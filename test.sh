@@ -1,0 +1,1 @@
+./init.sh && make && make install && make installcheck

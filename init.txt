@@ -1,0 +1,10 @@
+# DDL
+DROP DATABASE mydb
+CREATE DATABASE mydb
+
+# DML
+# CONTEXT-DATABASE: mydb
+
+cpu,tag1=tag1_A,tag2=tag2_A value1=100i,value2=0.5,value3="str",value4=true 1439856000
+cpu,tag1=tag1_B value1=100i,value2=2.0,value4=false 1439856000
+cpu,tag2=tag2_A value2=2.0 1439858888
