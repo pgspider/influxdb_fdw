@@ -27,7 +27,7 @@ make install
 CREATE EXTENSION influxdb_fdw;
 </pre>
 
-### Create server specifying SQLite database path as option
+### Create server
 <pre>
 CREATE SERVER influxdb_server FOREIGN DATA WRAPPER influxdb_fdw OPTIONS
 (dbname 'mydb', host 'http://localhost', port '8086') ;
