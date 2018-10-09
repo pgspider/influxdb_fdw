@@ -43,8 +43,8 @@ include $(top_builddir)/src/Makefile.global
 include $(top_srcdir)/contrib/contrib-global.mk
 endif
 
-query.a: query.go _obj/_cgo_export.h
+query.a: query.go
 	go build -buildmode=c-archive query.go
-influxdb_fdw.o:  _obj/_cgo_export.h
+$(OBJS):  _obj/_cgo_export.h
 _obj/_cgo_export.h: query.go
 	go tool cgo query.go
