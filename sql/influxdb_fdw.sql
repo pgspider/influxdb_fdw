@@ -8,9 +8,7 @@ CREATE EXTENSION influxdb_fdw;
 CREATE SERVER server1 FOREIGN DATA WRAPPER influxdb_fdw OPTIONS
 (dbname 'mydb', host 'http://localhost', port '8086') ;
 CREATE USER MAPPING FOR CURRENT_USER SERVER server1 OPTIONS(user 'user', password 'pass');
-CREATE FOREIGN TABLE t1(time timestamp with time zone , tag1 text, value1 integer) SERVER server1  OPTIONS (table 'cpu');
-SELECT * FROM t1;
-SELECT * FROM t1 WHERE time = TIMESTAMP WITH TIME ZONE '2015-08-18 09:00:00+09';
+
 -- import time column as timestamp and text type
 IMPORT FOREIGN SCHEMA public FROM SERVER server1 INTO public OPTIONS(import_time_text 'true');
 SELECT * FROM cpu;
@@ -59,6 +57,11 @@ SELECT * FROM cpu WHERE NOT (value4 AND value1=100);
 
 DROP FOREIGN TABLE cpu;
 
+
+CREATE FOREIGN TABLE t1(time timestamp with time zone , tag1 text, value1 integer) SERVER server1  OPTIONS (table 'cpu');
+SELECT * FROM t1;
+SELECT * FROM t1 WHERE time = TIMESTAMP WITH TIME ZONE '2015-08-18 09:00:00+09';
+DROP FOREIGN TABLE t1;
 
 
 DROP USER MAPPING FOR CURRENT_USER SERVER server1;

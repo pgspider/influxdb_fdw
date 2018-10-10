@@ -142,6 +142,22 @@ SELECT * FROM cpu WHERE NOT (value4 AND value1=100);
 (1 row)
 
 DROP FOREIGN TABLE cpu;
+CREATE FOREIGN TABLE t1(time timestamp with time zone , tag1 text, value1 integer) SERVER server1  OPTIONS (table 'cpu');
+SELECT * FROM t1;
+          time          |  tag1  | value1 
+------------------------+--------+--------
+ 2015-08-18 09:00:00+09 | tag1_A |    100
+ 2015-08-18 09:00:00+09 | tag1_B |    100
+(2 rows)
+
+SELECT * FROM t1 WHERE time = TIMESTAMP WITH TIME ZONE '2015-08-18 09:00:00+09';
+          time          |  tag1  | value1 
+------------------------+--------+--------
+ 2015-08-18 09:00:00+09 | tag1_A |    100
+ 2015-08-18 09:00:00+09 | tag1_B |    100
+(2 rows)
+
+DROP FOREIGN TABLE t1;
 DROP USER MAPPING FOR CURRENT_USER SERVER server1;
 DROP SERVER server1;
 DROP EXTENSION influxdb_fdw CASCADE;
