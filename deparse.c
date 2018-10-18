@@ -236,9 +236,6 @@ influxdb_is_foreign_expr(PlannerInfo *root,
 	if (loc_cxt.state == FDW_COLLATE_UNSAFE)
 		return false;
 
-	return true;
-
-
 	/* OK to evaluate on the remote server */
 	return true;
 }
