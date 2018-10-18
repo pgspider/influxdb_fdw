@@ -236,15 +236,8 @@ influxdb_is_foreign_expr(PlannerInfo *root,
 	if (loc_cxt.state == FDW_COLLATE_UNSAFE)
 		return false;
 
-	/*
-	 * An expression which includes any mutable functions can't be sent over
-	 * because its result is not stable.  For example, sending now() remote
-	 * side could cause confusion from clock offsets.  Future versions might
-	 * be able to make this choice with more granularity.  (We check this last
-	 * because it requires a lot of expensive catalog lookups.)
-	 */
-	if (contain_mutable_functions((Node *) expr))
-		return false;
+	return true;
+
 
 	/* OK to evaluate on the remote server */
 	return true;
@@ -275,8 +268,7 @@ foreign_expr_walker(Node *node,
 	HeapTuple	tuple;
 	Form_pg_operator form;
 	char	   *cur_opname;
-	return false;
-	
+
 	/* Need do nothing for empty subexpressions */
 	if (node == NULL)
 		return true;
@@ -346,9 +338,23 @@ foreign_expr_walker(Node *node,
 			{
 				Const	   *c = (Const *) node;
 
-				/* InfluxDB cannot handle interval type */
 				if (c->consttype == INTERVALOID)
-					return false;
+				{
+					Interval   *interval = DatumGetIntervalP(c->constvalue);
+					struct pg_tm tm;
+					fsec_t		fsec;
+
+					interval2tm(*interval, &tm, &fsec);
+
+					/*
+					 * Not pushdown interval with month or year because
+					 * InfluxDB does not support month and year duration
+					 */
+					if (tm.tm_mon != 0 || tm.tm_year != 0)
+					{
+						return false;
+					}
+				}
 
 				/*
 				 * If the constant has nondefault collation, either it's of a
@@ -382,7 +388,65 @@ foreign_expr_walker(Node *node,
 
 		case T_FuncExpr:
 			{
-				return false;
+
+				FuncExpr   *fe = (FuncExpr *) node;
+				char	   *opername = NULL;
+				Oid			schema;
+
+				/* get function name and schema */
+				tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(fe->funcid));
+				if (!HeapTupleIsValid(tuple))
+				{
+					elog(ERROR, "cache lookup failed for function %u", fe->funcid);
+				}
+				opername = pstrdup(((Form_pg_proc) GETSTRUCT(tuple))->proname.data);
+				schema = ((Form_pg_proc) GETSTRUCT(tuple))->pronamespace;
+				ReleaseSysCache(tuple);
+
+				/* ignore functions in other than the pg_catalog schema */
+				if (schema != PG_CATALOG_NAMESPACE)
+					return false;
+
+				/* Only now() is pushed down to InfluxDB */
+				if (strcmp(opername, "now") != 0)
+				{
+					return false;
+				}
+
+				/*
+				 * Recurse to input subexpressions.
+				 */
+				if (!foreign_expr_walker((Node *) fe->args,
+										 glob_cxt, &inner_cxt))
+					return false;
+
+				/*
+				 * If function's input collation is not derived from a foreign
+				 * Var, it can't be sent to remote.
+				 */
+				if (fe->inputcollid == InvalidOid)
+					 /* OK, inputs are all noncollatable */ ;
+				else if (inner_cxt.state != FDW_COLLATE_SAFE ||
+						 fe->inputcollid != inner_cxt.collation)
+					return false;
+
+				/*
+				 * Detect whether node is introducing a collation not derived
+				 * from a foreign Var.  (If so, we just mark it unsafe for now
+				 * rather than immediately returning false, since the parent
+				 * node might not care.)
+				 */
+				collation = fe->funccollid;
+				if (collation == InvalidOid)
+					state = FDW_COLLATE_NONE;
+				else if (inner_cxt.state == FDW_COLLATE_SAFE &&
+						 collation == inner_cxt.collation)
+					state = FDW_COLLATE_SAFE;
+				else if (collation == DEFAULT_COLLATION_OID)
+					state = FDW_COLLATE_NONE;
+				else
+					state = FDW_COLLATE_UNSAFE;
+
 			}
 			break;
 		case T_OpExpr:
@@ -1235,7 +1299,10 @@ influxdb_deparse_column_ref(StringInfo buf, int varno, int varattno, Oid vartype
 	}
 	else
 	{
-		appendStringInfoString(buf, influxdb_quote_identifier(colname, QUOTE));
+		if (strcmp(colname, "time") == 0)
+			appendStringInfoString(buf, colname);
+		else
+			appendStringInfoString(buf, influxdb_quote_identifier(colname, QUOTE));
 	}
 
 }
@@ -1491,6 +1558,51 @@ influxdb_deparse_const(Const *node, deparse_expr_cxt *context, int showtype)
 			extval = OidOutputFunctionCall(typoutput, node->constvalue);
 			appendStringInfo(buf, "X\'%s\'", extval + 2);
 			break;
+		case TIMESTAMPTZOID:
+			{
+				Datum		datum;
+
+				/*
+				 * Convert from TIMESTAMPTZOID to TIMESTAMP ex: '2015-08-18
+				 * 09:00:00+09' -> '2015-08-18 00:00:00'
+				 */
+				datum = DirectFunctionCall2(timestamptz_zone, CStringGetTextDatum("UTC"), node->constvalue);
+
+				/* Convert to string */
+				getTypeOutputInfo(TIMESTAMPOID, &typoutput, &typIsVarlena);
+				extval = OidOutputFunctionCall(typoutput, datum);
+				appendStringInfo(buf, "'%s'", extval);
+				break;
+			}
+		case INTERVALOID:
+			{
+				Interval   *interval = DatumGetIntervalP(node->constvalue);
+				struct pg_tm tm;
+				fsec_t		fsec;
+
+				interval2tm(*interval, &tm, &fsec);
+				if (tm.tm_mday)
+				{
+					appendStringInfo(buf, "%dd", tm.tm_mday);
+				}
+				if (tm.tm_hour)
+				{
+					appendStringInfo(buf, "%dh", tm.tm_hour);
+				}
+				if (tm.tm_min)
+				{
+					appendStringInfo(buf, "%dm", tm.tm_min);
+				}
+				if (tm.tm_sec)
+				{
+					appendStringInfo(buf, "%ds", tm.tm_sec);
+				}
+				if (fsec)
+				{
+					appendStringInfo(buf, "%du", fsec);
+				}
+				break;
+			}
 		default:
 			extval = OidOutputFunctionCall(typoutput, node->constvalue);
 			influxdb_deparse_string_literal(buf, extval);
