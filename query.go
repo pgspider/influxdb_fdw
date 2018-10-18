@@ -41,12 +41,12 @@ import "C"
 
 import (
 	"encoding/json"
-
 	"fmt"
-	"github.com/influxdata/influxdb/client/v2"
-	"github.com/influxdata/influxdb/models"
 	"strconv"
 	"unsafe"
+
+	"github.com/influxdata/influxdb/client/v2"
+	"github.com/influxdata/influxdb/models"
 )
 
 // convenience function to query the database using one statement and one series
@@ -292,7 +292,7 @@ func InfluxDBQuery(cquery *C.char, addr *C.char, port C.int,
 		nrow: C.int(nrow),
 		rows: (*C.struct_InfluxDBRow)(C.malloc(C.size_t(int(C.sizeof_struct_InfluxDBRow) * nrow))),
 	}
-	
+
 	resultRows := (*[1 << 30]C.struct_InfluxDBRow)(unsafe.Pointer(result.rows))[:nrow:nrow]
 
 	for i, row := range rows.Values {
