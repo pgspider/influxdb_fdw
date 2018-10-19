@@ -1800,6 +1800,10 @@ influxdb_deparse_operator_name(StringInfo buf, Form_pg_operator opform)
 /*
  * Deparse given ScalarArrayOpExpr expression.  To avoid problems
  * around priority of operations, we always parenthesize the arguments.
+ * InfluxDB does not support IN,
+ * so conditions concatenated by OR will be created.
+ * expr IN (c1, c2, c3) => expr == c1 OR expr == c2 OR expr == c3
+ * expr NOT IN (c1, c2, c3) => expr <> c1 AND expr <> c2 AND expr <> c3
  */
 static void
 influxdb_deparse_scalar_array_op_expr(ScalarArrayOpExpr *node, deparse_expr_cxt *context)
@@ -1813,6 +1817,14 @@ influxdb_deparse_scalar_array_op_expr(ScalarArrayOpExpr *node, deparse_expr_cxt 
 	Oid			typoutput;
 	bool		typIsVarlena;
 	char	   *extval;
+	bool		notIn;
+	Const	   *c;
+	bool		isstr;
+	const char *valptr;
+	int			i = -1;
+	bool		deparseLeft;
+	bool		inString;
+	bool		isEscape;
 
 	/* Retrieve information about the operator from system catalog. */
 	tuple = SearchSysCache1(OPEROID, ObjectIdGetDatum(node->opno));
@@ -1823,55 +1835,84 @@ influxdb_deparse_scalar_array_op_expr(ScalarArrayOpExpr *node, deparse_expr_cxt 
 	/* Sanity check. */
 	Assert(list_length(node->args) == 2);
 
-	/* Deparse left operand. */
-	arg1 = linitial(node->args);
-	deparseExpr(arg1, context);
-	appendStringInfoChar(buf, ' ');
-
 	opname = NameStr(form->oprname);
-	if (strcmp(opname, "<>") == 0)
-		appendStringInfo(buf, " NOT ");
 
-	/* Deparse operator name plus decoration. */
-	appendStringInfo(buf, " IN (");
+	notIn = false;
+	if (strcmp(opname, "<>") == 0)
+		notIn = true;
+
+	arg2 = lsecond(node->args);
+	c = (Const *) arg2;
+	Assert(nodeTag((Node *) arg2) == T_Const || c->constisnull);
+
+	getTypeOutputInfo(c->consttype,
+					  &typoutput, &typIsVarlena);
+	extval = OidOutputFunctionCall(typoutput, c->constvalue);
+	isstr = true;
+	if (c->consttype == INT4ARRAYOID || c->consttype == OIDARRAYOID)
+		isstr = false;
 
 	/* Deparse right operand. */
-	arg2 = lsecond(node->args);
-	switch (nodeTag((Node *) arg2))
+	deparseLeft = true;
+	inString = false;
+	isEscape = false;
+
+	for (valptr = extval; *valptr; valptr++)
 	{
-		case T_Const:
-			{
-				Const	   *c = (Const *) arg2;
+		char		ch = *valptr;
 
-				if (!c->constisnull)
-				{
-					getTypeOutputInfo(c->consttype,
-									  &typoutput, &typIsVarlena);
-					extval = OidOutputFunctionCall(typoutput, c->constvalue);
+		i++;
 
-					switch (c->consttype)
-					{
-						case INT4ARRAYOID:
-						case OIDARRAYOID:
-							influxdb_deparse_string(buf, extval, false);
-							break;
-						default:
-							influxdb_deparse_string(buf, extval, true);
-							break;
-					}
-				}
-				else
-				{
-					appendStringInfoString(buf, " NULL");
-					return;
-				}
-			}
-			break;
-		default:
-			deparseExpr(arg2, context);
-			break;
+		/* Deparse left operand. */
+		if (deparseLeft)
+		{
+			arg1 = linitial(node->args);
+			deparseExpr(arg1, context);
+			if (notIn)
+				appendStringInfo(buf, " <> ");
+			else
+				appendStringInfo(buf, " = ");
+			if (isstr)
+				appendStringInfoChar(buf, '\'');
+			deparseLeft = false;
+		}
+
+		if ((ch == '{' && i == 0) || (ch == '}' && (i == (strlen(extval) - 1))))
+			continue;
+
+		/* Remove '\"' and process the next character. */
+		if (ch == '\"' && !isEscape)
+		{
+			inString = ~inString;
+			continue;
+		}
+		/* Add escape character '\'' for '\'' */
+		if (ch == '\'')
+			appendStringInfoChar(buf, '\'');
+
+		/* Remove character '\\' and process the next character. */
+		if (ch == '\\' && !isEscape)
+		{
+			isEscape = true;
+			continue;
+		}
+		isEscape = false;
+
+		if (ch == ',' && !inString)
+		{
+			if (isstr)
+				appendStringInfoChar(buf, '\'');
+			if (notIn)
+				appendStringInfo(buf, "  AND ");
+			else
+				appendStringInfo(buf, "  OR ");
+			deparseLeft = true;
+			continue;
+		}
+		appendStringInfoChar(buf, ch);
 	}
-	appendStringInfoChar(buf, ')');
+	if (isstr)
+		appendStringInfoChar(buf, '\'');
 	ReleaseSysCache(tuple);
 }
 

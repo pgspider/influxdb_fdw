@@ -53,6 +53,14 @@ SELECT * FROM cpu WHERE value2=0.5;
 SELECT * FROM cpu WHERE value3='str';
 SELECT * FROM cpu WHERE value4=true;
 SELECT * FROM cpu WHERE NOT (value4 AND value1=100);
+SELECT * FROM cpu WHERE tag1='tag1_A';
+
+SELECT * FROM cpu WHERE tag1 IN ('tag1_A', 'tag1_B');
+EXPLAIN (verbose)  SELECT * FROM cpu WHERE tag1 IN ('tag1_A', 'tag1_B');
+
+-- Rows which have no tag are considered to have empty string tag, so much below conditions
+SELECT * FROM cpu WHERE tag1 NOT IN ('tag1_A', 'tag1_B');
+EXPLAIN (verbose)  SELECT * FROM cpu WHERE tag1 NOT IN ('tag1_A', 'tag1_B');
 
 DROP FOREIGN TABLE cpu;
 
