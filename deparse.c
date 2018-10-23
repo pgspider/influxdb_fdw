@@ -236,16 +236,6 @@ influxdb_is_foreign_expr(PlannerInfo *root,
 	if (loc_cxt.state == FDW_COLLATE_UNSAFE)
 		return false;
 
-	/*
-	 * An expression which includes any mutable functions can't be sent over
-	 * because its result is not stable.  For example, sending now() remote
-	 * side could cause confusion from clock offsets.  Future versions might
-	 * be able to make this choice with more granularity.  (We check this last
-	 * because it requires a lot of expensive catalog lookups.)
-	 */
-	if (contain_mutable_functions((Node *) expr))
-		return false;
-
 	/* OK to evaluate on the remote server */
 	return true;
 }
@@ -275,8 +265,7 @@ foreign_expr_walker(Node *node,
 	HeapTuple	tuple;
 	Form_pg_operator form;
 	char	   *cur_opname;
-	return false;
-	
+
 	/* Need do nothing for empty subexpressions */
 	if (node == NULL)
 		return true;
@@ -346,9 +335,23 @@ foreign_expr_walker(Node *node,
 			{
 				Const	   *c = (Const *) node;
 
-				/* InfluxDB cannot handle interval type */
 				if (c->consttype == INTERVALOID)
-					return false;
+				{
+					Interval   *interval = DatumGetIntervalP(c->constvalue);
+					struct pg_tm tm;
+					fsec_t		fsec;
+
+					interval2tm(*interval, &tm, &fsec);
+
+					/*
+					 * Not pushdown interval with month or year because
+					 * InfluxDB does not support month and year duration
+					 */
+					if (tm.tm_mon != 0 || tm.tm_year != 0)
+					{
+						return false;
+					}
+				}
 
 				/*
 				 * If the constant has nondefault collation, either it's of a
@@ -382,7 +385,65 @@ foreign_expr_walker(Node *node,
 
 		case T_FuncExpr:
 			{
-				return false;
+
+				FuncExpr   *fe = (FuncExpr *) node;
+				char	   *opername = NULL;
+				Oid			schema;
+
+				/* get function name and schema */
+				tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(fe->funcid));
+				if (!HeapTupleIsValid(tuple))
+				{
+					elog(ERROR, "cache lookup failed for function %u", fe->funcid);
+				}
+				opername = pstrdup(((Form_pg_proc) GETSTRUCT(tuple))->proname.data);
+				schema = ((Form_pg_proc) GETSTRUCT(tuple))->pronamespace;
+				ReleaseSysCache(tuple);
+
+				/* ignore functions in other than the pg_catalog schema */
+				if (schema != PG_CATALOG_NAMESPACE)
+					return false;
+
+				/* Only now() is pushed down to InfluxDB */
+				if (strcmp(opername, "now") != 0)
+				{
+					return false;
+				}
+
+				/*
+				 * Recurse to input subexpressions.
+				 */
+				if (!foreign_expr_walker((Node *) fe->args,
+										 glob_cxt, &inner_cxt))
+					return false;
+
+				/*
+				 * If function's input collation is not derived from a foreign
+				 * Var, it can't be sent to remote.
+				 */
+				if (fe->inputcollid == InvalidOid)
+					 /* OK, inputs are all noncollatable */ ;
+				else if (inner_cxt.state != FDW_COLLATE_SAFE ||
+						 fe->inputcollid != inner_cxt.collation)
+					return false;
+
+				/*
+				 * Detect whether node is introducing a collation not derived
+				 * from a foreign Var.  (If so, we just mark it unsafe for now
+				 * rather than immediately returning false, since the parent
+				 * node might not care.)
+				 */
+				collation = fe->funccollid;
+				if (collation == InvalidOid)
+					state = FDW_COLLATE_NONE;
+				else if (inner_cxt.state == FDW_COLLATE_SAFE &&
+						 collation == inner_cxt.collation)
+					state = FDW_COLLATE_SAFE;
+				else if (collation == DEFAULT_COLLATION_OID)
+					state = FDW_COLLATE_NONE;
+				else
+					state = FDW_COLLATE_UNSAFE;
+
 			}
 			break;
 		case T_OpExpr:
@@ -1235,7 +1296,10 @@ influxdb_deparse_column_ref(StringInfo buf, int varno, int varattno, Oid vartype
 	}
 	else
 	{
-		appendStringInfoString(buf, influxdb_quote_identifier(colname, QUOTE));
+		if (strcmp(colname, "time") == 0)
+			appendStringInfoString(buf, colname);
+		else
+			appendStringInfoString(buf, influxdb_quote_identifier(colname, QUOTE));
 	}
 
 }
@@ -1491,6 +1555,51 @@ influxdb_deparse_const(Const *node, deparse_expr_cxt *context, int showtype)
 			extval = OidOutputFunctionCall(typoutput, node->constvalue);
 			appendStringInfo(buf, "X\'%s\'", extval + 2);
 			break;
+		case TIMESTAMPTZOID:
+			{
+				Datum		datum;
+
+				/*
+				 * Convert from TIMESTAMPTZOID to TIMESTAMP ex: '2015-08-18
+				 * 09:00:00+09' -> '2015-08-18 00:00:00'
+				 */
+				datum = DirectFunctionCall2(timestamptz_zone, CStringGetTextDatum("UTC"), node->constvalue);
+
+				/* Convert to string */
+				getTypeOutputInfo(TIMESTAMPOID, &typoutput, &typIsVarlena);
+				extval = OidOutputFunctionCall(typoutput, datum);
+				appendStringInfo(buf, "'%s'", extval);
+				break;
+			}
+		case INTERVALOID:
+			{
+				Interval   *interval = DatumGetIntervalP(node->constvalue);
+				struct pg_tm tm;
+				fsec_t		fsec;
+
+				interval2tm(*interval, &tm, &fsec);
+				if (tm.tm_mday)
+				{
+					appendStringInfo(buf, "%dd", tm.tm_mday);
+				}
+				if (tm.tm_hour)
+				{
+					appendStringInfo(buf, "%dh", tm.tm_hour);
+				}
+				if (tm.tm_min)
+				{
+					appendStringInfo(buf, "%dm", tm.tm_min);
+				}
+				if (tm.tm_sec)
+				{
+					appendStringInfo(buf, "%ds", tm.tm_sec);
+				}
+				if (fsec)
+				{
+					appendStringInfo(buf, "%du", fsec);
+				}
+				break;
+			}
 		default:
 			extval = OidOutputFunctionCall(typoutput, node->constvalue);
 			influxdb_deparse_string_literal(buf, extval);
@@ -1691,6 +1800,10 @@ influxdb_deparse_operator_name(StringInfo buf, Form_pg_operator opform)
 /*
  * Deparse given ScalarArrayOpExpr expression.  To avoid problems
  * around priority of operations, we always parenthesize the arguments.
+ * InfluxDB does not support IN,
+ * so conditions concatenated by OR will be created.
+ * expr IN (c1, c2, c3) => expr == c1 OR expr == c2 OR expr == c3
+ * expr NOT IN (c1, c2, c3) => expr <> c1 AND expr <> c2 AND expr <> c3
  */
 static void
 influxdb_deparse_scalar_array_op_expr(ScalarArrayOpExpr *node, deparse_expr_cxt *context)
@@ -1704,6 +1817,14 @@ influxdb_deparse_scalar_array_op_expr(ScalarArrayOpExpr *node, deparse_expr_cxt 
 	Oid			typoutput;
 	bool		typIsVarlena;
 	char	   *extval;
+	bool		notIn;
+	Const	   *c;
+	bool		isstr;
+	const char *valptr;
+	int			i = -1;
+	bool		deparseLeft;
+	bool		inString;
+	bool		isEscape;
 
 	/* Retrieve information about the operator from system catalog. */
 	tuple = SearchSysCache1(OPEROID, ObjectIdGetDatum(node->opno));
@@ -1714,55 +1835,84 @@ influxdb_deparse_scalar_array_op_expr(ScalarArrayOpExpr *node, deparse_expr_cxt 
 	/* Sanity check. */
 	Assert(list_length(node->args) == 2);
 
-	/* Deparse left operand. */
-	arg1 = linitial(node->args);
-	deparseExpr(arg1, context);
-	appendStringInfoChar(buf, ' ');
-
 	opname = NameStr(form->oprname);
-	if (strcmp(opname, "<>") == 0)
-		appendStringInfo(buf, " NOT ");
 
-	/* Deparse operator name plus decoration. */
-	appendStringInfo(buf, " IN (");
+	notIn = false;
+	if (strcmp(opname, "<>") == 0)
+		notIn = true;
+
+	arg2 = lsecond(node->args);
+	c = (Const *) arg2;
+	Assert(nodeTag((Node *) arg2) == T_Const || c->constisnull);
+
+	getTypeOutputInfo(c->consttype,
+					  &typoutput, &typIsVarlena);
+	extval = OidOutputFunctionCall(typoutput, c->constvalue);
+	isstr = true;
+	if (c->consttype == INT4ARRAYOID || c->consttype == OIDARRAYOID)
+		isstr = false;
 
 	/* Deparse right operand. */
-	arg2 = lsecond(node->args);
-	switch (nodeTag((Node *) arg2))
+	deparseLeft = true;
+	inString = false;
+	isEscape = false;
+
+	for (valptr = extval; *valptr; valptr++)
 	{
-		case T_Const:
-			{
-				Const	   *c = (Const *) arg2;
+		char		ch = *valptr;
 
-				if (!c->constisnull)
-				{
-					getTypeOutputInfo(c->consttype,
-									  &typoutput, &typIsVarlena);
-					extval = OidOutputFunctionCall(typoutput, c->constvalue);
+		i++;
 
-					switch (c->consttype)
-					{
-						case INT4ARRAYOID:
-						case OIDARRAYOID:
-							influxdb_deparse_string(buf, extval, false);
-							break;
-						default:
-							influxdb_deparse_string(buf, extval, true);
-							break;
-					}
-				}
-				else
-				{
-					appendStringInfoString(buf, " NULL");
-					return;
-				}
-			}
-			break;
-		default:
-			deparseExpr(arg2, context);
-			break;
+		/* Deparse left operand. */
+		if (deparseLeft)
+		{
+			arg1 = linitial(node->args);
+			deparseExpr(arg1, context);
+			if (notIn)
+				appendStringInfo(buf, " <> ");
+			else
+				appendStringInfo(buf, " = ");
+			if (isstr)
+				appendStringInfoChar(buf, '\'');
+			deparseLeft = false;
+		}
+
+		if ((ch == '{' && i == 0) || (ch == '}' && (i == (strlen(extval) - 1))))
+			continue;
+
+		/* Remove '\"' and process the next character. */
+		if (ch == '\"' && !isEscape)
+		{
+			inString = ~inString;
+			continue;
+		}
+		/* Add escape character '\'' for '\'' */
+		if (ch == '\'')
+			appendStringInfoChar(buf, '\'');
+
+		/* Remove character '\\' and process the next character. */
+		if (ch == '\\' && !isEscape)
+		{
+			isEscape = true;
+			continue;
+		}
+		isEscape = false;
+
+		if (ch == ',' && !inString)
+		{
+			if (isstr)
+				appendStringInfoChar(buf, '\'');
+			if (notIn)
+				appendStringInfo(buf, "  AND ");
+			else
+				appendStringInfo(buf, "  OR ");
+			deparseLeft = true;
+			continue;
+		}
+		appendStringInfoChar(buf, ch);
 	}
-	appendStringInfoChar(buf, ')');
+	if (isstr)
+		appendStringInfoChar(buf, '\'');
 	ReleaseSysCache(tuple);
 }
 

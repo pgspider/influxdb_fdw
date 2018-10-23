@@ -53,16 +53,48 @@ SELECT * FROM cpu WHERE value2=0.5;
 SELECT * FROM cpu WHERE value3='str';
 SELECT * FROM cpu WHERE value4=true;
 SELECT * FROM cpu WHERE NOT (value4 AND value1=100);
+SELECT * FROM cpu WHERE tag1='tag1_A';
 
+SELECT * FROM cpu WHERE tag1 IN ('tag1_A', 'tag1_B');
+EXPLAIN (verbose)  SELECT * FROM cpu WHERE tag1 IN ('tag1_A', 'tag1_B');
+
+-- Rows which have no tag are considered to have empty string tag, so much below conditions
+SELECT * FROM cpu WHERE tag1 NOT IN ('tag1_A', 'tag1_B');
+EXPLAIN (verbose)  SELECT * FROM cpu WHERE tag1 NOT IN ('tag1_A', 'tag1_B');
 
 DROP FOREIGN TABLE cpu;
 
-
 CREATE FOREIGN TABLE t1(time timestamp with time zone , tag1 text, value1 integer) SERVER server1  OPTIONS (table 'cpu');
+CREATE FOREIGN TABLE t2(time timestamp , tag1 text, value1 integer) SERVER server1  OPTIONS (table 'cpu');
+
 SELECT * FROM t1;
 SELECT * FROM t1 WHERE time = TIMESTAMP WITH TIME ZONE '2015-08-18 09:00:00+09';
-DROP FOREIGN TABLE t1;
+SELECT * FROM t1 WHERE time = TIMESTAMP '2015-08-18 00:00:00';
 
+SELECT * FROM t2;
+SELECT * FROM t2 WHERE time = TIMESTAMP WITH TIME ZONE '2015-08-18 09:00:00+09';
+SELECT * FROM t2 WHERE time = TIMESTAMP '2015-08-18 00:00:00';
+
+-- pushdown now()
+SELECT * FROM t2 WHERE now() > time;
+EXPLAIN (verbose) SELECT * FROM t2 WHERE now() > time;
+
+SELECT * FROM t2 WHERE time = TIMESTAMP  WITH TIME ZONE '2015-08-26 05:43:21.1+00' - interval '1 week 1 day 5 hour 43 minute 21 second 100 millisecond';
+EXPLAIN (verbose)  SELECT * FROM t2 WHERE time = TIMESTAMP  WITH TIME ZONE '2015-08-26 05:43:21.1+00' - interval '1 week 1 day 5 hour 43 minute 21 second 100 millisecond';
+
+-- InfluxDB does not seem to support time + interval, so below query does not work
+-- SELECT * FROM t2 WHERE time + interval '1 seconds' = TIMESTAMP '2015-08-18 00:00:01+09';
+
+-- InfluxDB does not support month or year interval, so not push down
+SELECT * FROM t2 WHERE time = TIMESTAMP '2015-09-18 00:00:00' - interval '1 months';
+EXPLAIN (verbose)  SELECT * FROM t2 WHERE time = TIMESTAMP '2015-09-18 00:00:00' - interval '1 months';
+
+
+DROP FOREIGN TABLE t1;
+DROP FOREIGN TABLE t2;
+
+-- Currently using column_name 'time' does not work 
+-- CREATE FOREIGN TABLE t(tm timestamp OPTIONS (column_name 'time'),tm_with_zone timestamp with time zone OPTIONS (column_name 'time'), tag1 text,value1 integer) SERVER server1  OPTIONS (table 'cpu');
 
 DROP USER MAPPING FOR CURRENT_USER SERVER server1;
 DROP SERVER server1;
