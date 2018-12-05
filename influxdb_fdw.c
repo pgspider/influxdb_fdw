@@ -817,11 +817,29 @@ influxdbIterateForeignScan(ForeignScanState *node)
 	influxdb_opt *options;
 	struct InfluxDBQuery_return volatile ret;
 	struct InfluxDBResult volatile *result;
+	ForeignScan *fsplan = (ForeignScan *) node->ss.ps.plan;
+	RangeTblEntry *rte;
+	int			rtindex;
 
 	elog(DEBUG1, "influxdb_fdw : %s", __func__);
 
+
+
+	/*
+	 * Identify which user to do the remote access as.  This should match what
+	 * ExecCheckRTEPerms() does.  In case of a join or aggregate, use the
+	 * lowest-numbered member RTE as a representative; we would get the same
+	 * result from any.
+	 */
+	if (fsplan->scan.scanrelid > 0)
+		rtindex = fsplan->scan.scanrelid;
+	else
+		rtindex = bms_next_member(fsplan->fs_relids, -1);
+	rte = rt_fetch(rtindex, estate->es_range_table);
+
+	/* table = GetForeignTable(rte->relid); */
 	/* Fetch the options */
-	options = influxdb_get_options(RelationGetRelid(node->ss.ss_currentRelation));
+	options = influxdb_get_options(rte->relid);
 
 	/*
 	 * If this is the first call after Begin or ReScan, we need to create the
@@ -1158,6 +1176,9 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel)
 		/* Check whether this expression is part of GROUP BY clause */
 		if (sgref && get_sortgroupref_clause_noerr(sgref, query->groupClause))
 		{
+
+			return false;
+
 			/*
 			 * If any of the GROUP BY expression is not shippable we can not
 			 * push down aggregation to the foreign server.
