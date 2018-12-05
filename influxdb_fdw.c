@@ -124,10 +124,15 @@ static bool influxdbAnalyzeForeignTable(Relation relation,
 static List *influxdbImportForeignSchema(ImportForeignSchemaStmt *stmt,
 							Oid serverOid);
 
-static void influxdbGetForeignUpperPaths(PlannerInfo *root,
+static void
+influxdbGetForeignUpperPaths(PlannerInfo *root,
 							 UpperRelationKind stage,
 							 RelOptInfo *input_rel,
-							 RelOptInfo *output_rel);
+							 RelOptInfo *output_rel
+#if (PG_VERSION_NUM >= 110000)
+							 ,void *extra
+#endif
+);
 
 
 static void influxdb_to_pg_type(StringInfo str, char *typname);
@@ -738,9 +743,7 @@ influxdbBeginForeignScan(ForeignScanState *node, int eflags)
 
 	festate->temp_cxt = AllocSetContextCreate(estate->es_query_cxt,
 											  "influxdb_fdw temporary data",
-											  ALLOCSET_SMALL_MINSIZE,
-											  ALLOCSET_SMALL_INITSIZE,
-											  ALLOCSET_SMALL_MAXSIZE);
+											  ALLOCSET_SMALL_SIZES);
 
 
 	/* Prepare for output conversion of parameters used in remote query. */
@@ -774,15 +777,15 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 	foreach(lc, retrieved_attrs)
 	{
 		int			attnum = lfirst_int(lc) - 1;
-		Oid			pgtype = tupleDescriptor->attrs[attnum]->atttypid;
-		int32		pgtypmod = tupleDescriptor->attrs[attnum]->atttypmod;
+		Oid			pgtype = TupleDescAttr(tupleDescriptor, attnum)->atttypid;
+		int32		pgtypmod = TupleDescAttr(tupleDescriptor, attnum)->atttypmod;
 		int			attr_idx = 0;
 
 		/*
 		 * Get from first column of result set if attribute name is time
 		 * column
 		 */
-		if (INFLUXDB_IS_TIME_COLUMN(tupleDescriptor->attrs[attnum]->attname.data))
+		if (INFLUXDB_IS_TIME_COLUMN(TupleDescAttr(tupleDescriptor, attnum)->attname.data))
 		{
 			attr_idx = 0;
 		}
@@ -798,7 +801,6 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 			row[attnum] = influxdb_convert_to_pg(pgtype, pgtypmod,
 												 result_row->tuple, attr_idx);
 		}
-		elog(DEBUG2, "influxdb_fdw : make_tuple_from_result_row %d %d %d %d %s", attid, pgtype, attnum, attr_idx, tupleDescriptor->attrs[attnum]->attname.data);
 	}
 }
 
@@ -1365,7 +1367,11 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel)
  */
 static void
 influxdbGetForeignUpperPaths(PlannerInfo *root, UpperRelationKind stage,
-							 RelOptInfo *input_rel, RelOptInfo *output_rel)
+							 RelOptInfo *input_rel, RelOptInfo *output_rel
+#if (PG_VERSION_NUM >= 110000)
+							 ,void *extra
+#endif
+)
 {
 	InfluxDBFdwRelationInfo *fpinfo;
 

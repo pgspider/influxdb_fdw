@@ -1123,7 +1123,7 @@ influxdb_deparse_target_list(StringInfo buf,
 	*retrieved_attrs = NIL;
 	for (i = 1; i <= tupdesc->natts; i++)
 	{
-		Form_pg_attribute attr = tupdesc->attrs[i - 1];
+		Form_pg_attribute attr = TupleDescAttr(tupdesc, i - 1);
 
 		/* Ignore dropped attributes. */
 		if (attr->attisdropped)
@@ -1243,8 +1243,11 @@ influxdb_get_column_ref(StringInfo buf, int varno, int varattno, Oid vartype,
 	 * option, use attribute name.
 	 */
 	if (colname == NULL)
-		colname = get_relid_attribute_name(rte->relid, varattno);
-
+		colname = get_attname(rte->relid, varattno
+#if (PG_VERSION_NUM >= 110000)
+							  ,false
+#endif
+			);
 	return colname;
 }
 
@@ -1288,8 +1291,11 @@ influxdb_deparse_column_ref(StringInfo buf, int varno, int varattno, Oid vartype
 	 * option, use attribute name.
 	 */
 	if (colname == NULL)
-		colname = get_relid_attribute_name(rte->relid, varattno);
-
+		colname = get_attname(rte->relid, varattno
+#if (PG_VERSION_NUM >= 110000)
+							  ,false
+#endif
+			);
 	if (convert && vartype == BOOLOID)
 	{
 		appendStringInfo(buf, "(%s=true)", influxdb_quote_identifier(colname, QUOTE));

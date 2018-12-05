@@ -1,2 +1,2 @@
 export USE_PGXS=1
-./init.sh && make && make install && make installcheck
+./init.sh && make clean && make && make install && make installcheck
