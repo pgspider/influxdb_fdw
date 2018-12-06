@@ -1,7 +1,7 @@
 # InfluxDB Foreign Data Wrapper for PostgreSQL
 This PostgreSQL extension is a Foreign Data Wrapper (FDW) for InfluxDB.
 
-The current version can work with PostgreSQL 9.6 and 10.
+The current version can work with PostgreSQL 9.6, 10 and 11.
 
 ## Installation
 Install InfluxDB Go client library
@@ -55,10 +55,19 @@ SELECT * FROM t1;
 </pre>
 
 ## Features
-- Only SELECT queries are supported.
+- WHERE clauses including timestamp, interval and now functions are pushed down
+- Simple aggregation wihtout GROUP BY are pushed down
 
 ## Limitations
-- WHERE clauses are not pushed down to InfluxDB in current version.
+- INSERT, UPDATE and DELETE are not supported.
+
+Following limitations originate from data model and query language of InfluxDB.
+You can check a qeury executed in InfluxDB with `EXPLAIN (VERBOSE)` and why it behaves.
+- Result sets have different number of rows depending on specified target list.
+For example, `SELECT field1 FROM t1` and `SELECT field2 FROM t1` returns different number of rows if
+the number of points with field1 and field2 are different in InfluxDB database. 
+- Complex boolean conditions not allowed in InfluxDB like `WHERE b = (a = true)` may cause error.
+- Conditions including NULL may cause error.
 
 ## License
 Copyright (c) 2018, TOSHIBA Corporation 
