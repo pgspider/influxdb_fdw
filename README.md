@@ -62,13 +62,13 @@ SELECT * FROM t1;
 - INSERT, UPDATE and DELETE are not supported.
 
 Following limitations originate from data model and query language of InfluxDB.
-You can check a qeury executed in InfluxDB with `EXPLAIN (VERBOSE)` and why it behaves.
 - Result sets have different number of rows depending on specified target list.
 For example, `SELECT field1 FROM t1` and `SELECT field2 FROM t1` returns different number of rows if
 the number of points with field1 and field2 are different in InfluxDB database. 
 - Complex boolean conditions not allowed in InfluxDB like `WHERE b = (a = true)` may cause error.
 - Conditions including NULL may cause error.
 
+When a query to foreing tables fails, you can find why it fails by seeing a query executed in InfluxDB with `EXPLAIN (VERBOSE)`.
 ## License
 Copyright (c) 2018, TOSHIBA Corporation 
 Copyright (c) 2011 - 2016, EnterpriseDB Corporation
