@@ -56,7 +56,7 @@ SELECT * FROM t1;
 
 ## Features
 - WHERE clauses including timestamp, interval and now functions are pushed down
-- Simple aggregation wihtout GROUP BY are pushed down
+- Simple aggregation without GROUP BY are pushed down
 
 ## Limitations
 - INSERT, UPDATE and DELETE are not supported.
