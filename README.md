@@ -6,7 +6,7 @@ The current version can work with PostgreSQL 9.6, 10 and 11.
 ## Installation
 Install InfluxDB Go client library
 <pre>
-go get github.com/influxdata/influxdb/client/v2
+go get github.com/influxdata/influxdb1-client/v2
 </pre>
 
 Add a directory of pg_config to PATH and build and install influxdb_fdw.

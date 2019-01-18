@@ -45,8 +45,8 @@ import (
 	"strconv"
 	"unsafe"
 
-	"github.com/influxdata/influxdb/client/v2"
-	"github.com/influxdata/influxdb/models"
+	"github.com/influxdata/influxdb1-client/models"
+	"github.com/influxdata/influxdb1-client/v2"
 )
 
 // convenience function to query the database using one statement and one series
