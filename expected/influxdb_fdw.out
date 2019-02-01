@@ -282,18 +282,36 @@ SELECT * FROM t3;
  1970-01-01 09:00:04+09 | b    |     20 |    200
 (5 rows)
 
-EXPLAIN (verbose, costs off) SELECT sum(value1) FROM t3;
-                    QUERY PLAN                    
---------------------------------------------------
+EXPLAIN (verbose, costs off) SELECT
+sum(value1), max(value1),count(*) FROM t3;
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
  Foreign Scan
-   Output: (sum(value1))
-   InfluxDB query: SELECT sum("value1") FROM "t3"
+   Output: (sum(value1)), (max(value1)), (count(*))
+   InfluxDB query: SELECT sum("value1"), max("value1"), count(*) FROM "t3"
 (3 rows)
 
-SELECT sum(value1) FROM t3;
- sum 
+SELECT sum(value1), max(value1),count(*) FROM t3;
+ sum | max | count 
+-----+-----+-------
+  36 |  20 |     5
+(1 row)
+
+EXPLAIN (verbose, costs off) 
+SELECT avg(value1) FROM t3;
+                    QUERY PLAN                     
+---------------------------------------------------
+ Aggregate
+   Output: avg(value1)
+   ->  Foreign Scan on public.t3
+         Output: "time", tag1, value1, value2
+         InfluxDB query: SELECT "value1" FROM "t3"
+(5 rows)
+
+SELECT avg(value1) FROM t3;
+ avg 
 -----
-  36
+ 7.2
 (1 row)
 
 -- Not pushdown aggregates with GROUP BY because "SELECT sum(value1),tag1" cause error "mixing aggregate and non-aggregate queries is not supported"

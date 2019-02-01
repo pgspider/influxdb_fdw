@@ -92,8 +92,15 @@ EXPLAIN (verbose)  SELECT * FROM t2 WHERE time = TIMESTAMP '2015-09-18 00:00:00'
 
 
 SELECT * FROM t3;
-EXPLAIN (verbose, costs off) SELECT sum(value1) FROM t3;
-SELECT sum(value1) FROM t3;
+
+EXPLAIN (verbose, costs off) SELECT
+sum(value1), max(value1),count(*) FROM t3;
+SELECT sum(value1), max(value1),count(*) FROM t3;
+
+EXPLAIN (verbose, costs off) 
+SELECT avg(value1) FROM t3;
+SELECT avg(value1) FROM t3;
+
 
 -- Not pushdown aggregates with GROUP BY because "SELECT sum(value1),tag1" cause error "mixing aggregate and non-aggregate queries is not supported"
 EXPLAIN (verbose, costs off) 
