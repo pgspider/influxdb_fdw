@@ -36,18 +36,7 @@ SELECT value1,time,value2 FROM cpu;
 -- Get only tags returns no row. This behavior is based on InfluxDB 
 SELECT tag1 FROM cpu;
 
-select
-	at.attname,
-	format_type(at.atttypid, at.atttypmod)
-from
-	pg_attribute as at
-		left join pg_type as tp on (at.atttypid = tp.oid)
-where
-	at.attnum > 0 and
-	at.attrelid = (select relfilenode from pg_class where relname = 'cpu')
-order by
-	at.attnum
-;
+\d cpu;
 
 SELECT * FROM cpu WHERE value1=100;
 SELECT * FROM cpu WHERE value2=0.5;
@@ -55,6 +44,21 @@ SELECT * FROM cpu WHERE value3='str';
 SELECT * FROM cpu WHERE value4=true;
 SELECT * FROM cpu WHERE NOT (value4 AND value1=100);
 SELECT * FROM cpu WHERE tag1='tag1_A';
+
+EXPLAIN (verbose,costs off)
+SELECT * FROM cpu WHERE value3 IS NULL;
+SELECT * FROM cpu WHERE value3 IS NULL;
+SELECT * FROM cpu WHERE tag2 IS NULL;
+SELECT * FROM cpu WHERE value3 IS NOT NULL;
+SELECT * FROM cpu WHERE tag2 IS NOT NULL;
+-- There is inconsitency for search of missing values between tag and field
+EXPLAIN (verbose,costs off)
+SELECT * FROM cpu WHERE value3 = '';
+SELECT * FROM cpu WHERE value3 = '';
+
+EXPLAIN (verbose,costs off)
+SELECT * FROM cpu WHERE tag2 = '';
+SELECT * FROM cpu WHERE tag2 = '';
 
 SELECT * FROM cpu WHERE tag1 IN ('tag1_A', 'tag1_B');
 EXPLAIN (verbose)  SELECT * FROM cpu WHERE tag1 IN ('tag1_A', 'tag1_B');

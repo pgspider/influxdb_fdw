@@ -582,24 +582,6 @@ foreign_expr_walker(Node *node,
 				state = FDW_COLLATE_NONE;
 			}
 			break;
-		case T_NullTest:
-			{
-				NullTest   *nt = (NullTest *) node;
-
-				/*
-				 * Recurse to input subexpressions.
-				 */
-				if (!foreign_expr_walker((Node *) nt->arg,
-										 glob_cxt, &inner_cxt))
-					return false;
-
-				/* Output is always boolean and so noncollatable. */
-				collation = InvalidOid;
-				state = FDW_COLLATE_NONE;
-			}
-			break;
-
-
 		case T_List:
 			{
 				List	   *l = (List *) node;
@@ -730,6 +712,7 @@ foreign_expr_walker(Node *node,
 		case T_ArrayExpr:
 		case T_DistinctExpr:
 			/* IS DISTINCT FROM */
+		case T_NullTest:
 			return false;
 		default:
 
