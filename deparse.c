@@ -240,6 +240,27 @@ influxdb_is_foreign_expr(PlannerInfo *root,
 	return true;
 }
 
+static bool
+is_valid_type(Oid type)
+{
+	switch (type)
+	{
+		case INT2OID:
+		case INT4OID:
+		case INT8OID:
+		case OIDOID:
+		case FLOAT4OID:
+		case FLOAT8OID:
+		case NUMERICOID:
+		case VARCHAROID:
+		case TEXTOID:
+		case TIMEOID:
+		case TIMESTAMPOID:
+		case TIMESTAMPTZOID:
+			return true;
+	}
+	return false;
+}
 
 /*
  * Check if expression is safe to execute remotely, and return true if so.
@@ -292,15 +313,7 @@ foreign_expr_walker(Node *node,
 				{
 					/* Var belongs to foreign table */
 
-					/*
-					 * System columns other than ctid and oid should not be
-					 * sent to the remote, since we don't make any effort to
-					 * ensure that local and remote values match (tableoid, in
-					 * particular, almost certainly doesn't match).
-					 */
-					if (var->varattno < 0 &&
-						var->varattno != SelfItemPointerAttributeNumber &&
-						var->varattno != ObjectIdAttributeNumber)
+					if (var->varattno < 0)
 						return false;
 
 					/* Else check the collation */
@@ -371,6 +384,9 @@ foreign_expr_walker(Node *node,
 			{
 				Param	   *p = (Param *) node;
 
+				if (!is_valid_type(p->paramtype))
+					return false;
+					
 				/*
 				 * Collation rule is same as for Consts and non-foreign Vars.
 				 */
@@ -667,19 +683,10 @@ foreign_expr_walker(Node *node,
 						return false;
 				}
 
-				/*
-				 * For aggorder elements, check whether the sort operator, if
-				 * specified, is shippable or not.
-				 */
-				if (agg->aggorder)
+				if (agg->aggorder || agg->aggfilter)
 				{
 					return false;
 				}
-
-				/* Check aggregate filter */
-				if (!foreign_expr_walker((Node *) agg->aggfilter,
-										 glob_cxt, &inner_cxt))
-					return false;
 
 				/*
 				 * If aggregate's input collation is not derived from a
