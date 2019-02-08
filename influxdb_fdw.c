@@ -1078,7 +1078,7 @@ influxdbImportForeignSchema(ImportForeignSchemaStmt *stmt,
 			initStringInfo(&buf);
 
 			appendStringInfo(&buf, "CREATE FOREIGN TABLE %s.%s (\n",
-							 stmt->local_schema, quote_identifier(info[table_idx].measurement));
+							 quote_identifier(stmt->local_schema), quote_identifier(info[table_idx].measurement));
 
 			appendStringInfo(&buf, "%s timestamp with time zone", INFLUXDB_TIME_COLUMN);
 			if (import_time_text)
