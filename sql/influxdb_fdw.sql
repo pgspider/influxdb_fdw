@@ -117,6 +117,11 @@ SELECT sum(value1) FROM t3 GROUP BY "tag1";
 -- Currently using column_name 'time' does not work 
 -- CREATE FOREIGN TABLE t(tm timestamp OPTIONS (column_name 'time'),tm_with_zone timestamp with time zone OPTIONS (column_name 'time'), tag1 text,value1 integer) SERVER server1  OPTIONS (table 'cpu');
 
+ALTER SERVER server1 OPTIONS (SET dbname 'no such database');
+SELECT * FROM t1;
+ALTER SERVER server1 OPTIONS (SET dbname 'mydb');
+SELECT * FROM t1;
+
 DROP FOREIGN TABLE t1;
 DROP FOREIGN TABLE t2;
 DROP FOREIGN TABLE t3;
