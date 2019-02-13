@@ -766,10 +766,13 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 						   TupleDesc tupleDescriptor,
 						   List *retrieved_attrs,
 						   Datum *row,
-						   bool *is_null)
+						   bool *is_null,
+						   Oid relid)
 {
 	ListCell   *lc = NULL;
+	ListCell   *lc_opt = NULL;
 	int			attid = 0;
+	List	   *options = NULL;
 
 	memset(row, 0, sizeof(Datum) * tupleDescriptor->natts);
 	memset(is_null, true, sizeof(bool) * tupleDescriptor->natts);
@@ -780,12 +783,30 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 		Oid			pgtype = TupleDescAttr(tupleDescriptor, attnum)->atttypid;
 		int32		pgtypmod = TupleDescAttr(tupleDescriptor, attnum)->atttypmod;
 		int			attr_idx = 0;
+		char	   *colname = NULL;
+
+		options = GetForeignColumnOptions(relid, attnum + 1);
+		foreach(lc_opt, options)
+		{
+			DefElem    *def = (DefElem *) lfirst(lc_opt);
+
+			if (strcmp(def->defname, "column_name") == 0)
+			{
+				colname = defGetString(def);
+				break;
+			}
+		}
+
+		if (colname == NULL)
+		{
+			colname = TupleDescAttr(tupleDescriptor, attnum)->attname.data;
+		}
 
 		/*
 		 * Get from first column of result set if attribute name is time
 		 * column
 		 */
-		if (INFLUXDB_IS_TIME_COLUMN(TupleDescAttr(tupleDescriptor, attnum)->attname.data))
+		if (INFLUXDB_IS_TIME_COLUMN(colname))
 		{
 			attr_idx = 0;
 		}
@@ -887,9 +908,11 @@ influxdbIterateForeignScan(ForeignScanState *node)
 				festate->rows[i] = palloc(sizeof(Datum) * tupleDescriptor->natts);
 				festate->rows_isnull[i] = palloc(sizeof(bool) * tupleDescriptor->natts);
 				make_tuple_from_result_row(&(result->rows[i]),
-										   tupleDescriptor, festate->retrieved_attrs,
+										   tupleDescriptor,
+										   festate->retrieved_attrs,
 										   festate->rows[i],
-										   festate->rows_isnull[i]);
+										   festate->rows_isnull[i],
+										   rte->relid);
 			}
 			MemoryContextSwitchTo(oldcontext);
 			InfluxDBFreeResult((InfluxDBResult *) result);
@@ -969,7 +992,6 @@ influxdbExplainForeignScan(ForeignScanState *node,
 
 	initStringInfo(&buf);
 	appendStringInfo(&buf, "EXPLAIN QUERY PLAN %s", festate->query);
-
 }
 
 static void
@@ -990,8 +1012,6 @@ influxdbAnalyzeForeignTable(Relation relation,
 	elog(DEBUG1, "influxdb_fdw : %s", __func__);
 	return false;
 }
-
-
 
 /*
  * Import a foreign schema
@@ -1369,7 +1389,8 @@ static void
 influxdbGetForeignUpperPaths(PlannerInfo *root, UpperRelationKind stage,
 							 RelOptInfo *input_rel, RelOptInfo *output_rel
 #if (PG_VERSION_NUM >= 110000)
-							 ,void *extra
+							 ,
+							 void *extra
 #endif
 )
 {
@@ -1461,7 +1482,6 @@ add_foreign_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel,
 	/* Add generated path into grouped_rel by add_path(). */
 	add_path(grouped_rel, (Path *) grouppath);
 }
-
 
 static void
 influxdb_to_pg_type(StringInfo str, char *type)
@@ -1670,7 +1690,6 @@ create_cursor(ForeignScanState *node)
 							 festate->param_types,
 							 festate->param_influxdb_types,
 							 festate->param_influxdb_values);
-
 
 		MemoryContextSwitchTo(oldcontext);
 	}

@@ -123,9 +123,13 @@ SELECT * FROM t1;
 ALTER SERVER server1 OPTIONS (SET dbname 'mydb');
 SELECT * FROM t1;
 
+CREATE FOREIGN TABLE t4(t timestamp OPTIONS (column_name 'time') , tag1 text OPTIONS (column_name 'time'), v1  integer OPTIONS (column_name 'value1')) SERVER server1  OPTIONS (table 'cpu');
+SELECT * FROM t4;
+
 DROP FOREIGN TABLE t1;
 DROP FOREIGN TABLE t2;
 DROP FOREIGN TABLE t3;
+DROP FOREIGN TABLE t4;
 
 DROP USER MAPPING FOR CURRENT_USER SERVER server1;
 DROP SERVER server1;

@@ -424,9 +424,18 @@ SELECT * FROM t1;
  2015-08-18 09:00:00+09 | tag1_B |    100
 (2 rows)
 
+CREATE FOREIGN TABLE t4(t timestamp OPTIONS (column_name 'time') , tag1 text OPTIONS (column_name 'time'), v1  integer OPTIONS (column_name 'value1')) SERVER server1  OPTIONS (table 'cpu');
+SELECT * FROM t4;
+          t          |         tag1         | v1  
+---------------------+----------------------+-----
+ 2015-08-18 00:00:00 | 2015-08-18T00:00:00Z | 100
+ 2015-08-18 00:00:00 | 2015-08-18T00:00:00Z | 100
+(2 rows)
+
 DROP FOREIGN TABLE t1;
 DROP FOREIGN TABLE t2;
 DROP FOREIGN TABLE t3;
+DROP FOREIGN TABLE t4;
 DROP USER MAPPING FOR CURRENT_USER SERVER server1;
 DROP SERVER server1;
 DROP EXTENSION influxdb_fdw CASCADE;
