@@ -14,3 +14,10 @@ t3,tag1=a value1=2.0,value2=100 1
 t3,tag1=a value1=3.0,value2=100 2 
 t3,tag1=b value1=10.0,value2=200 3
 t3,tag1=b value1=20.0,value2=200 4
+
+t4,tag1=a,tag2=x value1=1.0,value2=100 0 
+t4,tag1=a,tag2=y value1=2.0,value2=100 1 
+t4,tag1=a,tag2=x value1=3.0,value2=100 2 
+t4,tag1=b,tag2=y value1=10.0,value2=200 3
+t4,tag1=b,tag2=z value1=20.0,value2=200 4
+t4,tag1=b,tag2=z value1=30.0,value2=200 5

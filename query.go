@@ -35,6 +35,8 @@ typedef struct InfluxDBResult {
 	InfluxDBRow *rows;
 	int ncol;
 	int nrow;
+	char **tagkeys;
+	int ntag;
 } InfluxDBResult;
 */
 import "C"
@@ -51,20 +53,30 @@ import (
 
 // convenience function to query the database using one statement and one series
 func queryDB(clnt client.Client, q client.Query) (res models.Row, err error) {
-
-	if response, err := clnt.Query(q); err == nil {
-		if response.Error() != nil {
-			return res, response.Error()
-		}
-
-		if len(response.Results) == 0 || len(response.Results[0].Series) == 0 {
-			//empty result is not error
-			return models.Row{}, nil
-		}
-		res = response.Results[0].Series[0]
-	} else {
+	rows, err := queryDBRows(clnt, q)
+	if err != nil {
 		return res, err
 	}
+	if len(rows) == 0 {
+		return res, nil
+	}
+	return rows[0], nil
+}
+
+func queryDBRows(clnt client.Client, q client.Query) (res []models.Row, err error) {
+	response, err := clnt.Query(q)
+	if err != nil {
+		return res, err
+	}
+	if response.Error() != nil {
+		return res, response.Error()
+	}
+
+	if len(response.Results) == 0 {
+		//empty result is not error
+		return res, nil
+	}
+	res = response.Results[0].Series
 	return res, nil
 }
 
@@ -155,14 +167,14 @@ func InfluxDBSchemaInfo(addr *C.char, port C.int, user *C.char, pass *C.char,
 
 		// fill member of tableInfo
 
-		fieldlen := len(fieldresult.Values)
-		tableInfo[i].field_len = C.int(fieldlen)
+		fieldLen := len(fieldresult.Values)
+		tableInfo[i].field_len = C.int(fieldLen)
 
-		tableInfo[i].field = allocCStringArray(fieldlen)
-		fields := cStringArrayToSlice(tableInfo[i].field, fieldlen)
+		tableInfo[i].field = allocCStringArray(fieldLen)
+		fields := cStringArrayToSlice(tableInfo[i].field, fieldLen)
 
-		tableInfo[i].field_type = allocCStringArray(fieldlen)
-		fieldtypes := cStringArrayToSlice(tableInfo[i].field_type, fieldlen)
+		tableInfo[i].field_type = allocCStringArray(fieldLen)
+		fieldtypes := cStringArrayToSlice(tableInfo[i].field_type, fieldLen)
 
 		//SHOW FIELD KEYS returns one row for each column
 		//first column of each row is column name, second column is column type
@@ -180,6 +192,7 @@ func InfluxDBSchemaInfo(addr *C.char, port C.int, user *C.char, pass *C.char,
 			fieldtypes[i] = C.CString(t)
 		}
 	}
+
 	return info, len(result.Values), nil
 }
 
@@ -218,26 +231,7 @@ func InfluxDBFreeSchemaInfo(tableInfo *C.struct_TableInfo, length int) {
 	}
 }
 
-//InfluxDBQuery returns result set
-//export InfluxDBQuery
-func InfluxDBQuery(cquery *C.char, addr *C.char, port C.int,
-	user *C.char, pass *C.char, db *C.char,
-	ctypes *C.InfluxDBType, cparam *C.InfluxDBValue, cparamNum C.int) (C.struct_InfluxDBResult, *C.char) {
-
-	// Create a new HTTPClient
-	cl, err := client.NewHTTPClient(client.HTTPConfig{
-		Addr:     C.GoString(addr) + ":" + strconv.Itoa(int(port)),
-		Username: C.GoString(user),
-		Password: C.GoString(pass),
-	})
-	if err != nil {
-		return C.InfluxDBResult{}, C.CString(err.Error())
-	}
-
-	query := client.Query{
-		Command:  C.GoString(cquery),
-		Database: C.GoString(db),
-	}
+func bindParameter(ctypes *C.InfluxDBType, cparam *C.InfluxDBValue, cparamNum C.int, query *client.Query) error {
 	// Set query.Parameters to parameters
 	paramNum := int(cparamNum)
 	if cparamNum > 0 {
@@ -268,58 +262,103 @@ func InfluxDBQuery(cquery *C.char, addr *C.char, port C.int,
 				query.Parameters[strconv.Itoa(i+1)] = C.GoString(*(**C.char)(unsafe.Pointer(&(param[i]))))
 				break
 			default:
-				return C.InfluxDBResult{}, C.CString("unexpected type: " + fmt.Sprint(types[i]))
+				return fmt.Errorf("unexpected type: %v", types[i])
 			}
+
 		}
 	}
+	return nil
+}
 
+//InfluxDBQuery returns result set
+//export InfluxDBQuery
+func InfluxDBQuery(cquery *C.char, addr *C.char, port C.int,
+	user *C.char, pass *C.char, db *C.char,
+	ctypes *C.InfluxDBType, cparam *C.InfluxDBValue, cparamNum C.int) (C.struct_InfluxDBResult, *C.char) {
+
+	// Create a new HTTPClient
+	cl, err := client.NewHTTPClient(client.HTTPConfig{
+		Addr:     C.GoString(addr) + ":" + strconv.Itoa(int(port)),
+		Username: C.GoString(user),
+		Password: C.GoString(pass),
+	})
+	if err != nil {
+		return C.InfluxDBResult{}, C.CString(err.Error())
+	}
+
+	query := client.Query{
+		Command:  C.GoString(cquery),
+		Database: C.GoString(db),
+	}
+	err = bindParameter(ctypes, cparam, cparamNum, &query)
+	if err != nil {
+		return C.InfluxDBResult{}, C.CString(err.Error())
+	}
 	// Query and get result
-	rows, err := queryDB(cl, query)
+	rows, err := queryDBRows(cl, query)
 	if err != nil {
 		return C.InfluxDBResult{}, C.CString(err.Error())
 	}
 
 	//Convert result to C.struct_InfluxDBResult
 
-	nrow := len(rows.Values)
+	nrow := 0
+	for _, row := range rows {
+		nrow += len(row.Values)
+	}
 
 	if nrow == 0 {
+		//returns empty reuslt, not error
 		return C.InfluxDBResult{}, nil
 	}
 
+	fieldLen := len(rows[0].Columns)
+	tagLen := len(rows[0].Tags)
 	result := C.InfluxDBResult{
-		ncol: C.int(len(rows.Values[0])),
-		nrow: C.int(nrow),
-		rows: (*C.struct_InfluxDBRow)(C.malloc(C.size_t(int(C.sizeof_struct_InfluxDBRow) * nrow))),
+		ncol:    C.int(fieldLen + tagLen),
+		nrow:    C.int(nrow),
+		rows:    (*C.struct_InfluxDBRow)(C.malloc(C.size_t(int(C.sizeof_struct_InfluxDBRow) * nrow))),
+		ntag:    C.int(tagLen),
+		tagkeys: allocCStringArray(tagLen),
+	}
+	ctagkeys := cStringArrayToSlice(result.tagkeys, tagLen)
+	tagkeys := make([]string, tagLen)
+	i := 0
+	for key := range rows[0].Tags {
+		tagkeys[i] = key
+		ctagkeys[i] = C.CString(key)
+		i++
 	}
 
 	resultRows := (*[1 << 30]C.struct_InfluxDBRow)(unsafe.Pointer(result.rows))[:nrow:nrow]
+	rowidx := 0
+	for _, row := range rows {
+		for _, ival := range row.Values {
+			resultRows[rowidx].tuple = allocCStringArray(len(ival) + tagLen)
+			tuple := cStringArrayToSlice(resultRows[rowidx].tuple, len(ival)+tagLen)
+			rowidx++
 
-	for i, row := range rows.Values {
-		resultRows[i].tuple = allocCStringArray(len(row))
-		tuple := cStringArrayToSlice(resultRows[i].tuple, len(row))
-		//Convert each value to C string and set to tuple
-		for j, c := range row {
-			switch val := c.(type) {
-			case nil:
-				tuple[j] = nil
-				break
-			case json.Number:
-				tuple[j] = C.CString(val.String())
-				break
-			case bool:
-				if val {
-					tuple[j] = C.CString("true")
-				} else {
-					tuple[j] = C.CString("false")
+			//Convert each value to C string and set to tuple
+			for j, c := range ival {
+				switch val := c.(type) {
+				case nil:
+					tuple[j] = nil
+				case json.Number:
+					tuple[j] = C.CString(val.String())
+				case bool:
+					if val {
+						tuple[j] = C.CString("true")
+					} else {
+						tuple[j] = C.CString("false")
+					}
+				case string:
+					tuple[j] = C.CString(val)
+				default:
+					return C.InfluxDBResult{}, C.CString("unexpected type: " + fmt.Sprint(val))
 				}
-				break
-			case string:
-				tuple[j] = C.CString(val)
-				break
-
-			default:
-				return C.InfluxDBResult{}, C.CString("unexpected type: " + fmt.Sprint(val))
+			}
+			for k, v := range tagkeys {
+				tuple[fieldLen+k] = C.CString(row.Tags[v])
 			}
 		}
 	}
