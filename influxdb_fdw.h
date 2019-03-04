@@ -76,7 +76,7 @@ typedef struct InfluxDBFdwExecState
 	int64		rowidx;			/* current index of rows */
 	bool	  **rows_isnull;	/* is null */
 	bool		for_update;		/* true if this scan is update target */
-	List	   *skip_attrs;		/* skip attrs */
+	bool		is_agg;			/* scan is aggregate or not */
 	List	   *tlist;			/* target list */
 	/* working memory context */
 	MemoryContext temp_cxt;		/* context for per-tuple temporary data */
@@ -150,7 +150,7 @@ extern influxdb_opt * influxdb_get_options(Oid foreigntableid);
 extern void influxdbDeparseSelectStmtForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *rel,
 								List *tlist, List *remote_conds, List *pathkeys,
 								bool is_subquery, List **retrieved_attrs,
-								List **params_list, List **skip_attrs);
+								List **params_list);
 extern void influxdb_deparse_insert(StringInfo buf, PlannerInfo *root, Index rtindex, Relation rel, List *targetAttrs);
 extern void influxdb_deparse_update(StringInfo buf, PlannerInfo *root, Index rtindex, Relation rel, List *targetAttrs, List *attname);
 extern void influxdb_deparse_delete(StringInfo buf, PlannerInfo *root, Index rtindex, Relation rel, List *name);

@@ -80,7 +80,6 @@ typedef struct deparse_expr_cxt
 								 * a base relation. */
 	StringInfo	buf;			/* output buffer to append to */
 	List	  **params_list;	/* exprs that will become remote Params */
-	List	   *skip_attrs;		/* attr not added to remote target list */
 } deparse_expr_cxt;
 
 /*
@@ -411,7 +410,7 @@ foreign_expr_walker(Node *node,
 
 				/* pushed down to InfluxDB */
 				if (strcmp(opername, "now") != 0 &&
-					strcmp(opername, "by_interval") != 0)
+					strcmp(opername, "influx_time") != 0)
 				{
 					return false;
 				}
@@ -836,7 +835,7 @@ void
 influxdbDeparseSelectStmtForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *rel,
 								List *tlist, List *remote_conds, List *pathkeys,
 								bool is_subquery, List **retrieved_attrs,
-								List **params_list, List **skip_attrs)
+								List **params_list)
 {
 	deparse_expr_cxt context;
 	InfluxDBFdwRelationInfo *fpinfo = (InfluxDBFdwRelationInfo *) rel->fdw_private;
@@ -856,10 +855,8 @@ influxdbDeparseSelectStmtForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *r
 	context.foreignrel = rel;
 	context.scanrel = (rel->reloptkind == RELOPT_UPPER_REL) ? fpinfo->outerrel : rel;
 	context.params_list = params_list;
-	context.skip_attrs = NIL;
 	/* Construct SELECT clause */
 	influxdb_deparse_select(tlist, retrieved_attrs, &context);
-	*skip_attrs = context.skip_attrs;
 
 	/*
 	 * For upper relations, the WHERE clause is built from the remote
@@ -1035,21 +1032,14 @@ deparseExplicitTargetList(List *tlist, List **retrieved_attrs,
 	foreach(lc, tlist)
 	{
 		TargetEntry *tle = lfirst_node(TargetEntry, lc);
-		bool		skip;
 
 		if (IsA((Expr *) tle->expr, Aggref))
 		{
-			skip = false;
 			if (!first)
 				appendStringInfoString(buf, ", ");
 			first = false;
 			deparseExpr((Expr *) tle->expr, context);
 		}
-		else
-		{
-			skip = true;
-		}
-		context->skip_attrs = lappend_int(context->skip_attrs, skip);
 		*retrieved_attrs = lappend_int(*retrieved_attrs, i + 1);
 		i++;
 	}
@@ -1633,8 +1623,8 @@ influxdb_deparse_func_expr(FuncExpr *node, deparse_expr_cxt *context)
 		elog(ERROR, "cache lookup failed for function %u", node->funcid);
 	procform = (Form_pg_proc) GETSTRUCT(proctup);
 
-	/* convert by_interval(time, interval '2h') to time(2h) */
-	if (strcmp(NameStr(procform->proname), "by_interval") == 0)
+	/* convert influx_time(time, interval '2h') to time(2h) */
+	if (strcmp(NameStr(procform->proname), "influx_time") == 0)
 	{
 		int			idx = 0;
 
