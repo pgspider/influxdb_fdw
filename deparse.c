@@ -1623,18 +1623,23 @@ influxdb_deparse_func_expr(FuncExpr *node, deparse_expr_cxt *context)
 		elog(ERROR, "cache lookup failed for function %u", node->funcid);
 	procform = (Form_pg_proc) GETSTRUCT(proctup);
 
-	/* convert influx_time(time, interval '2h') to time(2h) */
+	/*
+	 * convert influx_time(time, interval '2h') to time(2h) and
+	 * influx_time(time, interval '2h', interval '1h') to time(2h, 1h)
+	 */
 	if (strcmp(NameStr(procform->proname), "influx_time") == 0)
 	{
 		int			idx = 0;
 
-		appendStringInfo(buf, "time(");
+		Assert(list_length(node->args) == 2 || list_length(node->args) == 3);
 
+		appendStringInfo(buf, "time(");
 		first = true;
 		foreach(arg, node->args)
 		{
 			if (idx == 0)
 			{
+				/* Skip first parameter */
 				idx++;
 				continue;
 			}

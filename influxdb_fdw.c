@@ -700,12 +700,6 @@ influxdbGetForeignPlan(
 							 fdw_scan_tlist);
 
 	/*
-	 * if (baserel->reloptkind == RELOPT_JOINREL || baserel->reloptkind ==
-	 * RELOPT_UPPER_REL) fdw_private = lappend(fdw_private,
-	 * makeString(fpinfo->relation_name->data));
-	 */
-
-	/*
 	 * Create the ForeignScan node from target list, local filtering
 	 * expressions, remote parameter expressions, and FDW private information.
 	 *
@@ -971,7 +965,8 @@ influxdbIterateForeignScan(ForeignScanState *node)
 								festate->numParams);
 			if (ret.r1 != NULL)
 			{
-				char *err = pstrdup(ret.r1);
+				char	   *err = pstrdup(ret.r1);
+
 				free(ret.r1);
 				ret.r1 = err;
 				elog(ERROR, "influxdb_fdw : %s", err);
@@ -989,7 +984,7 @@ influxdbIterateForeignScan(ForeignScanState *node)
 				festate->rows[i] = palloc(sizeof(Datum) * tupleDescriptor->natts);
 				festate->rows_isnull[i] = palloc(sizeof(bool) * tupleDescriptor->natts);
 				make_tuple_from_result_row(&(result->rows[i]),
-										   (struct InfluxDBResult*)result,
+										   (struct InfluxDBResult *) result,
 										   tupleDescriptor,
 										   festate->rows[i],
 										   festate->rows_isnull[i],
