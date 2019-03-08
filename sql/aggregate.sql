@@ -15,18 +15,7 @@ CREATE USER MAPPING FOR CURRENT_USER SERVER server1 OPTIONS(user 'user', passwor
 IMPORT FOREIGN SCHEMA public FROM SERVER server1 INTO public OPTIONS(import_time_text 'true');
 
 
-CREATE FUNCTION influx_time(timestamp with time zone, interval, interval) RETURNS timestamp with time zone AS $$
-BEGIN
-RAISE 'Cannot execute this function in PostgreSQL';
-END
-$$ LANGUAGE plpgsql IMMUTABLE;
 
-
-CREATE FUNCTION influx_time(timestamp with time zone, interval) RETURNS timestamp with time zone AS $$
-BEGIN
-RAISE 'Cannot execute this function in PostgreSQL';
-END
-$$ LANGUAGE plpgsql IMMUTABLE;
 
 --ALTER EXTENSION influxdb_fdw ADD FUNCTION postgres_fdw_abs(int);
 --ALTER SERVER server1 OPTIONS (ADD extensions 'influxdb_fdw');
@@ -52,36 +41,7 @@ SELECT tag1,sum("value1"), count(value1), tag2 FROM "t4" group by tag1, tag2;
 EXPLAIN (verbose)  SELECT tag1,sum("value1"), count(value1), tag2 FROM "t4" group by tag1, tag2;
 
 
-CREATE FUNCTION last_value_sfunc(anyelement, timestamp with time zone, anyelement)
-RETURNS anyelement
-IMMUTABLE
 
-LANGUAGE PLPGSQL
-AS $$
-BEGIN
-  RAISE 'Cannot execute this function in PostgreSQL';
-END;
-$$;
-
-CREATE FUNCTION last_value_finalfunc_bigint(anyelement)
-RETURNS anyelement
-IMMUTABLE
-
-LANGUAGE PLPGSQL
-AS $$
-BEGIN
-  RAISE 'Cannot execute this function in PostgreSQL';
-END;
-$$;
-
-
-CREATE AGGREGATE last (timestamp with time zone, anyelement)
-(
-    sfunc = last_value_sfunc,
-    --basetype = anyelement,
-    stype = anyelement
-    --finalfunc = last_value_finalfunc_text
-);
 
 SELECT influx_time(time,interval '5s',interval '0s'),tag1,last(time, value1) FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00' 
  GROUP BY influx_time(time,interval '5s', interval '0s'), tag1;
