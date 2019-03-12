@@ -233,6 +233,7 @@ func InfluxDBQuery(cquery *C.char, addr *C.char, port C.int,
 	if err != nil {
 		return C.InfluxDBResult{}, C.CString(err.Error())
 	}
+	defer cl.Close()
 
 	query := client.Query{
 		Command:  C.GoString(cquery),
