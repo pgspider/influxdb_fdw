@@ -285,7 +285,7 @@ func InfluxDBQuery(cquery *C.char, addr *C.char, port C.int,
 	if err != nil {
 		return C.InfluxDBResult{}, C.CString(err.Error())
 	}
-
+	defer cl.Close()
 	query := client.Query{
 		Command:  C.GoString(cquery),
 		Database: C.GoString(db),
@@ -367,6 +367,9 @@ func InfluxDBQuery(cquery *C.char, addr *C.char, port C.int,
 
 //export InfluxDBFreeResult
 func InfluxDBFreeResult(result *C.struct_InfluxDBResult) {
+	if result == nil {
+		return
+	}
 	nrow := int(result.nrow)
 	ncol := int(result.ncol)
 	if nrow == 0 {
