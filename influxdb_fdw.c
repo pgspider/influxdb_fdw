@@ -536,6 +536,7 @@ influxdbGetForeignPlan(
 	List	   *fdw_recheck_quals = NIL;
 	int			for_update;
 
+
 	elog(DEBUG1, "influxdb_fdw : %s", __func__);
 
 	/*
@@ -695,11 +696,8 @@ influxdbGetForeignPlan(
 	 * Build the fdw_private list that will be available to the executor.
 	 * Items in the list must match enum FdwScanPrivateIndex, above.
 	 */
-	fdw_private = list_make3(makeString(sql.data), retrieved_attrs, makeInteger(for_update));
-	if (baserel->reloptkind == RELOPT_JOINREL ||
-		baserel->reloptkind == RELOPT_UPPER_REL)
-		fdw_private = lappend(fdw_private,
-							  makeString(fpinfo->relation_name->data));
+	fdw_private = list_make4(makeString(sql.data), retrieved_attrs, makeInteger(for_update),
+							 fdw_scan_tlist);
 
 	/*
 	 * Create the ForeignScan node from target list, local filtering
@@ -739,6 +737,8 @@ influxdbBeginForeignScan(ForeignScanState *node, int eflags)
 	festate->query = strVal(list_nth(fsplan->fdw_private, 0));
 	festate->retrieved_attrs = list_nth(fsplan->fdw_private, 1);
 	festate->for_update = intVal(list_nth(fsplan->fdw_private, 2)) ? true : false;
+	festate->tlist = (List *) list_nth(fsplan->fdw_private, 3);
+
 	festate->cursor_exists = false;
 
 	festate->temp_cxt = AllocSetContextCreate(estate->es_query_cxt,
@@ -761,66 +761,135 @@ influxdbBeginForeignScan(ForeignScanState *node, int eflags)
 							 &festate->param_influxdb_values);
 }
 
+static char *
+get_column_name(Oid relid, int attnum)
+{
+	List	   *options = NULL;
+	ListCell   *lc_opt;
+	char	   *colname = NULL;
+
+	options = GetForeignColumnOptions(relid, attnum);
+
+	foreach(lc_opt, options)
+	{
+		DefElem    *def = (DefElem *) lfirst(lc_opt);
+
+		if (strcmp(def->defname, "column_name") == 0)
+		{
+			colname = defGetString(def);
+			break;
+		}
+	}
+
+	if (colname == NULL)
+		colname = get_attname(relid, attnum
+#if (PG_VERSION_NUM >= 110000)
+							  ,
+							  false
+#endif
+			);
+	return colname;
+}
+
 static void
 make_tuple_from_result_row(InfluxDBRow * result_row,
+						   InfluxDBResult * result,
 						   TupleDesc tupleDescriptor,
-						   List *retrieved_attrs,
 						   Datum *row,
 						   bool *is_null,
-						   Oid relid)
+						   Oid relid,
+						   InfluxDBFdwExecState * festate,
+						   bool is_agg)
 {
 	ListCell   *lc = NULL;
-	ListCell   *lc_opt = NULL;
 	int			attid = 0;
-	List	   *options = NULL;
+	List	   *retrieved_attrs = festate->retrieved_attrs;
+	ListCell   *targetc;
 
 	memset(row, 0, sizeof(Datum) * tupleDescriptor->natts);
 	memset(is_null, true, sizeof(bool) * tupleDescriptor->natts);
 
+	targetc = list_head(festate->tlist);
 	foreach(lc, retrieved_attrs)
 	{
 		int			attnum = lfirst_int(lc) - 1;
 		Oid			pgtype = TupleDescAttr(tupleDescriptor, attnum)->atttypid;
 		int32		pgtypmod = TupleDescAttr(tupleDescriptor, attnum)->atttypmod;
-		int			attr_idx = 0;
+		int			result_idx = 0;
 		char	   *colname = NULL;
 
-		options = GetForeignColumnOptions(relid, attnum + 1);
-		foreach(lc_opt, options)
+		if (is_agg)
 		{
-			DefElem    *def = (DefElem *) lfirst(lc_opt);
+			/* Aggregate push down case */
 
-			if (strcmp(def->defname, "column_name") == 0)
+			/*
+			 * This column is not explicitly added to InfluxDB query, but
+			 * InfluxDB returns implicitly
+			 */
+
+			Expr	   *target = ((TargetEntry *) lfirst(targetc))->expr;
+
+			if (IsA(target, Var))
 			{
-				colname = defGetString(def);
-				break;
+				/* GROUP BY target variable */
+				int			i;
+				char	   *name = get_column_name(relid, ((Var *) target)->varattno);
+				int			nfield = result->ncol - result->ntag;
+
+				/*
+				 * Values of GROUP BY tag are stored in the order of
+				 * result->tagkeys at the last of result row. We will find
+				 * that index
+				 */
+				for (i = 0; i < result->ntag; i++)
+				{
+					if (strcmp(name, result->tagkeys[i]) == 0)
+					{
+						result_idx = nfield + i;
+						break;
+					}
+				}
 			}
-		}
+			else if (IsA(target, FuncExpr) &&
+					 strcmp(influxdb_get_function_name(((FuncExpr *) target)->funcid), "influx_time") == 0)
+			{
+				/* Time column corresponding to influx_time */
+				result_idx = 0;
+			}
+			else if (IsA(target, Aggref))
+			{
+				attid++;
+				result_idx = attid;
+			}
+			else
+			{
+				/*
+				 * Other GROUP BY target is not supported
+				 */
+				elog(ERROR, "not supported");
+			}
+			targetc = lnext(targetc);
 
-		if (colname == NULL)
-		{
-			colname = TupleDescAttr(tupleDescriptor, attnum)->attname.data;
-		}
-
-		/*
-		 * Get from first column of result set if attribute name is time
-		 * column
-		 */
-		if (INFLUXDB_IS_TIME_COLUMN(colname))
-		{
-			attr_idx = 0;
 		}
 		else
 		{
-			attid++;
-			attr_idx = attid;
+			colname = get_column_name(relid, attnum + 1);
+			if (INFLUXDB_IS_TIME_COLUMN(colname))
+			{
+				result_idx = 0;
+			}
+			else
+			{
+				attid++;
+				result_idx = attid;
+			}
 		}
 
-		if (result_row->tuple[attr_idx] != NULL)
+		if (result_row->tuple[result_idx] != NULL)
 		{
 			is_null[attnum] = false;
 			row[attnum] = influxdb_convert_to_pg(pgtype, pgtypmod,
-												 result_row->tuple, attr_idx);
+												 result_row->tuple, result_idx);
 		}
 	}
 }
@@ -843,6 +912,7 @@ influxdbIterateForeignScan(ForeignScanState *node)
 	ForeignScan *fsplan = (ForeignScan *) node->ss.ps.plan;
 	RangeTblEntry *rte;
 	int			rtindex;
+	bool		is_agg;
 
 	elog(DEBUG1, "influxdb_fdw : %s", __func__);
 
@@ -855,9 +925,15 @@ influxdbIterateForeignScan(ForeignScanState *node)
 	 * result from any.
 	 */
 	if (fsplan->scan.scanrelid > 0)
+	{
 		rtindex = fsplan->scan.scanrelid;
+		is_agg = false;
+	}
 	else
+	{
 		rtindex = bms_next_member(fsplan->fs_relids, -1);
+		is_agg = true;
+	}
 	rte = rt_fetch(rtindex, estate->es_range_table);
 
 	/* table = GetForeignTable(rte->relid); */
@@ -889,7 +965,7 @@ influxdbIterateForeignScan(ForeignScanState *node)
 								festate->numParams);
 			if (ret.r1 != NULL)
 			{
-				const char *err = pstrdup(ret.r1);
+				char	   *err = pstrdup(ret.r1);
 
 				free(ret.r1);
 				ret.r1 = err;
@@ -908,11 +984,13 @@ influxdbIterateForeignScan(ForeignScanState *node)
 				festate->rows[i] = palloc(sizeof(Datum) * tupleDescriptor->natts);
 				festate->rows_isnull[i] = palloc(sizeof(bool) * tupleDescriptor->natts);
 				make_tuple_from_result_row(&(result->rows[i]),
+										   (struct InfluxDBResult *) result,
 										   tupleDescriptor,
-										   festate->retrieved_attrs,
 										   festate->rows[i],
 										   festate->rows_isnull[i],
-										   rte->relid);
+										   rte->relid,
+										   festate,
+										   is_agg);
 			}
 			MemoryContextSwitchTo(oldcontext);
 			InfluxDBFreeResult((InfluxDBResult *) result);
@@ -1199,7 +1277,6 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel)
 		if (sgref && get_sortgroupref_clause_noerr(sgref, query->groupClause))
 		{
 
-			return false;
 
 			/*
 			 * If any of the GROUP BY expression is not shippable we can not

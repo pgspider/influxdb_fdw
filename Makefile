@@ -15,7 +15,7 @@ OBJS = option.o deparse.o influxdb_query.o influxdb_fdw.o query.a
 EXTENSION = influxdb_fdw
 DATA = influxdb_fdw--1.0.sql
 
-REGRESS = influxdb_fdw
+REGRESS =  aggregate influxdb_fdw
 
 UNAME = uname
 OS := $(shell $(UNAME))

@@ -125,10 +125,8 @@ static void deparseFromExpr(List *quals, deparse_expr_cxt *context);
 static void deparseAggref(Aggref *node, deparse_expr_cxt *context);
 static void appendConditions(List *exprs, deparse_expr_cxt *context);
 static void appendGroupByClause(List *tlist, deparse_expr_cxt *context);
-static void appendAggOrderBy(List *orderList, List *targetList,
-				 deparse_expr_cxt *context);
+
 static void appendOrderByClause(List *pathkeys, deparse_expr_cxt *context);
-static void appendFunctionName(Oid funcid, deparse_expr_cxt *context);
 static Node *deparseSortGroupClause(Index ref, List *tlist,
 					   deparse_expr_cxt *context);
 static void deparseExplicitTargetList(List *tlist, List **retrieved_attrs,
@@ -170,7 +168,6 @@ influxdb_deparse_relation(StringInfo buf, Relation rel)
 	if (relname == NULL)
 		relname = RelationGetRelationName(rel);
 
-
 	appendStringInfo(buf, "%s", influxdb_quote_identifier(relname, QUOTE));
 }
 
@@ -192,9 +189,6 @@ influxdb_quote_identifier(const char *s, char q)
 	*r++ = '\0';
 	return result;
 }
-
-
-
 
 /*
  * Returns true if given expr is safe to evaluate on the foreign server.
@@ -386,7 +380,7 @@ foreign_expr_walker(Node *node,
 
 				if (!is_valid_type(p->paramtype))
 					return false;
-					
+
 				/*
 				 * Collation rule is same as for Consts and non-foreign Vars.
 				 */
@@ -404,7 +398,6 @@ foreign_expr_walker(Node *node,
 
 				FuncExpr   *fe = (FuncExpr *) node;
 				char	   *opername = NULL;
-				Oid			schema;
 
 				/* get function name and schema */
 				tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(fe->funcid));
@@ -413,15 +406,11 @@ foreign_expr_walker(Node *node,
 					elog(ERROR, "cache lookup failed for function %u", fe->funcid);
 				}
 				opername = pstrdup(((Form_pg_proc) GETSTRUCT(tuple))->proname.data);
-				schema = ((Form_pg_proc) GETSTRUCT(tuple))->pronamespace;
 				ReleaseSysCache(tuple);
 
-				/* ignore functions in other than the pg_catalog schema */
-				if (schema != PG_CATALOG_NAMESPACE)
-					return false;
-
-				/* Only now() is pushed down to InfluxDB */
-				if (strcmp(opername, "now") != 0)
+				/* pushed down to InfluxDB */
+				if (strcmp(opername, "now") != 0 &&
+					strcmp(opername, "influx_time") != 0)
 				{
 					return false;
 				}
@@ -459,7 +448,6 @@ foreign_expr_walker(Node *node,
 					state = FDW_COLLATE_NONE;
 				else
 					state = FDW_COLLATE_UNSAFE;
-
 			}
 			break;
 		case T_OpExpr:
@@ -630,7 +618,6 @@ foreign_expr_walker(Node *node,
 				ListCell   *lc;
 				FuncExpr   *func = (FuncExpr *) node;
 				char	   *opername = NULL;
-				Oid			schema;
 
 				/* get function name and schema */
 				tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(agg->aggfnoid));
@@ -639,18 +626,14 @@ foreign_expr_walker(Node *node,
 					elog(ERROR, "cache lookup failed for function %u", func->funcid);
 				}
 				opername = pstrdup(((Form_pg_proc) GETSTRUCT(tuple))->proname.data);
-				schema = ((Form_pg_proc) GETSTRUCT(tuple))->pronamespace;
 				ReleaseSysCache(tuple);
 
-				/* ignore functions in other than the pg_catalog schema */
-				if (schema != PG_CATALOG_NAMESPACE)
-					return false;
-
-				/* these function can be passed to SQLite */
+				/* these function can be passed to InfluxDB */
 				if (!(strcmp(opername, "sum") == 0
 					  || strcmp(opername, "max") == 0
 					  || strcmp(opername, "min") == 0
-					  || strcmp(opername, "count") == 0))
+					  || strcmp(opername, "count") == 0
+					  || strcmp(opername, "last") == 0))
 				{
 					return false;
 				}
@@ -827,7 +810,6 @@ influxdb_build_tlist_to_deparse(RelOptInfo *foreignrel)
 	return tlist;
 }
 
-
 /*
  * Deparse SELECT statement for given relation into buf.
  *
@@ -871,8 +853,7 @@ influxdbDeparseSelectStmtForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *r
 	context.buf = buf;
 	context.root = root;
 	context.foreignrel = rel;
-	context.scanrel = (rel->reloptkind == RELOPT_UPPER_REL) ?
-		fpinfo->outerrel : rel;
+	context.scanrel = (rel->reloptkind == RELOPT_UPPER_REL) ? fpinfo->outerrel : rel;
 	context.params_list = params_list;
 	/* Construct SELECT clause */
 	influxdb_deparse_select(tlist, retrieved_attrs, &context);
@@ -911,10 +892,7 @@ influxdbDeparseSelectStmtForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *r
 	/* Add ORDER BY clause if we found any useful pathkeys */
 	if (pathkeys)
 		appendOrderByClause(pathkeys, &context);
-
 }
-
-
 
 /*
  * Deparese SELECT statment
@@ -993,7 +971,6 @@ deparseFromExpr(List *quals, deparse_expr_cxt *context)
 	}
 }
 
-
 /*
  * Deparse conditions from the provided list and append them to buf.
  *
@@ -1033,7 +1010,6 @@ appendConditions(List *exprs, deparse_expr_cxt *context)
 	influxdb_reset_transmission_modes(nestlevel);
 }
 
-
 /*
  * Deparse given targetlist and append it to context->buf.
  *
@@ -1049,6 +1025,7 @@ deparseExplicitTargetList(List *tlist, List **retrieved_attrs,
 	ListCell   *lc;
 	StringInfo	buf = context->buf;
 	int			i = 0;
+	bool		first = true;
 
 	*retrieved_attrs = NIL;
 
@@ -1056,10 +1033,13 @@ deparseExplicitTargetList(List *tlist, List **retrieved_attrs,
 	{
 		TargetEntry *tle = lfirst_node(TargetEntry, lc);
 
-		if (i > 0)
-			appendStringInfoString(buf, ", ");
-		deparseExpr((Expr *) tle->expr, context);
-
+		if (IsA((Expr *) tle->expr, Aggref))
+		{
+			if (!first)
+				appendStringInfoString(buf, ", ");
+			first = false;
+			deparseExpr((Expr *) tle->expr, context);
+		}
 		*retrieved_attrs = lappend_int(*retrieved_attrs, i + 1);
 		i++;
 	}
@@ -1067,7 +1047,6 @@ deparseExplicitTargetList(List *tlist, List **retrieved_attrs,
 	if (i == 0)
 		appendStringInfoString(buf, "*");
 }
-
 
 /*
  * Construct FROM clause for given relation
@@ -1101,7 +1080,6 @@ deparseFromExprForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *foreignrel,
 		heap_close(rel, NoLock);
 	}
 }
-
 
 void
 influxdb_deparse_analyze(StringInfo sql, char *dbname, char *relname)
@@ -1168,7 +1146,6 @@ influxdb_deparse_target_list(StringInfo buf,
 		appendStringInfoString(buf, "*");
 }
 
-
 /*
  * Deparse WHERE clauses in given list of RestrictInfos and append them to buf.
  *
@@ -1221,7 +1198,6 @@ influxdb_append_where_clause(StringInfo buf,
 	}
 }
 
-
 static char *
 influxdb_get_column_ref(StringInfo buf, int varno, int varattno, Oid vartype,
 						PlannerInfo *root)
@@ -1260,7 +1236,8 @@ influxdb_get_column_ref(StringInfo buf, int varno, int varattno, Oid vartype,
 	if (colname == NULL)
 		colname = get_attname(rte->relid, varattno
 #if (PG_VERSION_NUM >= 110000)
-							  ,false
+							  ,
+							  false
 #endif
 			);
 	return colname;
@@ -1308,7 +1285,8 @@ influxdb_deparse_column_ref(StringInfo buf, int varno, int varattno, Oid vartype
 	if (colname == NULL)
 		colname = get_attname(rte->relid, varattno
 #if (PG_VERSION_NUM >= 110000)
-							  ,false
+							  ,
+							  false
 #endif
 			);
 	if (convert && vartype == BOOLOID)
@@ -1322,44 +1300,6 @@ influxdb_deparse_column_ref(StringInfo buf, int varno, int varattno, Oid vartype
 		else
 			appendStringInfoString(buf, influxdb_quote_identifier(colname, QUOTE));
 	}
-
-}
-
-
-static void
-influxdb_deparse_string(StringInfo buf, const char *val, bool isstr)
-{
-	const char *valptr;
-	int			i = -1;
-
-	for (valptr = val; *valptr; valptr++)
-	{
-		char		ch = *valptr;
-
-		i++;
-
-		if (i == 0 && isstr)
-			appendStringInfoChar(buf, '\'');
-
-		/*
-		 * Remove '{', '}' and \" character from the string. Because this
-		 * syntax is not recognize by the remote InfluxDB server.
-		 */
-		if ((ch == '{' && i == 0) || (ch == '}' && (i == (strlen(val) - 1))) || ch == '\"')
-			continue;
-
-		if (ch == ',' && isstr)
-		{
-			appendStringInfoChar(buf, '\'');
-			appendStringInfoChar(buf, ch);
-			appendStringInfoChar(buf, ' ');
-			appendStringInfoChar(buf, '\'');
-			continue;
-		}
-		appendStringInfoChar(buf, ch);
-	}
-	if (isstr)
-		appendStringInfoChar(buf, '\'');
 }
 
 /*
@@ -1440,9 +1380,6 @@ deparseExpr(Expr *node, deparse_expr_cxt *context)
 	}
 }
 
-
-
-
 /*
  * Deparse given Var node into context->buf.
  *
@@ -1466,7 +1403,6 @@ influxdb_deparse_var(Var *node, deparse_expr_cxt *context)
 	{
 		/* Var belongs to foreign table */
 		influxdb_deparse_column_ref(buf, node->varno, node->varattno, node->vartype, context->root, true);
-
 	}
 	else
 	{
@@ -1599,26 +1535,12 @@ influxdb_deparse_const(Const *node, deparse_expr_cxt *context, int showtype)
 				fsec_t		fsec;
 
 				interval2tm(*interval, &tm, &fsec);
-				if (tm.tm_mday)
-				{
-					appendStringInfo(buf, "%dd", tm.tm_mday);
-				}
-				if (tm.tm_hour)
-				{
-					appendStringInfo(buf, "%dh", tm.tm_hour);
-				}
-				if (tm.tm_min)
-				{
-					appendStringInfo(buf, "%dm", tm.tm_min);
-				}
-				if (tm.tm_sec)
-				{
-					appendStringInfo(buf, "%ds", tm.tm_sec);
-				}
-				if (fsec)
-				{
-					appendStringInfo(buf, "%du", fsec);
-				}
+
+				appendStringInfo(buf, "%dd%dh%dm%ds%du", tm.tm_mday, tm.tm_hour,
+								 tm.tm_min, tm.tm_sec, fsec
+					);
+
+
 				break;
 			}
 		default:
@@ -1701,6 +1623,37 @@ influxdb_deparse_func_expr(FuncExpr *node, deparse_expr_cxt *context)
 		elog(ERROR, "cache lookup failed for function %u", node->funcid);
 	procform = (Form_pg_proc) GETSTRUCT(proctup);
 
+	/*
+	 * convert influx_time(time, interval '2h') to time(2h) and
+	 * influx_time(time, interval '2h', interval '1h') to time(2h, 1h)
+	 */
+	if (strcmp(NameStr(procform->proname), "influx_time") == 0)
+	{
+		int			idx = 0;
+
+		Assert(list_length(node->args) == 2 || list_length(node->args) == 3);
+
+		appendStringInfo(buf, "time(");
+		first = true;
+		foreach(arg, node->args)
+		{
+			if (idx == 0)
+			{
+				/* Skip first parameter */
+				idx++;
+				continue;
+			}
+			if (idx >= 2)
+				appendStringInfoString(buf, ", ");
+
+			deparseExpr((Expr *) lfirst(arg), context);
+			idx++;
+		}
+		appendStringInfoChar(buf, ')');
+		ReleaseSysCache(proctup);
+		return;
+	}
+
 	/* Translate PostgreSQL function into influxdb function */
 	proname = influxdb_replace_function(NameStr(procform->proname));
 
@@ -1713,6 +1666,7 @@ influxdb_deparse_func_expr(FuncExpr *node, deparse_expr_cxt *context)
 	{
 		if (!first)
 			appendStringInfoString(buf, ", ");
+
 		deparseExpr((Expr *) lfirst(arg), context);
 		first = false;
 	}
@@ -2091,6 +2045,7 @@ deparseAggref(Aggref *node, deparse_expr_cxt *context)
 {
 	StringInfo	buf = context->buf;
 	bool		use_variadic;
+	char	   *func_name;
 
 	/* Only basic, non-split aggregation accepted. */
 	Assert(node->aggsplit == AGGSPLIT_SIMPLE);
@@ -2099,77 +2054,51 @@ deparseAggref(Aggref *node, deparse_expr_cxt *context)
 	use_variadic = node->aggvariadic;
 
 	/* Find aggregate name from aggfnoid which is a pg_proc entry */
-	appendFunctionName(node->aggfnoid, context);
+	func_name = influxdb_get_function_name(node->aggfnoid);
+
+	if (strcmp(func_name, "last") == 0)
+	{
+		/* Convert last(time, value) to last(value) */
+		Assert(list_length(node->args) == 2);
+		appendStringInfo(buf, "last(");
+		deparseExpr((Expr *) (((TargetEntry *) list_nth(node->args, 1))->expr), context);
+		appendStringInfoChar(buf, ')');
+		return;
+	}
+
+	appendStringInfo(buf, "%s", quote_identifier(func_name));
 	appendStringInfoChar(buf, '(');
 
 	/* Add DISTINCT */
 	appendStringInfo(buf, "%s", (node->aggdistinct != NIL) ? "DISTINCT " : "");
 
-	if (AGGKIND_IS_ORDERED_SET(node->aggkind))
+	/* aggstar can be set only in zero-argument aggregates */
+	if (node->aggstar)
+		appendStringInfoChar(buf, '*');
+	else
 	{
-		/* Add WITHIN GROUP (ORDER BY ..) */
 		ListCell   *arg;
 		bool		first = true;
 
-		Assert(!node->aggvariadic);
-		Assert(node->aggorder != NIL);
-
-		foreach(arg, node->aggdirectargs)
+		/* Add all the arguments */
+		foreach(arg, node->args)
 		{
+			TargetEntry *tle = (TargetEntry *) lfirst(arg);
+			Node	   *n = (Node *) tle->expr;
+
+			if (tle->resjunk)
+				continue;
+
 			if (!first)
 				appendStringInfoString(buf, ", ");
 			first = false;
 
-			deparseExpr((Expr *) lfirst(arg), context);
+			/* Add VARIADIC */
+			if (use_variadic && lnext(arg) == NULL)
+				appendStringInfoString(buf, "VARIADIC ");
+
+			deparseExpr((Expr *) n, context);
 		}
-
-		appendStringInfoString(buf, ") WITHIN GROUP (ORDER BY ");
-		appendAggOrderBy(node->aggorder, node->args, context);
-	}
-	else
-	{
-		/* aggstar can be set only in zero-argument aggregates */
-		if (node->aggstar)
-			appendStringInfoChar(buf, '*');
-		else
-		{
-			ListCell   *arg;
-			bool		first = true;
-
-			/* Add all the arguments */
-			foreach(arg, node->args)
-			{
-				TargetEntry *tle = (TargetEntry *) lfirst(arg);
-				Node	   *n = (Node *) tle->expr;
-
-				if (tle->resjunk)
-					continue;
-
-				if (!first)
-					appendStringInfoString(buf, ", ");
-				first = false;
-
-				/* Add VARIADIC */
-				if (use_variadic && lnext(arg) == NULL)
-					appendStringInfoString(buf, "VARIADIC ");
-
-				deparseExpr((Expr *) n, context);
-			}
-		}
-
-		/* Add ORDER BY */
-		if (node->aggorder != NIL)
-		{
-			appendStringInfoString(buf, " ORDER BY ");
-			appendAggOrderBy(node->aggorder, node->args, context);
-		}
-	}
-
-	/* Add FILTER (WHERE ..) */
-	if (node->aggfilter != NULL)
-	{
-		appendStringInfoString(buf, ") FILTER (WHERE ");
-		deparseExpr((Expr *) node->aggfilter, context);
 	}
 
 	appendStringInfoChar(buf, ')');
@@ -2210,61 +2139,6 @@ appendGroupByClause(List *tlist, deparse_expr_cxt *context)
 	}
 }
 
-
-/*
- * Append ORDER BY within aggregate function.
- */
-static void
-appendAggOrderBy(List *orderList, List *targetList, deparse_expr_cxt *context)
-{
-	StringInfo	buf = context->buf;
-	ListCell   *lc;
-	bool		first = true;
-
-	foreach(lc, orderList)
-	{
-		SortGroupClause *srt = (SortGroupClause *) lfirst(lc);
-		Node	   *sortexpr;
-		Oid			sortcoltype;
-		TypeCacheEntry *typentry;
-
-		if (!first)
-			appendStringInfoString(buf, ", ");
-		first = false;
-
-		sortexpr = deparseSortGroupClause(srt->tleSortGroupRef, targetList,
-										  context);
-		sortcoltype = exprType(sortexpr);
-		/* See whether operator is default < or > for datatype */
-		typentry = lookup_type_cache(sortcoltype,
-									 TYPECACHE_LT_OPR | TYPECACHE_GT_OPR);
-		if (srt->sortop == typentry->lt_opr)
-			appendStringInfoString(buf, " ASC");
-		else if (srt->sortop == typentry->gt_opr)
-			appendStringInfoString(buf, " DESC");
-		else
-		{
-			HeapTuple	opertup;
-			Form_pg_operator operform;
-
-			appendStringInfoString(buf, " USING ");
-
-			/* Append operator name. */
-			opertup = SearchSysCache1(OPEROID, ObjectIdGetDatum(srt->sortop));
-			if (!HeapTupleIsValid(opertup))
-				elog(ERROR, "cache lookup failed for operator %u", srt->sortop);
-			operform = (Form_pg_operator) GETSTRUCT(opertup);
-			influxdb_deparse_operator_name(buf, operform);
-			ReleaseSysCache(opertup);
-		}
-
-		if (srt->nulls_first)
-			appendStringInfoString(buf, " NULLS FIRST");
-		else
-			appendStringInfoString(buf, " NULLS LAST");
-	}
-}
-
 /*
  * Find an equivalence class member expression, all of whose Vars, come from
  * the indicated relation.
@@ -2292,7 +2166,6 @@ find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 	/* We didn't find any suitable equivalence class expression */
 	return NULL;
 }
-
 
 /*
  * Deparse ORDER BY clause according to the given pathkeys for given base
@@ -2338,33 +2211,22 @@ appendOrderByClause(List *pathkeys, deparse_expr_cxt *context)
  * appendFunctionName
  *		Deparses function name from given function oid.
  */
-static void
-appendFunctionName(Oid funcid, deparse_expr_cxt *context)
+char *
+influxdb_get_function_name(Oid funcid)
 {
-	StringInfo	buf = context->buf;
+
 	HeapTuple	proctup;
 	Form_pg_proc procform;
-	const char *proname;
+	char	   *proname;
 
 	proctup = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcid));
 	if (!HeapTupleIsValid(proctup))
 		elog(ERROR, "cache lookup failed for function %u", funcid);
 	procform = (Form_pg_proc) GETSTRUCT(proctup);
-
-	/* Print schema name only if it's not pg_catalog */
-	if (procform->pronamespace != PG_CATALOG_NAMESPACE)
-	{
-		const char *schemaname;
-
-		schemaname = get_namespace_name(procform->pronamespace);
-		appendStringInfo(buf, "%s.", quote_identifier(schemaname));
-	}
-
 	/* Always print the function name */
-	proname = NameStr(procform->proname);
-	appendStringInfo(buf, "%s", quote_identifier(proname));
-
+	proname = pstrdup(NameStr(procform->proname));
 	ReleaseSysCache(proctup);
+	return proname;
 }
 
 /*

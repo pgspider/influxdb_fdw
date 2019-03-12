@@ -17,9 +17,10 @@ SELECT value1,time,value2 FROM cpu;
 SELECT value1,time_text,value2 FROM cpu;
 DROP FOREIGN TABLE cpu;
 DROP FOREIGN TABLE t3;
+DROP FOREIGN TABLE t4;
 
 -- test EXECPT
-IMPORT FOREIGN SCHEMA public EXCEPT (cpu,t3) FROM SERVER server1 INTO public;
+IMPORT FOREIGN SCHEMA public EXCEPT (cpu,t3, t4) FROM SERVER server1 INTO public;
 SELECT ftoptions FROM pg_foreign_table;
 
 -- test LIMIT TO
@@ -97,23 +98,6 @@ SELECT * FROM t2 WHERE time + interval '1 week 1 day 5 hour 43 minute 21 second 
 SELECT * FROM t2 WHERE time = TIMESTAMP '2015-09-18 00:00:00' - interval '1 months';
 EXPLAIN (verbose)  SELECT * FROM t2 WHERE time = TIMESTAMP '2015-09-18 00:00:00' - interval '1 months';
 
-
-SELECT * FROM t3;
-
-EXPLAIN (verbose, costs off) SELECT
-sum(value1), max(value1),count(*) FROM t3;
-SELECT sum(value1), max(value1),count(*) FROM t3;
-
-EXPLAIN (verbose, costs off) 
-SELECT avg(value1) FROM t3;
-SELECT avg(value1) FROM t3;
-
-
--- Not pushdown aggregates with GROUP BY because "SELECT sum(value1),tag1" cause error "mixing aggregate and non-aggregate queries is not supported"
-EXPLAIN (verbose, costs off) 
-SELECT sum(value1) FROM t3 GROUP BY "tag1";
-SELECT sum(value1) FROM t3 GROUP BY "tag1";
-
 -- Currently using column_name 'time' does not work 
 -- CREATE FOREIGN TABLE t(tm timestamp OPTIONS (column_name 'time'),tm_with_zone timestamp with time zone OPTIONS (column_name 'time'), tag1 text,value1 integer) SERVER server1  OPTIONS (table 'cpu');
 SELECT * FROM t2 WHERE value1 = ANY (ARRAY(SELECT value1 FROM t1 WHERE value1 < 1000));
@@ -123,13 +107,14 @@ SELECT * FROM t1;
 ALTER SERVER server1 OPTIONS (SET dbname 'mydb');
 SELECT * FROM t1;
 
-CREATE FOREIGN TABLE t4(t timestamp OPTIONS (column_name 'time') , tag1 text OPTIONS (column_name 'time'), v1  integer OPTIONS (column_name 'value1')) SERVER server1  OPTIONS (table 'cpu');
-SELECT * FROM t4;
+CREATE FOREIGN TABLE t5(t timestamp OPTIONS (column_name 'time') , tag1 text OPTIONS (column_name 'time'), v1  integer OPTIONS (column_name 'value1')) SERVER server1  OPTIONS (table 'cpu');
+SELECT * FROM t5;
 
 DROP FOREIGN TABLE t1;
 DROP FOREIGN TABLE t2;
 DROP FOREIGN TABLE t3;
 DROP FOREIGN TABLE t4;
+DROP FOREIGN TABLE t5;
 
 DROP USER MAPPING FOR CURRENT_USER SERVER server1;
 DROP SERVER server1;

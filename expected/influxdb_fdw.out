@@ -42,8 +42,9 @@ SELECT value1,time_text,value2 FROM cpu;
 
 DROP FOREIGN TABLE cpu;
 DROP FOREIGN TABLE t3;
+DROP FOREIGN TABLE t4;
 -- test EXECPT
-IMPORT FOREIGN SCHEMA public EXCEPT (cpu,t3) FROM SERVER server1 INTO public;
+IMPORT FOREIGN SCHEMA public EXCEPT (cpu,t3, t4) FROM SERVER server1 INTO public;
 SELECT ftoptions FROM pg_foreign_table;
  ftoptions 
 -----------
@@ -342,68 +343,6 @@ EXPLAIN (verbose)  SELECT * FROM t2 WHERE time = TIMESTAMP '2015-09-18 00:00:00'
    InfluxDB query: SELECT "tag1", "value1" FROM "cpu" WHERE ((time = '2015-08-18 00:00:00'))
 (3 rows)
 
-SELECT * FROM t3;
-          time          | tag1 | value1 | value2 
-------------------------+------+--------+--------
- 1970-01-01 09:00:00+09 | a    |      1 |    100
- 1970-01-01 09:00:01+09 | a    |      2 |    100
- 1970-01-01 09:00:02+09 | a    |      3 |    100
- 1970-01-01 09:00:03+09 | b    |     10 |    200
- 1970-01-01 09:00:04+09 | b    |     20 |    200
-(5 rows)
-
-EXPLAIN (verbose, costs off) SELECT
-sum(value1), max(value1),count(*) FROM t3;
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan
-   Output: (sum(value1)), (max(value1)), (count(*))
-   InfluxDB query: SELECT sum("value1"), max("value1"), count(*) FROM "t3"
-(3 rows)
-
-SELECT sum(value1), max(value1),count(*) FROM t3;
- sum | max | count 
------+-----+-------
-  36 |  20 |     5
-(1 row)
-
-EXPLAIN (verbose, costs off) 
-SELECT avg(value1) FROM t3;
-                    QUERY PLAN                     
----------------------------------------------------
- Aggregate
-   Output: avg(value1)
-   ->  Foreign Scan on public.t3
-         Output: "time", tag1, value1, value2
-         InfluxDB query: SELECT "value1" FROM "t3"
-(5 rows)
-
-SELECT avg(value1) FROM t3;
- avg 
------
- 7.2
-(1 row)
-
--- Not pushdown aggregates with GROUP BY because "SELECT sum(value1),tag1" cause error "mixing aggregate and non-aggregate queries is not supported"
-EXPLAIN (verbose, costs off) 
-SELECT sum(value1) FROM t3 GROUP BY "tag1";
-                        QUERY PLAN                         
------------------------------------------------------------
- HashAggregate
-   Output: sum(value1), tag1
-   Group Key: t3.tag1
-   ->  Foreign Scan on public.t3
-         Output: "time", tag1, value1, value2
-         InfluxDB query: SELECT "tag1", "value1" FROM "t3"
-(6 rows)
-
-SELECT sum(value1) FROM t3 GROUP BY "tag1";
- sum 
------
-   6
-  30
-(2 rows)
-
 -- Currently using column_name 'time' does not work 
 -- CREATE FOREIGN TABLE t(tm timestamp OPTIONS (column_name 'time'),tm_with_zone timestamp with time zone OPTIONS (column_name 'time'), tag1 text,value1 integer) SERVER server1  OPTIONS (table 'cpu');
 SELECT * FROM t2 WHERE value1 = ANY (ARRAY(SELECT value1 FROM t1 WHERE value1 < 1000));
@@ -424,8 +363,8 @@ SELECT * FROM t1;
  2015-08-18 09:00:00+09 | tag1_B |    100
 (2 rows)
 
-CREATE FOREIGN TABLE t4(t timestamp OPTIONS (column_name 'time') , tag1 text OPTIONS (column_name 'time'), v1  integer OPTIONS (column_name 'value1')) SERVER server1  OPTIONS (table 'cpu');
-SELECT * FROM t4;
+CREATE FOREIGN TABLE t5(t timestamp OPTIONS (column_name 'time') , tag1 text OPTIONS (column_name 'time'), v1  integer OPTIONS (column_name 'value1')) SERVER server1  OPTIONS (table 'cpu');
+SELECT * FROM t5;
           t          |         tag1         | v1  
 ---------------------+----------------------+-----
  2015-08-18 00:00:00 | 2015-08-18T00:00:00Z | 100
@@ -436,6 +375,7 @@ DROP FOREIGN TABLE t1;
 DROP FOREIGN TABLE t2;
 DROP FOREIGN TABLE t3;
 DROP FOREIGN TABLE t4;
+DROP FOREIGN TABLE t5;
 DROP USER MAPPING FOR CURRENT_USER SERVER server1;
 DROP SERVER server1;
 DROP EXTENSION influxdb_fdw CASCADE;
