@@ -328,6 +328,9 @@ func InfluxDBQuery(cquery *C.char, addr *C.char, port C.int,
 
 //export InfluxDBFreeResult
 func InfluxDBFreeResult(result *C.struct_InfluxDBResult) {
+	if result == nil {
+		return
+	}
 	nrow := int(result.nrow)
 	ncol := int(result.ncol)
 	if nrow == 0 {
