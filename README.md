@@ -55,8 +55,8 @@ SELECT * FROM t1;
 </pre>
 
 ## Features
-- WHERE clauses including timestamp, interval and now functions are pushed down
-- Simple aggregation without GROUP BY are pushed down
+- WHERE clauses including timestamp, interval and `now()` functions are pushed down
+- Some of aggregation are pushed down
 
 ## Limitations
 - INSERT, UPDATE and DELETE are not supported.
@@ -65,8 +65,7 @@ Following limitations originate from data model and query language of InfluxDB.
 - Result sets have different number of rows depending on specified target list.
 For example, `SELECT field1 FROM t1` and `SELECT field2 FROM t1` returns different number of rows if
 the number of points with field1 and field2 are different in InfluxDB database. 
-- Complex boolean conditions not allowed in InfluxDB like `WHERE b = (a = true)` may cause error.
-- Conditions including NULL may cause error.
+- Currently `GROUP BY` works for only tag keys, not for field keys([#3](/../../issues/3))
 
 When a query to foreing tables fails, you can find why it fails by seeing a query executed in InfluxDB with `EXPLAIN (VERBOSE)`.
 ## License
