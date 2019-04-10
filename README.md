@@ -68,6 +68,10 @@ the number of points with field1 and field2 are different in InfluxDB database.
 - Currently `GROUP BY` works for only tag keys, not for field keys([#3](/../../issues/3))
 
 When a query to foreing tables fails, you can find why it fails by seeing a query executed in InfluxDB with `EXPLAIN (VERBOSE)`.
+
+## Contributing
+Opening issues and pull requests on GitHub are welcome.
+
 ## License
 Copyright (c) 2018, TOSHIBA Corporation 
 Copyright (c) 2011 - 2016, EnterpriseDB Corporation
