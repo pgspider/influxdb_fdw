@@ -11,14 +11,15 @@ go get github.com/influxdata/influxdb1-client/v2
 
 Add a directory of pg_config to PATH and build and install influxdb_fdw.
 <pre>
-make USE_PGXS=1
-make install USE_PGXS=1
+make USE_PGXS=1 with_llvm=no
+make install USE_PGXS=1 with_llvm=no
 </pre>
+with_llvm=no is necessary to disable llvm bit code generation when PostgreSQL is configured with --with-llvm because influxdb_fdw use go code and cannot be compiled to llvm bit code.
 
 If you want to build influxdb_fdw in a source tree of PostgreSQL instead, use
 <pre>
-make
-make install
+make with_llvm=no
+make install  with_llvm=no
 </pre>
 
 ## Usage
@@ -44,7 +45,7 @@ You need to declare a column named "time" to access InfluxDB time column.
 CREATE FOREIGN TABLE t1(time timestamp with time zone , tag1 text, field1 integer) SERVER influxdb_server OPTIONS (table 'measurement1');
 </pre>
 
-### Or you can use import foreign schema
+### Import foreign schema
 <pre>
 IMPORT FOREIGN SCHEMA public FROM SERVER influxdb_server INTO public;
 </pre>
@@ -73,7 +74,7 @@ When a query to foreing tables fails, you can find why it fails by seeing a quer
 Opening issues and pull requests on GitHub are welcome.
 
 ## License
-Copyright (c) 2018, TOSHIBA Corporation 
+Copyright (c) 2018 - 2019, TOSHIBA Corporation 
 Copyright (c) 2011 - 2016, EnterpriseDB Corporation
 
 Permission to use, copy, modify, and distribute this software and its documentation for any purpose, without fee, and without a written agreement is hereby granted, provided that the above copyright notice and this paragraph and the following two paragraphs appear in all copies.
