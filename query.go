@@ -1,5 +1,5 @@
 package main
-
+// #cgo CFLAGS: -fPIC
 /*
 #include <stdlib.h>
 
