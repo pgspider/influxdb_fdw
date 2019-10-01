@@ -3,6 +3,7 @@ This PostgreSQL extension is a Foreign Data Wrapper (FDW) for InfluxDB.
 
 The current version can work with PostgreSQL 9.6, 10 and 11.
 
+Go version should be 1.10.4 or later.
 ## Installation
 Install InfluxDB Go client library
 <pre>
@@ -67,6 +68,7 @@ Following limitations originate from data model and query language of InfluxDB.
 For example, `SELECT field1 FROM t1` and `SELECT field2 FROM t1` returns different number of rows if
 the number of points with field1 and field2 are different in InfluxDB database. 
 - Currently `GROUP BY` works for only tag keys, not for field keys([#3](/../../issues/3))
+- Timestamp precision may be lost because timestamp resolution of PostgreSQL is microseconds while that of InfluxDB is nanoseconds.
 
 When a query to foreing tables fails, you can find why it fails by seeing a query executed in InfluxDB with `EXPLAIN (VERBOSE)`.
 
