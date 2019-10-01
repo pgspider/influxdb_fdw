@@ -84,23 +84,23 @@ extern Datum influxdb_fdw_validator(PG_FUNCTION_ARGS);
 PG_FUNCTION_INFO_V1(influxdb_fdw_handler);
 
 static void influxdbGetForeignRelSize(PlannerInfo *root,
-						  RelOptInfo *baserel,
-						  Oid foreigntableid);
+									  RelOptInfo *baserel,
+									  Oid foreigntableid);
 
 static void influxdbGetForeignPaths(PlannerInfo *root,
-						RelOptInfo *baserel,
-						Oid foreigntableid);
+									RelOptInfo *baserel,
+									Oid foreigntableid);
 
 static ForeignScan *influxdbGetForeignPlan(PlannerInfo *root,
-					   RelOptInfo *baserel,
-					   Oid foreigntableid,
-					   ForeignPath *best_path,
-					   List *tlist,
-					   List *scan_clauses,
-					   Plan *outer_plan);
+										   RelOptInfo *baserel,
+										   Oid foreigntableid,
+										   ForeignPath *best_path,
+										   List *tlist,
+										   List *scan_clauses,
+										   Plan *outer_plan);
 
 static void influxdbBeginForeignScan(ForeignScanState *node,
-						 int eflags);
+									 int eflags);
 
 static TupleTableSlot *influxdbIterateForeignScan(ForeignScanState *node);
 
@@ -109,28 +109,28 @@ static void influxdbReScanForeignScan(ForeignScanState *node);
 static void influxdbEndForeignScan(ForeignScanState *node);
 
 static void influxdbExplainForeignScan(ForeignScanState *node,
-						   struct ExplainState *es);
+									   struct ExplainState *es);
 
 static void influxdbExplainForeignModify(ModifyTableState *mtstate,
-							 ResultRelInfo *rinfo,
-							 List *fdw_private,
-							 int subplan_index,
-							 struct ExplainState *es);
+										 ResultRelInfo *rinfo,
+										 List *fdw_private,
+										 int subplan_index,
+										 struct ExplainState *es);
 
 static bool influxdbAnalyzeForeignTable(Relation relation,
-							AcquireSampleRowsFunc *func,
-							BlockNumber *totalpages);
+										AcquireSampleRowsFunc *func,
+										BlockNumber *totalpages);
 
 static List *influxdbImportForeignSchema(ImportForeignSchemaStmt *stmt,
-							Oid serverOid);
+										 Oid serverOid);
 
 static void
-influxdbGetForeignUpperPaths(PlannerInfo *root,
-							 UpperRelationKind stage,
-							 RelOptInfo *input_rel,
-							 RelOptInfo *output_rel
+			influxdbGetForeignUpperPaths(PlannerInfo *root,
+										 UpperRelationKind stage,
+										 RelOptInfo *input_rel,
+										 RelOptInfo *output_rel
 #if (PG_VERSION_NUM >= 110000)
-							 ,void *extra
+										 ,void *extra
 #endif
 );
 
@@ -138,28 +138,28 @@ influxdbGetForeignUpperPaths(PlannerInfo *root,
 static void influxdb_to_pg_type(StringInfo str, char *typname);
 
 static void prepare_query_params(PlanState *node,
-					 List *fdw_exprs,
-					 int numParams,
-					 FmgrInfo **param_flinfo,
-					 List **param_exprs,
-					 const char ***param_values,
-					 Oid **param_types,
-					 InfluxDBType * *param_influxdb_types,
-					 InfluxDBValue * *param_influxdb_values);
+								 List *fdw_exprs,
+								 int numParams,
+								 FmgrInfo **param_flinfo,
+								 List **param_exprs,
+								 const char ***param_values,
+								 Oid **param_types,
+								 InfluxDBType * *param_influxdb_types,
+								 InfluxDBValue * *param_influxdb_values);
 
 static void process_query_params(ExprContext *econtext,
-					 FmgrInfo *param_flinfo,
-					 List *param_exprs,
-					 const char **param_values,
-					 Oid *param_types,
-					 InfluxDBType * param_influxdb_types,
-					 InfluxDBValue * param_influxdb_values);
+								 FmgrInfo *param_flinfo,
+								 List *param_exprs,
+								 const char **param_values,
+								 Oid *param_types,
+								 InfluxDBType * param_influxdb_types,
+								 InfluxDBValue * param_influxdb_values);
 
 static void create_cursor(ForeignScanState *node);
 static bool foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel);
 static void add_foreign_grouping_paths(PlannerInfo *root,
-						   RelOptInfo *input_rel,
-						   RelOptInfo *grouped_rel);
+									   RelOptInfo *input_rel,
+									   RelOptInfo *grouped_rel);
 
 /*
  * Library load-time initialization, sets on_proc_exit() callback for
