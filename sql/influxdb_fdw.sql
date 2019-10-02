@@ -64,7 +64,7 @@ SELECT * FROM cpu WHERE tag2 = '';
 SELECT * FROM cpu WHERE tag1 IN ('tag1_A', 'tag1_B');
 EXPLAIN (verbose)  SELECT * FROM cpu WHERE tag1 IN ('tag1_A', 'tag1_B');
 
--- Rows which have no tag are considered to have empty string tag, so much below conditions
+-- Rows which have no tag are considered to have empty string
 SELECT * FROM cpu WHERE tag1 NOT IN ('tag1_A', 'tag1_B');
 EXPLAIN (verbose)  SELECT * FROM cpu WHERE tag1 NOT IN ('tag1_A', 'tag1_B');
 
@@ -74,10 +74,11 @@ CREATE FOREIGN TABLE t1(time timestamp with time zone , tag1 text, value1 intege
 CREATE FOREIGN TABLE t2(time timestamp , tag1 text, value1 integer) SERVER server1  OPTIONS (table 'cpu');
 
 SELECT * FROM t1;
+SELECT * FROM t2;
+-- In following four queries, timestamp condition is added to InfluxQL as "time = '2015-08-18 00:00:00'"
 SELECT * FROM t1 WHERE time = TIMESTAMP WITH TIME ZONE '2015-08-18 09:00:00+09';
 SELECT * FROM t1 WHERE time = TIMESTAMP '2015-08-18 00:00:00';
 
-SELECT * FROM t2;
 SELECT * FROM t2 WHERE time = TIMESTAMP WITH TIME ZONE '2015-08-18 09:00:00+09';
 SELECT * FROM t2 WHERE time = TIMESTAMP '2015-08-18 00:00:00';
 
@@ -89,17 +90,15 @@ SELECT * FROM t2 WHERE time = TIMESTAMP  WITH TIME ZONE '2015-08-26 05:43:21.1+0
 EXPLAIN (verbose)  SELECT * FROM t2 WHERE time = TIMESTAMP  WITH TIME ZONE '2015-08-26 05:43:21.1+00' - interval '1 week 1 day 5 hour 43 minute 21 second 100 millisecond';
 
 -- InfluxDB does not seem to support time column + interval, so below query returns empty result
-SELECT * FROM t2 WHERE time + interval '1 week 1 day 5 hour 43 minute 21 second 100 millisecond' = TIMESTAMP  WITH TIME ZONE '2015-08-26 05:43:21.1+00';
-EXPLAIN (verbose, costs off) 
-SELECT * FROM t2 WHERE time + interval '1 week 1 day 5 hour 43 minute 21 second 100 millisecond' = TIMESTAMP  WITH TIME ZONE '2015-08-26 05:43:21.1+00';
+-- SELECT * FROM t2 WHERE time + interval '1 week 1 day 5 hour 43 minute 21 second 100 millisecond' = TIMESTAMP  WITH TIME ZONE '2015-08-26 05:43:21.1+00';
+-- EXPLAIN (verbose, costs off) 
+-- SELECT * FROM t2 WHERE time + interval '1 week 1 day 5 hour 43 minute 21 second 100 millisecond' = TIMESTAMP  WITH TIME ZONE '2015-08-26 05:43:21.1+00';
 
 
 -- InfluxDB does not support month or year interval, so not push down
 SELECT * FROM t2 WHERE time = TIMESTAMP '2015-09-18 00:00:00' - interval '1 months';
 EXPLAIN (verbose)  SELECT * FROM t2 WHERE time = TIMESTAMP '2015-09-18 00:00:00' - interval '1 months';
 
--- Currently using column_name 'time' does not work 
--- CREATE FOREIGN TABLE t(tm timestamp OPTIONS (column_name 'time'),tm_with_zone timestamp with time zone OPTIONS (column_name 'time'), tag1 text,value1 integer) SERVER server1  OPTIONS (table 'cpu');
 SELECT * FROM t2 WHERE value1 = ANY (ARRAY(SELECT value1 FROM t1 WHERE value1 < 1000));
 
 ALTER SERVER server1 OPTIONS (SET dbname 'no such database');
@@ -107,6 +106,7 @@ SELECT * FROM t1;
 ALTER SERVER server1 OPTIONS (SET dbname 'mydb');
 SELECT * FROM t1;
 
+-- map time column to both timestamp and text
 CREATE FOREIGN TABLE t5(t timestamp OPTIONS (column_name 'time') , tag1 text OPTIONS (column_name 'time'), v1  integer OPTIONS (column_name 'value1')) SERVER server1  OPTIONS (table 'cpu');
 SELECT * FROM t5;
 
