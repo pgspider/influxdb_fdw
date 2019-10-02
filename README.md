@@ -69,6 +69,7 @@ For example, `SELECT field1 FROM t1` and `SELECT field2 FROM t1` returns differe
 the number of points with field1 and field2 are different in InfluxDB database. 
 - Currently `GROUP BY` works for only tag keys, not for field keys([#3](/../../issues/3))
 - Timestamp precision may be lost because timestamp resolution of PostgreSQL is microseconds while that of InfluxDB is nanoseconds.
+- Conditions like `WHERE time + interval '1 day' < now()` do not work. Please use `WHERE time < now() - interval '1 day'`.
 
 When a query to foreing tables fails, you can find why it fails by seeing a query executed in InfluxDB with `EXPLAIN (VERBOSE)`.
 
