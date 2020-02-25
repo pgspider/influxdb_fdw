@@ -4037,13 +4037,24 @@ select c2, sum from "S 1"."T1" t1, lateral (select sum(t2.c1 + t1."C1") sum from
          ->  Subquery Scan on qry
                Output: qry.sum, t2.c1
                Filter: (((t1.c2 * 2))::numeric = qry.sum)
-               ->  Foreign Scan
-                     Output: (sum((t2.c1 + t1."C1"))), t2.c1
-                     InfluxDB query: SELECT sum(("C1" + $1)) FROM "T1" GROUP BY "C1"
-(14 rows)
+               ->  GroupAggregate
+                     Output: sum((t2.c1 + t1."C1")), t2.c1
+                     Group Key: t2.c1
+                     ->  Sort
+                           Output: t2.c1
+                           Sort Key: t2.c1
+                           ->  Foreign Scan on public.ft2 t2
+                                 Output: t2.c1
+                                 InfluxDB query: SELECT "C1" FROM "T1"
+(20 rows)
 
 select c2, sum from "S 1"."T1" t1, lateral (select sum(t2.c1 + t1."C1") sum from ft2 t2 group by t2.c1) qry where t1.c2 * 2 = qry.sum and t1.c2 < 3 and t1."C1" < 100 order by 1;
-ERROR:  influxdb_fdw : expected field argument in sum()
+ c2 | sum 
+----+-----
+  1 |   2
+  2 |   4
+(2 rows)
+
 reset enable_hashagg;
 -- Check with placeHolderVars
 explain (verbose, costs off)

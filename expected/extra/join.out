@@ -2439,7 +2439,13 @@ from c2 left join
   ) as ss
   on (c2.a = ss.code)
 order by c2.name;
-ERROR:  influxdb_fdw : expected field argument in count()
+ name | code | b_cnt | const 
+------+------+-------+-------
+ A    | p    |     2 |    -1
+ B    | q    |     0 |    -1
+ C    |      |       |      
+(3 rows)
+
 rollback;
 --
 -- test incorrect handling of placeholders that only appear in targetlists,
