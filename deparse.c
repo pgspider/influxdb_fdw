@@ -660,6 +660,11 @@ foreign_expr_walker(Node *node,
 						TargetEntry *tle = (TargetEntry *) n;
 
 						n = (Node *) tle->expr;
+
+						if (!IsA(n, Var))
+						{
+							return false;
+						}
 					}
 
 					if (!foreign_expr_walker(n, glob_cxt, &inner_cxt))
