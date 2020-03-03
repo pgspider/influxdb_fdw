@@ -17,7 +17,16 @@
 
 #include "foreign/foreign.h"
 #include "lib/stringinfo.h"
+
+#if (PG_VERSION_NUM >= 120000)
+#include "nodes/pathnodes.h"
+#include "utils/float.h"
+#include "optimizer/optimizer.h"
+#else
 #include "nodes/relation.h"
+#include "optimizer/var.h"
+#endif
+
 #include "utils/rel.h"
 
 #define WAIT_TIMEOUT		0

@@ -47,7 +47,6 @@
 #include "optimizer/paths.h"
 #include "optimizer/prep.h"
 #include "optimizer/restrictinfo.h"
-#include "optimizer/var.h"
 #include "optimizer/cost.h"
 #include "optimizer/pathnode.h"
 #include "optimizer/plancat.h"
