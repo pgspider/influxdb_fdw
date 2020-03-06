@@ -117,16 +117,32 @@ SELECT var_pop(1.0), var_samp(2.0);
 SELECT stddev_pop(3.0::numeric), stddev_samp(4.0::numeric);
 
 -- verify correct results for null and NaN inputs
--- select sum(null::int4) from generate_series(1,3);
--- select sum(null::int8) from generate_series(1,3);
--- select sum(null::numeric) from generate_series(1,3);
--- select sum(null::float8) from generate_series(1,3);
--- select avg(null::int4) from generate_series(1,3);
--- select avg(null::int8) from generate_series(1,3);
--- select avg(null::numeric) from generate_series(1,3);
--- select avg(null::float8) from generate_series(1,3);
--- select sum('NaN'::numeric) from generate_series(1,3);
--- select avg('NaN'::numeric) from generate_series(1,3);
+select sum(null::int4) from generate_series(1,3);
+select sum(null::int8) from generate_series(1,3);
+select sum(null::numeric) from generate_series(1,3);
+select sum(null::float8) from generate_series(1,3);
+select avg(null::int4) from generate_series(1,3);
+select avg(null::int8) from generate_series(1,3);
+select avg(null::numeric) from generate_series(1,3);
+select avg(null::float8) from generate_series(1,3);
+select sum('NaN'::numeric) from generate_series(1,3);
+select avg('NaN'::numeric) from generate_series(1,3);
+
+-- verify correct results for infinite inputs
+SELECT avg(x::float8), var_pop(x::float8)
+FROM (VALUES ('1'), ('infinity')) v(x);
+SELECT avg(x::float8), var_pop(x::float8)
+FROM (VALUES ('infinity'), ('1')) v(x);
+SELECT avg(x::float8), var_pop(x::float8)
+FROM (VALUES ('infinity'), ('infinity')) v(x);
+SELECT avg(x::float8), var_pop(x::float8)
+FROM (VALUES ('-infinity'), ('infinity')) v(x);
+
+-- test accuracy with a large input offset
+SELECT avg(x::float8), var_pop(x::float8)
+FROM (VALUES (100000003), (100000004), (100000006), (100000007)) v(x);
+SELECT avg(x::float8), var_pop(x::float8)
+FROM (VALUES (7000000000005), (7000000000007)) v(x);
 
 -- SQL2003 binary aggregates
 SELECT regr_count(b, a) FROM aggtest;
@@ -139,6 +155,31 @@ SELECT regr_slope(b, a), regr_intercept(b, a) FROM aggtest;
 SELECT covar_pop(b, a), covar_samp(b, a) FROM aggtest;
 SELECT corr(b, a) FROM aggtest;
 
+-- test accum and combine functions directly
+CREATE TABLE regr_test (x float8, y float8);
+INSERT INTO regr_test VALUES (10,150),(20,250),(30,350),(80,540),(100,200);
+SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+FROM regr_test WHERE x IN (10,20,30,80);
+SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+FROM regr_test;
+SELECT float8_accum('{4,140,2900}'::float8[], 100);
+SELECT float8_regr_accum('{4,140,2900,1290,83075,15050}'::float8[], 200, 100);
+SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+FROM regr_test WHERE x IN (10,20,30);
+SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+FROM regr_test WHERE x IN (80,100);
+SELECT float8_combine('{3,60,200}'::float8[], '{0,0,0}'::float8[]);
+SELECT float8_combine('{0,0,0}'::float8[], '{2,180,200}'::float8[]);
+SELECT float8_combine('{3,60,200}'::float8[], '{2,180,200}'::float8[]);
+SELECT float8_regr_combine('{3,60,200,750,20000,2000}'::float8[],
+                           '{0,0,0,0,0,0}'::float8[]);
+SELECT float8_regr_combine('{0,0,0,0,0,0}'::float8[],
+                           '{2,180,200,740,57800,-3400}'::float8[]);
+SELECT float8_regr_combine('{3,60,200,750,20000,2000}'::float8[],
+                           '{2,180,200,740,57800,-3400}'::float8[]);
+DROP TABLE regr_test;
+
+-- test count, distinct
 SELECT count(four) AS cnt_1000 FROM onek;
 SELECT count(DISTINCT four) AS cnt_4 FROM onek;
 
@@ -594,23 +635,10 @@ select aggfns(distinct a,b,c order by a,b,i,c) from multi_arg_agg2, generate_ser
 select aggfns(distinct a,a,c order by a,b) from multi_arg_agg2, generate_series(1,2) i;
 
 -- string_agg tests
--- begin;
--- delete from varchar_tbl;
--- insert into varchar_tbl values ('aaaa'),('bbbb'),('cccc');
--- select string_agg(f1,',') from varchar_tbl;
-
--- delete from varchar_tbl;
--- insert into varchar_tbl values ('aaaa'),(null),('bbbb'),('cccc');
--- select string_agg(f1,',') from varchar_tbl;
-
--- delete from varchar_tbl;
--- insert into varchar_tbl values (null),(null),('bbbb'),('cccc');
--- select string_agg(f1,'AB') from varchar_tbl;
-
--- delete from varchar_tbl;
--- insert into varchar_tbl values (null),(null);
--- select string_agg(f1,',') from varchar_tbl;
--- rollback;
+select string_agg(a,',') from (values('aaaa'),('bbbb'),('cccc')) g(a);
+select string_agg(a,',') from (values('aaaa'),(null),('bbbb'),('cccc')) g(a);
+select string_agg(a,'AB') from (values(null),(null),('bbbb'),('cccc')) g(a);
+select string_agg(a,',') from (values(null),(null)) g(a);
 
 -- check some implicit casting cases, as per bug #5564
 
@@ -620,21 +648,21 @@ select string_agg(distinct f1, ',' order by f1::text) from varchar_tbl;  -- not 
 select string_agg(distinct f1::text, ',' order by f1::text) from varchar_tbl;  -- ok
 
 -- string_agg bytea tests
--- create foreign table bytea_test_table(v bytea) server influxdb_svr;
+create foreign table bytea_test_table(v bytea) server influxdb_svr;
 
--- select string_agg(v, '') from bytea_test_table;
+select string_agg(v, '') from bytea_test_table;
 
--- insert into bytea_test_table values(decode('ff','hex'));
+insert into bytea_test_table values(decode('ff','hex'));
 
--- select string_agg(v, '') from bytea_test_table;
+select string_agg(v, '') from bytea_test_table;
 
--- insert into bytea_test_table values(decode('aa','hex'));
+insert into bytea_test_table values(decode('aa','hex'));
 
--- select string_agg(v, '') from bytea_test_table;
--- select string_agg(v, NULL) from bytea_test_table;
--- select string_agg(v, decode('ee', 'hex')) from bytea_test_table;
+select string_agg(v, '') from bytea_test_table;
+select string_agg(v, NULL) from bytea_test_table;
+select string_agg(v, decode('ee', 'hex')) from bytea_test_table;
 
--- drop foreign table bytea_test_table;
+drop foreign table bytea_test_table;
 
 -- FILTER tests
 
@@ -724,8 +752,8 @@ select percentile_cont(array[0,0.25,0.5,0.75,1]) within group (order by thousand
 from tenk1;
 select percentile_disc(array[[null,1,0.5],[0.75,0.25,null]]) within group (order by thousand)
 from tenk1;
--- select percentile_cont(array[0,1,0.25,0.75,0.5,1,0.3,0.32,0.35,0.38,0.4]) within group (order by x)
--- from generate_series(1,6) x;
+select percentile_cont(array[0,1,0.25,0.75,0.5,1,0.3,0.32,0.35,0.38,0.4]) within group (order by x)
+from generate_series(1,6) x;
 
 select ten, mode() within group (order by string4) from tenk1 group by ten;
 
@@ -737,9 +765,9 @@ select pg_collation_for(percentile_disc(1) within group (order by x collate "POS
   from (values ('fred'),('jim')) v(x);
 
 -- ordered-set aggs created with CREATE AGGREGATE
--- select test_rank(3) within group (order by x)
--- from (values (1),(1),(2),(2),(3),(3),(4)) v(x);
--- select test_percentile_disc(0.5) within group (order by thousand) from tenk1;
+select test_rank(3) within group (order by x)
+from (values (1),(1),(2),(2),(3),(3),(4)) v(x);
+select test_percentile_disc(0.5) within group (order by thousand) from tenk1;
 
 -- ordered-set aggs can't use ungrouped vars in direct args:
 select rank(x) within group (order by x) from generate_series(1,5) x;
@@ -753,11 +781,11 @@ select array(select percentile_disc(a) within group (order by x)
 select rank(sum(x)) within group (order by x) from generate_series(1,5) x;
 
 -- hypothetical-set type unification and argument-count failures:
--- select rank(3) within group (order by x) from (values ('fred'),('jim')) v(x);
+select rank(3) within group (order by x) from (values ('fred'),('jim')) v(x);
 select rank(3) within group (order by stringu1,stringu2) from tenk1;
 select rank('fred') within group (order by x) from generate_series(1,5) x;
--- select rank('adam'::text collate "C") within group (order by x collate "POSIX")
---   from (values ('fred'),('jim')) v(x);
+select rank('adam'::text collate "C") within group (order by x collate "POSIX")
+  from (values ('fred'),('jim')) v(x);
 -- hypothetical-set type unification successes:
 select rank('adam'::varchar) within group (order by x) from (values ('fred'),('jim')) v(x);
 select rank('3') within group (order by x) from generate_series(1,5) x;
@@ -1051,6 +1079,28 @@ ROLLBACK;
 
 -- test coverage for dense_rank
 SELECT dense_rank(x) WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(1),(2),(2),(3),(3)) v(x) GROUP BY (x) ORDER BY 1;
+
+
+-- Ensure that the STRICT checks for aggregates does not take NULLness
+-- of ORDER BY columns into account. See bug report around
+-- 2a505161-2727-2473-7c46-591ed108ac52@email.cz
+SELECT min(x ORDER BY y) FROM (VALUES(1, NULL)) AS d(x,y);
+SELECT min(x ORDER BY y) FROM (VALUES(1, 2)) AS d(x,y);
+
+-- check collation-sensitive matching between grouping expressions
+select v||'a', case v||'a' when 'aa' then 1 else 0 end, count(*)
+  from unnest(array['a','b']) u(v)
+ group by v||'a' order by 1;
+select v||'a', case when v||'a' = 'aa' then 1 else 0 end, count(*)
+  from unnest(array['a','b']) u(v)
+ group by v||'a' order by 1;
+
+-- Make sure that generation of HashAggregate for uniqification purposes
+-- does not lead to array overflow due to unexpected duplicate hash keys
+-- see CAFeeJoKKu0u+A_A9R9316djW-YW3-+Gtgvy3ju655qRHR3jtdA@mail.gmail.com
+explain (costs off)
+  select 1 from tenk1
+   where (hundred, thousand) in (select twothousand, twothousand from onek);
 
 -- Clean up
 DO $d$
