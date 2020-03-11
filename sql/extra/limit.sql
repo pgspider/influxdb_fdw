@@ -13,43 +13,43 @@ CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user 'user', p
 --
 
 CREATE FOREIGN TABLE onek (
-	unique1		int4,
-	unique2		int4,
-	two			int4,
-	four		int4,
-	ten			int4,
-	twenty		int4,
-	hundred		int4,
-	thousand	int4,
-	twothousand	int4,
-	fivethous	int4,
-	tenthous	int4,
-	odd			int4,
-	even		int4,
-	stringu1	name,
-	stringu2	name,
-	string4		name
+	unique1	 	int4,
+	unique2	 	int4,
+	two 			int4,
+	four 		int4,
+	ten 			int4,
+	twenty 		int4,
+	hundred	 	int4,
+	thousand 	int4,
+	twothousand 	int4,
+	fivethous 	int4,
+	tenthous 	int4,
+	odd 			int4,
+	even 		int4,
+	stringu1 	name,
+	stringu2 	name,
+	string4	 	name
 ) SERVER influxdb_svr;
 
 CREATE FOREIGN TABLE int8_tbl(q1 int8, q2 int8) SERVER influxdb_svr;
 
 CREATE FOREIGN TABLE tenk1 (
-	unique1		int4,
-	unique2		int4,
-	two			int4,
-	four		int4,
-	ten			int4,
-	twenty		int4,
-	hundred		int4,
-	thousand	int4,
-	twothousand	int4,
-	fivethous	int4,
-	tenthous	int4,
-	odd			int4,
-	even		int4,
-	stringu1	name,
-	stringu2	name,
-	string4		name
+	unique1	 	int4,
+	unique2	 	int4,
+	two 			int4,
+	four 		int4,
+	ten 			int4,
+	twenty 		int4,
+	hundred	 	int4,
+	thousand 	int4,
+	twothousand 	int4,
+	fivethous 	int4,
+	tenthous 	int4,
+	odd 			int4,
+	even 		int4,
+	stringu1 	name,
+	stringu2 	name,
+	string4	 	name
 ) SERVER influxdb_svr OPTIONS (table 'tenk');
 
 SELECT ''::text AS two, unique1, unique2, stringu1
@@ -88,7 +88,7 @@ select * from int8_tbl offset (case when random() < 0.5 then null::bigint end);
 -- Test assorted cases involving backwards fetch from a LIMIT plan node
 begin;
 
-declare c1 cursor for select * from int8_tbl limit 10;
+declare c1 scroll cursor for select * from int8_tbl limit 10;
 fetch all in c1;
 fetch 1 in c1;
 fetch backward 1 in c1;
@@ -96,7 +96,7 @@ fetch backward all in c1;
 fetch backward 1 in c1;
 fetch all in c1;
 
-declare c2 cursor for select * from int8_tbl limit 3;
+declare c2 scroll cursor for select * from int8_tbl limit 3;
 fetch all in c2;
 fetch 1 in c2;
 fetch backward 1 in c2;
@@ -104,7 +104,7 @@ fetch backward all in c2;
 fetch backward 1 in c2;
 fetch all in c2;
 
-declare c3 cursor for select * from int8_tbl offset 3;
+declare c3 scroll cursor for select * from int8_tbl offset 3;
 fetch all in c3;
 fetch 1 in c3;
 fetch backward 1 in c3;
@@ -112,7 +112,7 @@ fetch backward all in c3;
 fetch backward 1 in c3;
 fetch all in c3;
 
-declare c4 cursor for select * from int8_tbl offset 10;
+declare c4 scroll cursor for select * from int8_tbl offset 10;
 fetch all in c4;
 fetch 1 in c4;
 fetch backward 1 in c4;
