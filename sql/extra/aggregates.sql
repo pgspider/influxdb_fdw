@@ -67,6 +67,7 @@ CREATE FOREIGN TABLE INT8_TBL2 (
 CREATE FOREIGN TABLE INT4_TBL (f1 int4) SERVER influxdb_svr;
 CREATE FOREIGN TABLE INT4_TBL2 (f1 int4) SERVER influxdb_svr;
 CREATE FOREIGN TABLE INT4_TBL3 (f1 int4) SERVER influxdb_svr;
+CREATE FOREIGN TABLE INT4_TBL4 (f1 int4) SERVER influxdb_svr;
 
 CREATE FOREIGN TABLE multi_arg_agg (a int, b int, c text) SERVER influxdb_svr;
 CREATE FOREIGN TABLE multi_arg_agg2 (a int, b int, c text) SERVER influxdb_svr;
@@ -742,7 +743,7 @@ select percentile_disc(0.5) within group (order by thousand) from tenk1;
 begin;
 select rank(3) within group (order by f1) from INT4_TBL3;
 select cume_dist(3) within group (order by f1) from INT4_TBL3;
-select percent_rank(3) within group (order by f1) from INT4_TBL3;
+select percent_rank(3) within group (order by f1) from INT4_TBL4;
 select dense_rank(3) within group (order by f1) from INT4_TBL3;
 rollback;
 
@@ -1070,10 +1071,11 @@ SET enable_indexonlyscan = off;
 
 -- variance(int4) covers numeric_poly_combine
 -- sum(int8) covers int8_avg_combine
-EXPLAIN (COSTS OFF)
-  SELECT variance(unique1::int4), sum(unique1::int8) FROM tenk1;
+-- regr_count(float8, float8) covers int8inc_float8_float8 and aggregates with > 1 arg
+EXPLAIN (COSTS OFF, VERBOSE)
+  SELECT variance(unique1::int4), sum(unique1::int8), regr_count(unique1::float8, unique1::float8) FROM tenk1;
 
-SELECT variance(unique1::int4), sum(unique1::int8) FROM tenk1;
+SELECT variance(unique1::int4), sum(unique1::int8), regr_count(unique1::float8, unique1::float8) FROM tenk1;
 
 ROLLBACK;
 
