@@ -819,7 +819,7 @@ create aggregate least_agg(variadic items anyarray) (
 );
 
 -- variadic aggregates
---select least_agg(q1,q2) from int8_tbl;
+select least_agg(q1,q2) from int8_tbl;
 select least_agg(variadic array[q1,q2]) from int8_tbl;
 
 
