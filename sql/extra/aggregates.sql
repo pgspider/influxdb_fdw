@@ -80,6 +80,9 @@ CREATE FOREIGN TABLE FLOAT8_TBL (f1 float8) SERVER influxdb_svr;
 -- AGGREGATES
 --
 
+-- avoid bit-exact output here because operations may not be bit-exact.
+SET extra_float_digits = 0;
+
 SELECT avg(four) AS avg_1 FROM onek;
 
 SELECT avg(a) AS avg_32 FROM aggtest WHERE a < 100;
@@ -649,21 +652,21 @@ select string_agg(distinct f1, ',' order by f1::text) from varchar_tbl;  -- not 
 select string_agg(distinct f1::text, ',' order by f1::text) from varchar_tbl;  -- ok
 
 -- string_agg bytea tests
-create foreign table bytea_test_table(v bytea) server influxdb_svr;
+-- create foreign table bytea_test_table(v bytea) server influxdb_svr;
 
-select string_agg(v, '') from bytea_test_table;
+-- select string_agg(v, '') from bytea_test_table;
 
-insert into bytea_test_table values(decode('ff','hex'));
+-- insert into bytea_test_table values(decode('ff','hex'));
 
-select string_agg(v, '') from bytea_test_table;
+-- select string_agg(v, '') from bytea_test_table;
 
-insert into bytea_test_table values(decode('aa','hex'));
+-- insert into bytea_test_table values(decode('aa','hex'));
 
-select string_agg(v, '') from bytea_test_table;
-select string_agg(v, NULL) from bytea_test_table;
-select string_agg(v, decode('ee', 'hex')) from bytea_test_table;
+-- select string_agg(v, '') from bytea_test_table;
+-- select string_agg(v, NULL) from bytea_test_table;
+-- select string_agg(v, decode('ee', 'hex')) from bytea_test_table;
 
-drop foreign table bytea_test_table;
+-- drop foreign table bytea_test_table;
 
 -- FILTER tests
 
@@ -807,8 +810,16 @@ select pg_get_viewdef('aggordview1');
 select * from aggordview1 order by ten;
 drop view aggordview1;
 
+-- User defined function for user defined aggregate, VARIADIC
+create function least_accum(anyelement, variadic anyarray)
+returns anyelement language sql as
+  'select least($1, min($2[i])) from generate_subscripts($2,1) g(i)';
+create aggregate least_agg(variadic items anyarray) (
+  stype = anyelement, sfunc = least_accum
+);
+
 -- variadic aggregates
-select least_agg(q1,q2) from int8_tbl;
+--select least_agg(q1,q2) from int8_tbl;
 select least_agg(variadic array[q1,q2]) from int8_tbl;
 
 

@@ -68,6 +68,8 @@ CREATE FOREIGN TABLE FLOAT8_TBL (f1 float8) SERVER influxdb_svr;
 --
 -- AGGREGATES
 --
+-- avoid bit-exact output here because operations may not be bit-exact.
+SET extra_float_digits = 0;
 SELECT avg(four) AS avg_1 FROM onek;
        avg_1        
 --------------------
@@ -89,9 +91,9 @@ SELECT avg(b)::numeric(10,3) AS avg_107_943 FROM aggtest;
 (1 row)
 
 SELECT avg(gpa) AS avg_3_4 FROM ONLY student;
-      avg_3_4       
---------------------
- 3.4000000000000004
+ avg_3_4 
+---------
+     3.4
 (1 row)
 
 SELECT sum(four) AS sum_1500 FROM onek;
@@ -109,13 +111,13 @@ SELECT sum(a) AS sum_198 FROM aggtest;
 SELECT sum(b) AS avg_431_773 FROM aggtest;
  avg_431_773 
 -------------
-    431.7726
+     431.773
 (1 row)
 
 SELECT sum(gpa) AS avg_6_8 FROM ONLY student;
-      avg_6_8      
--------------------
- 6.800000000000001
+ avg_6_8 
+---------
+     6.8
 (1 row)
 
 SELECT max(four) AS max_3 FROM onek;
@@ -143,27 +145,27 @@ SELECT max(student.gpa) AS max_3_7 FROM student;
 (1 row)
 
 SELECT stddev_pop(b) FROM aggtest;
-     stddev_pop     
---------------------
- 131.10703231895047
+   stddev_pop    
+-----------------
+ 131.10703231895
 (1 row)
 
 SELECT stddev_samp(b) FROM aggtest;
-    stddev_samp     
---------------------
- 151.38936080399804
+   stddev_samp    
+------------------
+ 151.389360803998
 (1 row)
 
 SELECT var_pop(b) FROM aggtest;
-      var_pop       
---------------------
- 17189.053923482326
+     var_pop      
+------------------
+ 17189.0539234823
 (1 row)
 
 SELECT var_samp(b) FROM aggtest;
-      var_samp      
---------------------
- 22918.738564643103
+     var_samp     
+------------------
+ 22918.7385646431
 (1 row)
 
 SELECT stddev_pop(b::numeric) FROM aggtest;
@@ -323,45 +325,45 @@ SELECT regr_sxx(b, a) FROM aggtest;
 (1 row)
 
 SELECT regr_syy(b, a) FROM aggtest;
-     regr_syy      
--------------------
- 68756.21569392929
+     regr_syy     
+------------------
+ 68756.2156939293
 (1 row)
 
 SELECT regr_sxy(b, a) FROM aggtest;
-      regr_sxy      
---------------------
- 2614.5158215500414
+     regr_sxy     
+------------------
+ 2614.51582155004
 (1 row)
 
 SELECT regr_avgx(b, a), regr_avgy(b, a) FROM aggtest;
- regr_avgx |     regr_avgy      
------------+--------------------
-      49.5 | 107.94315227307379
+ regr_avgx |    regr_avgy     
+-----------+------------------
+      49.5 | 107.943152273074
 (1 row)
 
 SELECT regr_r2(b, a) FROM aggtest;
-       regr_r2        
-----------------------
- 0.019497798203180264
+      regr_r2       
+--------------------
+ 0.0194977982031803
 (1 row)
 
 SELECT regr_slope(b, a), regr_intercept(b, a) FROM aggtest;
-     regr_slope     |  regr_intercept   
---------------------+-------------------
- 0.5127507004412711 | 82.56199260123087
+    regr_slope     |  regr_intercept  
+-------------------+------------------
+ 0.512750700441271 | 82.5619926012309
 (1 row)
 
 SELECT covar_pop(b, a), covar_samp(b, a) FROM aggtest;
-     covar_pop     |    covar_samp     
--------------------+-------------------
- 653.6289553875104 | 871.5052738500139
+    covar_pop    |    covar_samp    
+-----------------+------------------
+ 653.62895538751 | 871.505273850014
 (1 row)
 
 SELECT corr(b, a) FROM aggtest;
-        corr        
---------------------
- 0.1396345165178734
+       corr        
+-------------------
+ 0.139634516517873
 (1 row)
 
 -- test accum and combine functions directly
@@ -1438,42 +1440,15 @@ select string_agg(distinct f1::text, ',' order by f1::text) from varchar_tbl;  -
 (1 row)
 
 -- string_agg bytea tests
-create foreign table bytea_test_table(v bytea) server influxdb_svr;
-select string_agg(v, '') from bytea_test_table;
- string_agg 
-------------
- 
-(1 row)
-
-insert into bytea_test_table values(decode('ff','hex'));
-ERROR:  cannot insert into foreign table "bytea_test_table"
-select string_agg(v, '') from bytea_test_table;
- string_agg 
-------------
- 
-(1 row)
-
-insert into bytea_test_table values(decode('aa','hex'));
-ERROR:  cannot insert into foreign table "bytea_test_table"
-select string_agg(v, '') from bytea_test_table;
- string_agg 
-------------
- 
-(1 row)
-
-select string_agg(v, NULL) from bytea_test_table;
- string_agg 
-------------
- 
-(1 row)
-
-select string_agg(v, decode('ee', 'hex')) from bytea_test_table;
- string_agg 
-------------
- 
-(1 row)
-
-drop foreign table bytea_test_table;
+-- create foreign table bytea_test_table(v bytea) server influxdb_svr;
+-- select string_agg(v, '') from bytea_test_table;
+-- insert into bytea_test_table values(decode('ff','hex'));
+-- select string_agg(v, '') from bytea_test_table;
+-- insert into bytea_test_table values(decode('aa','hex'));
+-- select string_agg(v, '') from bytea_test_table;
+-- select string_agg(v, NULL) from bytea_test_table;
+-- select string_agg(v, decode('ee', 'hex')) from bytea_test_table;
+-- drop foreign table bytea_test_table;
 -- FILTER tests
 select min(unique1) filter (where unique1 > 100) from tenk1;
  min 
@@ -1623,15 +1598,15 @@ LINE 1: select f1, percentile_cont(f1,f1)
                    ^
 rollback;
 select percentile_cont(0.5) within group (order by b) from aggtest;
-  percentile_cont  
--------------------
- 53.44850015640259
+ percentile_cont  
+------------------
+ 53.4485001564026
 (1 row)
 
 select percentile_cont(0.5) within group (order by b), sum(b) from aggtest;
-  percentile_cont  |   sum    
--------------------+----------
- 53.44850015640259 | 431.7726
+ percentile_cont  |   sum   
+------------------+---------
+ 53.4485001564026 | 431.773
 (1 row)
 
 select percentile_cont(0.5) within group (order by thousand) from tenk1;
@@ -1835,17 +1810,21 @@ select * from aggordview1 order by ten;
 (10 rows)
 
 drop view aggordview1;
+-- User defined function for user defined aggregate, VARIADIC
+create function least_accum(anyelement, variadic anyarray)
+returns anyelement language sql as
+  'select least($1, min($2[i])) from generate_subscripts($2,1) g(i)';
+create aggregate least_agg(variadic items anyarray) (
+  stype = anyelement, sfunc = least_accum
+);
 -- variadic aggregates
-select least_agg(q1,q2) from int8_tbl;
-ERROR:  function least_agg(bigint, bigint) does not exist
-LINE 1: select least_agg(q1,q2) from int8_tbl;
-               ^
-HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+--select least_agg(q1,q2) from int8_tbl;
 select least_agg(variadic array[q1,q2]) from int8_tbl;
-ERROR:  function least_agg(bigint[]) does not exist
-LINE 1: select least_agg(variadic array[q1,q2]) from int8_tbl;
-               ^
-HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+     least_agg     
+-------------------
+ -4567890123456789
+(1 row)
+
 -- test aggregates with common transition functions share the same states
 begin work;
 create type avg_state as (total bigint, count bigint);
