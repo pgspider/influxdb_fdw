@@ -309,12 +309,11 @@ select * from (values (2),(null),(1)) v(k) where k = k;
 
 -- Test partitioned tables with no partitions, which should be handled the
 -- same as the non-inheritance case when expanding its RTE.
--- create table list_parted_tbl (a int,b int) partition by list (a);
--- create table list_parted_tbl1 partition of list_parted_tbl
---   for values in (1) partition by list(b);
--- create foreign table list_parted_tbl (a int,b int) server influxdb_svr;
--- explain (costs off) select * from list_parted_tbl;
--- drop table list_parted_tbl;
+create table list_parted_tbl (a int,b int) partition by list (a);
+create table list_parted_tbl1 partition of list_parted_tbl
+  for values in (1) partition by list(b);
+explain (costs off) select * from list_parted_tbl;
+drop table list_parted_tbl;
 
 DROP USER MAPPING FOR CURRENT_USER SERVER influxdb_svr;
 DROP SERVER influxdb_svr CASCADE;

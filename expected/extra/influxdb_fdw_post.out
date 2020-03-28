@@ -3885,21 +3885,21 @@ select c1, rank(c1, c2) within group (order by c1, c2) from ft1 group by c1, c2 
 (1 row)
 
 -- User defined function for user defined aggregate, VARIADIC
-create function least_accum(anyelement, variadic anyarray)
+create function least_accum1(anyelement, variadic anyarray)
 returns anyelement language sql as
   'select least($1, min($2[i])) from generate_subscripts($2,1) g(i)';
-create aggregate least_agg(variadic items anyarray) (
-  stype = anyelement, sfunc = least_accum
+create aggregate least_agg1(variadic items anyarray) (
+  stype = anyelement, sfunc = least_accum1
 );
 -- Disable hash aggregation for plan stability.
 set enable_hashagg to false;
 -- Not pushed down due to user defined aggregate
 explain (verbose, costs off)
-select c2, least_agg(c1) from ft1 group by c2 order by c2;
+select c2, least_agg1(c1) from ft1 group by c2 order by c2;
                         QUERY PLAN                         
 -----------------------------------------------------------
  GroupAggregate
-   Output: c2, least_agg(VARIADIC ARRAY[c1])
+   Output: c2, least_agg1(VARIADIC ARRAY[c1])
    Group Key: ft1.c2
    ->  Sort
          Output: c2, c1
@@ -3910,15 +3910,15 @@ select c2, least_agg(c1) from ft1 group by c2 order by c2;
 (9 rows)
 
 -- Add function and aggregate into extension
-alter extension influxdb_fdw add function least_accum(anyelement, variadic anyarray);
-alter extension influxdb_fdw add aggregate least_agg(variadic items anyarray);
+alter extension influxdb_fdw add function least_accum1(anyelement, variadic anyarray);
+alter extension influxdb_fdw add aggregate least_agg1(variadic items anyarray);
 -- Now aggregate will be pushed.  Aggregate will display VARIADIC argument.
 explain (verbose, costs off)
-select c2, least_agg(c1) from ft1 where c2 < 100 group by c2 order by c2;
+select c2, least_agg1(c1) from ft1 where c2 < 100 group by c2 order by c2;
                                    QUERY PLAN                                   
 --------------------------------------------------------------------------------
  GroupAggregate
-   Output: c2, least_agg(VARIADIC ARRAY[c1])
+   Output: c2, least_agg1(VARIADIC ARRAY[c1])
    Group Key: ft1.c2
    ->  Sort
          Output: c2, c1
@@ -3928,31 +3928,31 @@ select c2, least_agg(c1) from ft1 where c2 < 100 group by c2 order by c2;
                InfluxDB query: SELECT "C1", "c2" FROM "T1" WHERE (("c2" < 100))
 (9 rows)
 
-select c2, least_agg(c1) from ft1 where c2 < 100 group by c2 order by c2;
- c2 | least_agg 
-----+-----------
-  0 |        10
-  1 |         1
-  2 |         2
-  3 |         3
-  4 |         4
-  5 |         5
-  6 |         6
-  7 |         7
-  8 |         8
-  9 |         9
+select c2, least_agg1(c1) from ft1 where c2 < 100 group by c2 order by c2;
+ c2 | least_agg1 
+----+------------
+  0 |         10
+  1 |          1
+  2 |          2
+  3 |          3
+  4 |          4
+  5 |          5
+  6 |          6
+  7 |          7
+  8 |          8
+  9 |          9
 (10 rows)
 
 -- Remove function and aggregate from extension
-alter extension influxdb_fdw drop function least_accum(anyelement, variadic anyarray);
-alter extension influxdb_fdw drop aggregate least_agg(variadic items anyarray);
+alter extension influxdb_fdw drop function least_accum1(anyelement, variadic anyarray);
+alter extension influxdb_fdw drop aggregate least_agg1(variadic items anyarray);
 -- Not pushed down as we have dropped objects from extension.
 explain (verbose, costs off)
-select c2, least_agg(c1) from ft1 group by c2 order by c2;
+select c2, least_agg1(c1) from ft1 group by c2 order by c2;
                         QUERY PLAN                         
 -----------------------------------------------------------
  GroupAggregate
-   Output: c2, least_agg(VARIADIC ARRAY[c1])
+   Output: c2, least_agg1(VARIADIC ARRAY[c1])
    Group Key: ft1.c2
    ->  Sort
          Output: c2, c1
@@ -3964,8 +3964,8 @@ select c2, least_agg(c1) from ft1 group by c2 order by c2;
 
 -- Cleanup
 reset enable_hashagg;
-drop aggregate least_agg(variadic items anyarray);
-drop function least_accum(anyelement, variadic anyarray);
+drop aggregate least_agg1(variadic items anyarray);
+drop function least_accum1(anyelement, variadic anyarray);
 -- Testing USING OPERATOR() in ORDER BY within aggregate.
 -- For this, we need user defined operators along with operator family and
 -- operator class.  Create those and then add them in extension.  Note that

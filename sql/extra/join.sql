@@ -72,6 +72,11 @@ CREATE FOREIGN TABLE INT8_TBL(
 ) SERVER influxdb_svr;
 CREATE FOREIGN TABLE INT2_TBL(f1 int2) SERVER influxdb_svr;
 
+-- useful in some tests below
+create temp table onerow();
+insert into onerow default values;
+analyze onerow;
+
 --
 -- CORRELATION NAMES
 -- Make sure that table/column aliases are supported
@@ -910,8 +915,8 @@ select t1.unique2, t1.stringu1, t2.unique1, t2.stringu2 from
   tenk1 t1
   inner join int4_tbl i1
     left join (select v1.x2, v2.y1, 11 AS d1
-               from (values(1,0)) v1(x1,x2)
-               left join (values(3,1)) v2(y1,y2)
+               from (select 1,0 from onerow) v1(x1,x2)
+               left join (select 3,1 from onerow) v2(y1,y2)
                on v1.x1 = v2.y2) subq1
     on (i1.f1 = subq1.x2)
   on (t1.unique2 = subq1.d1)
@@ -923,8 +928,8 @@ select t1.unique2, t1.stringu1, t2.unique1, t2.stringu2 from
   tenk1 t1
   inner join int4_tbl i1
     left join (select v1.x2, v2.y1, 11 AS d1
-               from (values(1,0)) v1(x1,x2)
-               left join (values(3,1)) v2(y1,y2)
+               from (select 1,0 from onerow) v1(x1,x2)
+               left join (select 3,1 from onerow) v2(y1,y2)
                on v1.x1 = v2.y2) subq1
     on (i1.f1 = subq1.x2)
   on (t1.unique2 = subq1.d1)
@@ -1540,11 +1545,11 @@ select uunique1 from
 -- Take care to reference the correct RTE
 --
 
--- select atts.relid::regclass, s.* from pg_stats s join
---     pg_attribute a on s.attname = a.attname and s.tablename =
---     a.attrelid::regclass::text join (select unnest(indkey) attnum,
---     indexrelid from pg_index i) atts on atts.attnum = a.attnum where
---     schemaname != 'pg_catalog';
+--select atts.relid::regclass, s.* from pg_stats s join
+--    pg_attribute a on s.attname = a.attname and s.tablename =
+--    a.attrelid::regclass::text join (select unnest(indkey) attnum,
+--    indexrelid from pg_index i) atts on atts.attnum = a.attnum where
+--    schemaname != 'pg_catalog';
 
 --
 -- Test LATERAL
@@ -1658,7 +1663,7 @@ analyze dual;
 select v.* from
   (int8_tbl x left join (select q1,(select coalesce(q2,0)) q2 from int8_tbl) y on x.q2 = y.q1)
   left join int4_tbl z on z.f1 = x.q2,
-  lateral (select x.q1,y.q1 from dual union all select x.q2,y.q2 from dual) v(vx,vy);
+  lateral (select x.q1,y.q1 from onerow union all select x.q2,y.q2 from onerow) v(vx,vy);
 
 explain (verbose, costs off)
 select * from
@@ -1987,6 +1992,7 @@ CREATE FOREIGN TABLE onek (
   string4   name
 ) SERVER influxdb_svr;
 
+-- check that semijoin inner is not seen as unique for a portion of the outerrel
 explain (verbose, costs off)
 select t1.unique1, t2.hundred
 from onek t1, tenk1 t2

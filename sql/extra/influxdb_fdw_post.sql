@@ -699,11 +699,11 @@ select c1, rank(c1, c2) within group (order by c1, c2) from ft1 group by c1, c2 
 select c1, rank(c1, c2) within group (order by c1, c2) from ft1 group by c1, c2 having c1 = 6 order by 1;
 
 -- User defined function for user defined aggregate, VARIADIC
-create function least_accum(anyelement, variadic anyarray)
+create function least_accum1(anyelement, variadic anyarray)
 returns anyelement language sql as
   'select least($1, min($2[i])) from generate_subscripts($2,1) g(i)';
-create aggregate least_agg(variadic items anyarray) (
-  stype = anyelement, sfunc = least_accum
+create aggregate least_agg1(variadic items anyarray) (
+  stype = anyelement, sfunc = least_accum1
 );
 
 -- Disable hash aggregation for plan stability.
@@ -711,29 +711,29 @@ set enable_hashagg to false;
 
 -- Not pushed down due to user defined aggregate
 explain (verbose, costs off)
-select c2, least_agg(c1) from ft1 group by c2 order by c2;
+select c2, least_agg1(c1) from ft1 group by c2 order by c2;
 
 -- Add function and aggregate into extension
-alter extension influxdb_fdw add function least_accum(anyelement, variadic anyarray);
-alter extension influxdb_fdw add aggregate least_agg(variadic items anyarray);
+alter extension influxdb_fdw add function least_accum1(anyelement, variadic anyarray);
+alter extension influxdb_fdw add aggregate least_agg1(variadic items anyarray);
 
 -- Now aggregate will be pushed.  Aggregate will display VARIADIC argument.
 explain (verbose, costs off)
-select c2, least_agg(c1) from ft1 where c2 < 100 group by c2 order by c2;
-select c2, least_agg(c1) from ft1 where c2 < 100 group by c2 order by c2;
+select c2, least_agg1(c1) from ft1 where c2 < 100 group by c2 order by c2;
+select c2, least_agg1(c1) from ft1 where c2 < 100 group by c2 order by c2;
 
 -- Remove function and aggregate from extension
-alter extension influxdb_fdw drop function least_accum(anyelement, variadic anyarray);
-alter extension influxdb_fdw drop aggregate least_agg(variadic items anyarray);
+alter extension influxdb_fdw drop function least_accum1(anyelement, variadic anyarray);
+alter extension influxdb_fdw drop aggregate least_agg1(variadic items anyarray);
 
 -- Not pushed down as we have dropped objects from extension.
 explain (verbose, costs off)
-select c2, least_agg(c1) from ft1 group by c2 order by c2;
+select c2, least_agg1(c1) from ft1 group by c2 order by c2;
 
 -- Cleanup
 reset enable_hashagg;
-drop aggregate least_agg(variadic items anyarray);
-drop function least_accum(anyelement, variadic anyarray);
+drop aggregate least_agg1(variadic items anyarray);
+drop function least_accum1(anyelement, variadic anyarray);
 
 
 -- Testing USING OPERATOR() in ORDER BY within aggregate.
