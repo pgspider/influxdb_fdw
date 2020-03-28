@@ -1465,7 +1465,7 @@ SELECT t1.c1, t1.c2, t2.c1, t2.c2 FROM ft4 t1 LEFT JOIN (SELECT * FROM ft5 WHERE
    Output: t1.c1, t1.c2, ft5.c1, ft5.c2
    Hash Cond: (t1.c1 = ft5.c1)
    ->  Foreign Scan on public.ft4 t1
-         Output: t1.c1, t1.c2, t1.c3
+         Output: t1.c1, t1.c2
          InfluxDB query: SELECT "c1", "c2" FROM "T3" WHERE (("c1" < 10))
    ->  Hash
          Output: ft5.c1, ft5.c2
@@ -1495,7 +1495,7 @@ SELECT t1.c1, t1.c2, t2.c1, t2.c2 FROM ft4 t1 LEFT JOIN (SELECT * FROM ft5 WHERE
    Hash Cond: (t1.c1 = ft5.c1)
    Filter: ((ft5.c1 < 10) OR (ft5.c1 IS NULL))
    ->  Foreign Scan on public.ft4 t1
-         Output: t1.c1, t1.c2, t1.c3
+         Output: t1.c1, t1.c2
          InfluxDB query: SELECT "c1", "c2" FROM "T3" WHERE (("c1" < 10))
    ->  Hash
          Output: ft5.c1, ft5.c2
@@ -1570,7 +1570,7 @@ SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 RIGHT JOIN ft2 t2 ON (t1.c1 = t2.c1) RIGH
                Output: t3.c3, t2.c2, t2.c1
                Join Filter: (t2.c1 = t3.c1)
                ->  Foreign Scan on public.ft4 t3
-                     Output: t3.c1, t3.c2, t3.c3
+                     Output: t3.c3, t3.c1
                      InfluxDB query: SELECT "c1", "c3" FROM "T3"
                ->  Materialize
                      Output: t2.c2, t2.c1
@@ -1654,7 +1654,7 @@ SELECT t1.c1, t2.c1 FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t1 FULL
          Output: ft4.c1, ft5.c1
          Hash Cond: (ft4.c1 = ft5.c1)
          ->  Foreign Scan on public.ft4
-               Output: ft4.c1, ft4.c2, ft4.c3
+               Output: ft4.c1
                InfluxDB query: SELECT "c1" FROM "T3" WHERE (("c1" >= 50)) AND (("c1" <= 60))
          ->  Hash
                Output: ft5.c1
@@ -1685,14 +1685,11 @@ SELECT 1 FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t1 FULL JOIN (SELE
    ->  Merge Full Join
          Output: 1
          ->  Foreign Scan on public.ft4
-               Output: ft4.c1, ft4.c2, ft4.c3
                InfluxDB query: SELECT * FROM "T3" WHERE (("c1" >= 50)) AND (("c1" <= 60))
          ->  Materialize
-               Output: ft5.c1, ft5.c2, ft5.c3
                ->  Foreign Scan on public.ft5
-                     Output: ft5.c1, ft5.c2, ft5.c3
                      InfluxDB query: SELECT * FROM "T4" WHERE (("c1" >= 50)) AND (("c1" <= 60))
-(12 rows)
+(9 rows)
 
 SELECT 1 FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t1 FULL JOIN (SELECT c1 FROM ft5 WHERE c1 between 50 and 60) t2 ON (TRUE) OFFSET 10 LIMIT 10;
  ?column? 
@@ -1725,7 +1722,7 @@ SELECT t1.c1, ss.a, ss.b FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t1
                Output: t2.c1, t3.c1
                Hash Cond: (t3.c1 = t2.c1)
                ->  Foreign Scan on public.ft5 t3
-                     Output: t3.c1, t3.c2, t3.c3
+                     Output: t3.c1
                      InfluxDB query: SELECT "c1" FROM "T4"
                ->  Hash
                      Output: t2.c1
@@ -1766,7 +1763,7 @@ SELECT t1.c1, ss.a, ss.b FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t1
                Hash Cond: (ft4_1.c1 = ft5.c1)
                Filter: ((ft4_1.c1 IS NULL) OR (ft4_1.c1 IS NOT NULL))
                ->  Foreign Scan on public.ft4 ft4_1
-                     Output: ft4_1.c1, ft4_1.c2, ft4_1.c3
+                     Output: ft4_1.c1
                      InfluxDB query: SELECT "c1" FROM "T3" WHERE (("c1" >= 50)) AND (("c1" <= 60))
                ->  Hash
                      Output: ft5.c1
@@ -1855,7 +1852,7 @@ SELECT t1.c1, t2.c1, t3.c1 FROM ft4 t1 INNER JOIN ft5 t2 ON (t1.c1 = t2.c1 + 1 a
                Output: t1.c1, t2.c1, t3.c1
                Hash Cond: (t3.c1 = t2.c1)
                ->  Foreign Scan on public.ft4 t3
-                     Output: t3.c1, t3.c2, t3.c3
+                     Output: t3.c1
                      InfluxDB query: SELECT "c1" FROM "T3"
                ->  Hash
                      Output: t1.c1, t2.c1
@@ -1863,7 +1860,7 @@ SELECT t1.c1, t2.c1, t3.c1 FROM ft4 t1 INNER JOIN ft5 t2 ON (t1.c1 = t2.c1 + 1 a
                            Output: t1.c1, t2.c1
                            Hash Cond: ((t2.c1 + 1) = t1.c1)
                            ->  Foreign Scan on public.ft5 t2
-                                 Output: t2.c1, t2.c2, t2.c3
+                                 Output: t2.c1
                                  InfluxDB query: SELECT "c1" FROM "T4"
                            ->  Hash
                                  Output: t1.c1
@@ -1944,7 +1941,7 @@ SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 FULL JOIN ft2 t2 ON (t1.c1 = t2.c1) RIGHT
                Output: t3.c3, t2.c2, t2.c1
                Join Filter: (t2.c1 = t3.c1)
                ->  Foreign Scan on public.ft4 t3
-                     Output: t3.c1, t3.c2, t3.c3
+                     Output: t3.c3, t3.c1
                      InfluxDB query: SELECT "c1", "c3" FROM "T3"
                ->  Materialize
                      Output: t2.c2, t2.c1
@@ -2834,7 +2831,7 @@ SELECT t1."C1" FROM "S 1"."T1" t1, LATERAL (SELECT DISTINCT t2.c1, t3.c1 FROM ft
          ->  Nested Loop
                Output: t1."C1"
                ->  Foreign Scan on "S 1"."T1" t1
-                     Output: t1."time", t1."C1", t1.c2, t1.c3, t1.c6, t1.c7, t1.c8
+                     Output: t1."C1", t1.c2
                      InfluxDB query: SELECT "C1", "c2" FROM "T1"
                ->  Unique
                      Output: t2.c1, t3.c1
@@ -3235,7 +3232,7 @@ select count(c6), sum(c1), avg(c1), min(c2), max(c1), stddev(c2), sum(c1) * (ran
                Output: count(c6), sum(c1), avg(c1), min(c2), max(c1), stddev(c2), c2
                Group Key: ft1.c2
                ->  Foreign Scan on public.ft1
-                     Output: c6, c1, c2
+                     Output: c2, c6, c1
                      InfluxDB query: SELECT "C1", "c2", "c6" FROM "T1" WHERE (("c2" < 5))
 (11 rows)
 
@@ -3264,7 +3261,7 @@ select count(c6), sum(c1), avg(c1), min(c2), max(c1), stddev(c2), sum(c1) * (ran
                      Output: count(c6), sum(c1), avg(c1), min(c2), max(c1), stddev(c2), c2
                      Group Key: ft1.c2
                      ->  Foreign Scan on public.ft1
-                           Output: c6, c1, c2
+                           Output: c2, c6, c1
                            InfluxDB query: SELECT "C1", "c2", "c6" FROM "T1" WHERE (("c2" < 5))
 (13 rows)
 
@@ -3487,7 +3484,7 @@ select sum(c1) from ft1 group by c2 having avg(c1 * (random() <= 1)::int) > 100 
          Group Key: ft1.c2
          Filter: (avg((ft1.c1 * ((random() <= '1'::double precision))::integer)) > '100'::numeric)
          ->  Foreign Scan on public.ft1
-               Output: c1, c2
+               Output: c2, c1
                InfluxDB query: SELECT "C1", "c2" FROM "T1"
 (10 rows)
 
@@ -3711,7 +3708,7 @@ select sum(c1) filter (where c1 < 100 and c2 > 5) from ft1 group by c2 order by 
          Output: sum(c1) FILTER (WHERE ((c1 < 100) AND (c2 > 5))), c2
          Group Key: ft1.c2
          ->  Foreign Scan on public.ft1
-               Output: c1, c2
+               Output: c2, c1
                InfluxDB query: SELECT "C1", "c2" FROM "T1"
 (9 rows)
 
@@ -3739,7 +3736,7 @@ select sum(c1%3), sum(distinct c1%3 order by c1%3) filter (where c1%3 < 2), c2 f
    Output: sum((c1 % 3)), sum(DISTINCT (c1 % 3) ORDER BY (c1 % 3)) FILTER (WHERE ((c1 % 3) < 2)), c2
    Group Key: ft1.c2
    ->  Foreign Scan on public.ft1
-         Output: c1, c2
+         Output: c2, c1
          InfluxDB query: SELECT "C1", "c2" FROM "T1" WHERE (("c2" = 6))
 (6 rows)
 
@@ -3816,7 +3813,7 @@ select sum(c1) filter (where (c1 / c1) * random() <= 1) from ft1 group by c2 ord
          Output: sum(c1) FILTER (WHERE ((((c1 / c1))::double precision * random()) <= '1'::double precision)), c2
          Group Key: ft1.c2
          ->  Foreign Scan on public.ft1
-               Output: c1, c2
+               Output: c2, c1
                InfluxDB query: SELECT "C1", "c2" FROM "T1"
 (9 rows)
 
@@ -4004,7 +4001,7 @@ select array_agg(c1 order by c1 using operator(public.<^)) from ft2 where c2 = 6
    Output: array_agg(c1 ORDER BY c1 USING <^ NULLS LAST), c2
    Group Key: ft2.c2
    ->  Foreign Scan on public.ft2
-         Output: c1, c2
+         Output: c2, c1
          InfluxDB query: SELECT "C1", "c2" FROM "T1" WHERE (("C1" < 100)) AND (("c2" = 6))
 (6 rows)
 
@@ -4027,7 +4024,7 @@ select array_agg(c1 order by c1 using operator(public.<^)) from ft2 where c2 = 6
    Output: array_agg(c1 ORDER BY c1 USING <^ NULLS LAST), c2
    Group Key: ft2.c2
    ->  Foreign Scan on public.ft2
-         Output: c1, c2
+         Output: c2, c1
          InfluxDB query: SELECT "C1", "c2" FROM "T1" WHERE (("C1" < 100)) AND (("c2" = 6))
 (6 rows)
 
@@ -4053,7 +4050,7 @@ select array_agg(c1 order by c1 using operator(public.<^)) from ft2 where c2 = 6
    Output: array_agg(c1 ORDER BY c1 USING <^ NULLS LAST), c2
    Group Key: ft2.c2
    ->  Foreign Scan on public.ft2
-         Output: c1, c2
+         Output: c2, c1
          InfluxDB query: SELECT "C1", "c2" FROM "T1" WHERE (("C1" < 100)) AND (("c2" = 6))
 (6 rows)
 
@@ -4166,7 +4163,7 @@ select count(*), sum(t1.c1), avg(t2.c1) from (select c1 from ft4 where c1 betwee
          Output: ft4.c1, ft5.c1
          Hash Cond: (ft4.c1 = ft5.c1)
          ->  Foreign Scan on public.ft4
-               Output: ft4.c1, ft4.c2, ft4.c3
+               Output: ft4.c1
                InfluxDB query: SELECT "c1" FROM "T3" WHERE (("c1" >= 50)) AND (("c1" <= 60))
          ->  Hash
                Output: ft5.c1
@@ -4213,7 +4210,7 @@ select c2, sum from "S 1"."T1" t1, lateral (select sum(t2.c1 + t1."C1") sum from
    ->  Nested Loop
          Output: t1.c2, qry.sum
          ->  Foreign Scan on "S 1"."T1" t1
-               Output: t1."time", t1."C1", t1.c2, t1.c3, t1.c6, t1.c7, t1.c8
+               Output: t1.c2, t1."C1"
                InfluxDB query: SELECT "C1", "c2" FROM "T1" WHERE (("c2" < 3)) AND (("C1" < 100))
          ->  Subquery Scan on qry
                Output: qry.sum, t2.c1
@@ -4250,8 +4247,8 @@ FROM
     ) AS subq_1
 WHERE ref_0."C1" < 10 AND subq_1.c3 = '00001'
 ORDER BY ref_0."C1";
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
  Sort
    Output: ref_0.c2, ref_0."C1", (ref_0.c2), ref_1.c3, ref_0."C1"
    Sort Key: ref_0."C1"
@@ -4260,7 +4257,7 @@ ORDER BY ref_0."C1";
          ->  Nested Loop
                Output: ref_0.c2, ref_0."C1", ref_1.c3, (ref_0.c2)
                ->  Foreign Scan on "S 1"."T1" ref_0
-                     Output: ref_0."time", ref_0."C1", ref_0.c2, ref_0.c3, ref_0.c6, ref_0.c7, ref_0.c8
+                     Output: ref_0.c2, ref_0."C1"
                      InfluxDB query: SELECT "C1", "c2" FROM "T1" WHERE (("C1" < 10))
                ->  Foreign Scan on public.ft1 ref_1
                      Output: ref_1.c3, ref_0.c2
@@ -4308,7 +4305,7 @@ select sum(q.a), count(q.b) from ft4 left join (select 13, avg(ft1.c1), sum(ft2.
          Inner Unique: true
          Join Filter: ((ft4.c1)::numeric <= q.b)
          ->  Foreign Scan on public.ft4
-               Output: ft4.c1, ft4.c2, ft4.c3
+               Output: ft4.c1
                InfluxDB query: SELECT "c1" FROM "T3"
          ->  Materialize
                Output: q.a, q.b

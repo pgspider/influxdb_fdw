@@ -3425,7 +3425,6 @@ select t1.* from
                                                    ->  Nested Loop
                                                          Output: i8b2.q1, NULL::integer
                                                          ->  Foreign Scan on public.int4_tbl i4b2
-                                                               Output: i4b2.f1
                                                                InfluxDB query: SELECT * FROM "int4_tbl"
                                                          ->  Materialize
                                                                Output: i8b2.q1
@@ -3437,7 +3436,7 @@ select t1.* from
          ->  Foreign Scan on public.int4_tbl i4
                Output: i4.f1
                InfluxDB query: SELECT "f1" FROM "int4_tbl"
-(54 rows)
+(53 rows)
 
 select t1.* from
   text_tbl t1
@@ -3711,7 +3710,6 @@ where tt1.f1 = ss1.c0;
          ->  Nested Loop
                Output: tt1.f1
                ->  Foreign Scan on public.text_tbl tt2
-                     Output: tt2.f1
                      InfluxDB query: SELECT * FROM "text_tbl"
                ->  Materialize
                      Output: tt1.f1
@@ -3737,7 +3735,7 @@ where tt1.f1 = ss1.c0;
                ->  Foreign Scan on public.text_tbl tt5
                      Output: tt4.f1
                      InfluxDB query: SELECT * FROM "text_tbl"
-(33 rows)
+(32 rows)
 
 select 1 from
   text_tbl as tt1
@@ -5083,7 +5081,7 @@ select * from
    ->  Nested Loop
          Output: b.q1, c.q1, LEAST(a.q1, b.q1, c.q1)
          ->  Foreign Scan on public.int8_tbl b
-               Output: b.q1, b.q2
+               Output: b.q1
                InfluxDB query: SELECT "q1" FROM "int8_tbl" WHERE (($1 = "q1"))
          ->  Materialize
                Output: c.q1
@@ -5399,7 +5397,7 @@ lateral (select * from int8_tbl t1,
                                ->  Result
                                      Output: ($3 = 0)
                              ->  Foreign Scan on public.int8_tbl t3
-                                   Output: t3.q1, t3.q2
+                                   Output: t3.q2
                                    InfluxDB query: SELECT "q2" FROM "int8_tbl" WHERE (("q2" = $1))
 (29 rows)
 
@@ -5947,13 +5945,13 @@ from onek t1, tenk1 t2
 where exists (select 1 from tenk1 t3
               where t3.thousand = t1.unique1 and t3.tenthous = t2.hundred)
       and t1.unique1 < 1;
-                                                                                                    QUERY PLAN                                                                                                     
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
  Hash Join
    Output: t1.unique1, t2.hundred
    Hash Cond: (t2.hundred = t3.tenthous)
    ->  Foreign Scan on public.tenk1 t2
-         Output: t2.unique1, t2.unique2, t2.two, t2.four, t2.ten, t2.twenty, t2.hundred, t2.thousand, t2.twothousand, t2.fivethous, t2.tenthous, t2.odd, t2.even, t2.stringu1, t2.stringu2, t2.string4
+         Output: t2.hundred
          InfluxDB query: SELECT "hundred" FROM "tenk"
    ->  Hash
          Output: t1.unique1, t3.tenthous
@@ -5961,7 +5959,7 @@ where exists (select 1 from tenk1 t3
                Output: t1.unique1, t3.tenthous
                Hash Cond: (t1.unique1 = t3.thousand)
                ->  Foreign Scan on public.onek t1
-                     Output: t1.unique1, t1.unique2, t1.two, t1.four, t1.ten, t1.twenty, t1.hundred, t1.thousand, t1.twothousand, t1.fivethous, t1.tenthous, t1.odd, t1.even, t1.stringu1, t1.stringu2, t1.string4
+                     Output: t1.unique1
                      InfluxDB query: SELECT "unique1" FROM "onek" WHERE (("unique1" < 1))
                ->  Hash
                      Output: t3.thousand, t3.tenthous
@@ -5983,13 +5981,13 @@ from onek t1, tenk1 t2
 where exists (select 1 from j3
               where j3.unique1 = t1.unique1 and j3.tenthous = t2.hundred)
       and t1.unique1 < 1;
-                                                                                                    QUERY PLAN                                                                                                     
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
  Hash Join
    Output: t1.unique1, t2.hundred
    Hash Cond: (t2.hundred = j3.tenthous)
    ->  Foreign Scan on public.tenk1 t2
-         Output: t2.unique1, t2.unique2, t2.two, t2.four, t2.ten, t2.twenty, t2.hundred, t2.thousand, t2.twothousand, t2.fivethous, t2.tenthous, t2.odd, t2.even, t2.stringu1, t2.stringu2, t2.string4
+         Output: t2.hundred
          InfluxDB query: SELECT "hundred" FROM "tenk"
    ->  Hash
          Output: t1.unique1, j3.tenthous
@@ -5997,7 +5995,7 @@ where exists (select 1 from j3
                Output: t1.unique1, j3.tenthous
                Hash Cond: (t1.unique1 = j3.unique1)
                ->  Foreign Scan on public.onek t1
-                     Output: t1.unique1, t1.unique2, t1.two, t1.four, t1.ten, t1.twenty, t1.hundred, t1.thousand, t1.twothousand, t1.fivethous, t1.tenthous, t1.odd, t1.even, t1.stringu1, t1.stringu2, t1.string4
+                     Output: t1.unique1
                      InfluxDB query: SELECT "unique1" FROM "onek" WHERE (("unique1" < 1))
                ->  Hash
                      Output: j3.unique1, j3.tenthous
