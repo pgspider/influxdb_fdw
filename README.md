@@ -1,7 +1,7 @@
 # InfluxDB Foreign Data Wrapper for PostgreSQL
 This PostgreSQL extension is a Foreign Data Wrapper (FDW) for InfluxDB.
 
-The current version can work with PostgreSQL 9.6, 10 and 11.
+The current version can work with PostgreSQL 9.6, 10, 11 and 12.
 
 Go version should be 1.10.4 or later.
 ## Installation
@@ -57,8 +57,10 @@ SELECT * FROM t1;
 </pre>
 
 ## Features
+
+InfluxDB FDW supports pushed-down functions
 - WHERE clauses including timestamp, interval and `now()` functions are pushed down
-- Some of aggregation are pushed down
+- Some of aggregation are pushed down such as `influx_time` and `last` functions. These functions does not work on PostgreSQL 9.
 
 ## Limitations
 - INSERT, UPDATE and DELETE are not supported.
@@ -67,9 +69,16 @@ Following limitations originate from data model and query language of InfluxDB.
 - Result sets have different number of rows depending on specified target list.
 For example, `SELECT field1 FROM t1` and `SELECT field2 FROM t1` returns different number of rows if
 the number of points with field1 and field2 are different in InfluxDB database. 
-- Currently `GROUP BY` works for only tag keys, not for field keys([#3](/../../issues/3))
 - Timestamp precision may be lost because timestamp resolution of PostgreSQL is microseconds while that of InfluxDB is nanoseconds.
 - Conditions like `WHERE time + interval '1 day' < now()` do not work. Please use `WHERE time < now() - interval '1 day'`.
+- `GROUP BY time` does not work (([#19](/../../issues/19)).
+- Conditions have mix usage of aggregate function and arithmetic do not work ([#18](/../../issues/18)).
+- `GROUP BY` does not support FIELD KEY having arithmetic ([#17](/../../issues/17)).
+- `GROUP BY` only works with time and tag dimensions ([#16](/../../issues/16)).
+- `GROUP BY` does not work with duplicated targets ([#15](/../../issues/15)).
+- Aggregate functions with arithmetic in parentheses are not supported ([#14](/../../issues/14)).
+- String comparisons do not work except `=` and `!=` ([#13](/../../issues/13)).
+- `GROUP BY` works for only tag keys, not for field keys([#3](/../../issues/3))
 
 When a query to foreing tables fails, you can find why it fails by seeing a query executed in InfluxDB with `EXPLAIN (VERBOSE)`.
 
@@ -77,7 +86,8 @@ When a query to foreing tables fails, you can find why it fails by seeing a quer
 Opening issues and pull requests on GitHub are welcome.
 
 ## License
-Copyright (c) 2018 - 2019, TOSHIBA Corporation 
+Copyright (c) 2018 - 2020, TOSHIBA Corporation
+
 Copyright (c) 2011 - 2016, EnterpriseDB Corporation
 
 Permission to use, copy, modify, and distribute this software and its documentation for any purpose, without fee, and without a written agreement is hereby granted, provided that the above copyright notice and this paragraph and the following two paragraphs appear in all copies.
