@@ -51,7 +51,7 @@ CREATE FOREIGN TABLE t1(time timestamp with time zone , tag1 text, field1 intege
 IMPORT FOREIGN SCHEMA public FROM SERVER influxdb_server INTO public;
 </pre>
 
-### Access foregin table
+### Access foreign table
 <pre>
 SELECT * FROM t1;
 </pre>
