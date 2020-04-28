@@ -67,6 +67,7 @@ CREATE FOREIGN TABLE INT8_TBL2 (
 CREATE FOREIGN TABLE INT4_TBL (f1 int4) SERVER influxdb_svr;
 CREATE FOREIGN TABLE INT4_TBL2 (f1 int4) SERVER influxdb_svr;
 CREATE FOREIGN TABLE INT4_TBL3 (f1 int4) SERVER influxdb_svr;
+CREATE FOREIGN TABLE INT4_TBL4 (f1 int4) SERVER influxdb_svr;
 
 CREATE FOREIGN TABLE multi_arg_agg (a int, b int, c text) SERVER influxdb_svr;
 CREATE FOREIGN TABLE multi_arg_agg2 (a int, b int, c text) SERVER influxdb_svr;
@@ -78,6 +79,9 @@ CREATE FOREIGN TABLE FLOAT8_TBL (f1 float8) SERVER influxdb_svr;
 --
 -- AGGREGATES
 --
+
+-- avoid bit-exact output here because operations may not be bit-exact.
+SET extra_float_digits = 0;
 
 SELECT avg(four) AS avg_1 FROM onek;
 
@@ -117,16 +121,39 @@ SELECT var_pop(1.0), var_samp(2.0);
 SELECT stddev_pop(3.0::numeric), stddev_samp(4.0::numeric);
 
 -- verify correct results for null and NaN inputs
--- select sum(null::int4) from generate_series(1,3);
--- select sum(null::int8) from generate_series(1,3);
--- select sum(null::numeric) from generate_series(1,3);
--- select sum(null::float8) from generate_series(1,3);
--- select avg(null::int4) from generate_series(1,3);
--- select avg(null::int8) from generate_series(1,3);
--- select avg(null::numeric) from generate_series(1,3);
--- select avg(null::float8) from generate_series(1,3);
--- select sum('NaN'::numeric) from generate_series(1,3);
--- select avg('NaN'::numeric) from generate_series(1,3);
+create foreign table generate_series1(a int) server influxdb_svr;
+select sum(null::int4) from generate_series1;
+select sum(null::int8) from generate_series1;
+select sum(null::numeric) from generate_series1;
+select sum(null::float8) from generate_series1;
+select avg(null::int4) from generate_series1;
+select avg(null::int8) from generate_series1;
+select avg(null::numeric) from generate_series1;
+select avg(null::float8) from generate_series1;
+select sum('NaN'::numeric) from generate_series1;
+select avg('NaN'::numeric) from generate_series1;
+
+-- verify correct results for infinite inputs
+create foreign table infinite1(id int, a text) server influxdb_svr;
+SELECT avg(a::float8), var_pop(a::float8) 
+FROM infinite1 WHERE id = 1;
+
+SELECT avg(a::float8), var_pop(a::float8) 
+FROM infinite1 WHERE id = 2;
+
+SELECT avg(a::float8), var_pop(a::float8) 
+FROM infinite1 WHERE id = 3;
+
+SELECT avg(a::float8), var_pop(a::float8)
+FROM infinite1 WHERE id = 4;
+
+-- test accuracy with a large input offset
+create foreign table large_input1(id int, a int) server influxdb_svr;
+SELECT avg(a::float8), var_pop(a::float8)
+FROM large_input1 WHERE id=1;
+
+SELECT avg(a::float8), var_pop(a::float8)
+FROM large_input1 WHERE id=2;
 
 -- SQL2003 binary aggregates
 SELECT regr_count(b, a) FROM aggtest;
@@ -139,6 +166,28 @@ SELECT regr_slope(b, a), regr_intercept(b, a) FROM aggtest;
 SELECT covar_pop(b, a), covar_samp(b, a) FROM aggtest;
 SELECT corr(b, a) FROM aggtest;
 
+-- test accum and combine functions directly
+CREATE FOREIGN TABLE regr_test1 (x float8, y float8) server influxdb_svr;
+SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+FROM regr_test1 WHERE x IN (10,20,30,80);
+SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+FROM regr_test1;
+
+CREATE FOREIGN TABLE float8_arr1 (id int, x text, y text) server influxdb_svr;
+SELECT float8_accum(x::float8[], 100) FROM float8_arr1 WHERE id=1;
+SELECT float8_regr_accum(x::float8[], 200, 100) FROM float8_arr1 WHERE id=2;
+SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+FROM regr_test1 WHERE x IN (10,20,30);
+SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+FROM regr_test1 WHERE x IN (80,100);
+SELECT float8_combine(x::float8[], y::float8[]) FROM float8_arr1 WHERE id=3;
+SELECT float8_combine(x::float8[], y::float8[]) FROM float8_arr1 WHERE id=4;
+SELECT float8_combine(x::float8[], y::float8[]) FROM float8_arr1 WHERE id=5;
+SELECT float8_regr_combine(x::float8[],y::float8[]) FROM float8_arr1 WHERE id=6;
+SELECT float8_regr_combine(x::float8[],y::float8[]) FROM float8_arr1 WHERE id=7;
+SELECT float8_regr_combine(x::float8[],y::float8[]) FROM float8_arr1 WHERE id=8;
+
+-- test count, distinct
 SELECT count(four) AS cnt_1000 FROM onek;
 SELECT count(DISTINCT four) AS cnt_4 FROM onek;
 
@@ -210,31 +259,32 @@ having exists (select 1 from onek b
 
 -- Test handling of sublinks within outer-level aggregates.
 -- Per bug report from Daniel Grace.
--- select
---   (select max((select i.unique2 from tenk1 i where i.unique1 = o.unique1)))
--- from tenk1 o;
+-- this test 
+--select
+--  (select max((select i.unique2 from tenk1 i where i.unique1 = o.unique1)))
+--from tenk1 o;
 
 -- Test handling of Params within aggregate arguments in hashed aggregation.
 -- Per bug report from Jeevan Chalke.
 explain (verbose, costs off)
-select s1, s2, sm
-from generate_series(1, 3) s1,
-     lateral (select s2, sum(s1 + s2) sm
-              from generate_series(1, 3) s2 group by s2) ss
+select s1.a, ss.a, sm
+from generate_series1 s1,
+     lateral (select s2.a, sum(s1.a + s2.a) sm
+              from generate_series1 s2 group by s2.a) ss
 order by 1, 2;
-select s1, s2, sm
-from generate_series(1, 3) s1,
-     lateral (select s2, sum(s1 + s2) sm
-              from generate_series(1, 3) s2 group by s2) ss
+select s1.a, ss.a, sm
+from generate_series1 s1,
+     lateral (select s2.a, sum(s1.a + s2.a) sm
+              from generate_series1 s2 group by s2.a) ss
 order by 1, 2;
 
 explain (verbose, costs off)
-select array(select sum(x+y) s
-            from generate_series(1,3) y group by y order by s)
-  from generate_series(1,3) x;
-select array(select sum(x+y) s
-            from generate_series(1,3) y group by y order by s)
-  from generate_series(1,3) x;
+select array(select sum(x.a+y.a) s
+            from generate_series1 y group by y.a order by s)
+  from generate_series1 x;
+select array(select sum(x.a+y.a) s
+            from generate_series1 y group by y.a order by s)
+  from generate_series1 x;
 
 --
 -- test for bitwise integer aggregates
@@ -283,34 +333,39 @@ FROM bitwise_test;
 -- test boolean aggregates
 --
 -- first test all possible transition and final states
+CREATE FOREIGN TABLE boolean1 (x1 BOOL, y1 BOOL , x2 BOOL, y2 BOOL,
+			x3 BOOL, y3 BOOL, x4 BOOL, y4 BOOL,
+			x5 BOOL, y5 BOOL, x6 BOOL, y6 BOOL,
+			x7 BOOL, y7 BOOL, x8 BOOL, y8 BOOL,
+			x9 BOOL, y9 BOOL) SERVER influxdb_svr;
 
 SELECT
   -- boolean and transitions
   -- null because strict
-  booland_statefunc(NULL, NULL)  IS NULL AS "t",
-  booland_statefunc(TRUE, NULL)  IS NULL AS "t",
-  booland_statefunc(FALSE, NULL) IS NULL AS "t",
-  booland_statefunc(NULL, TRUE)  IS NULL AS "t",
-  booland_statefunc(NULL, FALSE) IS NULL AS "t",
+  booland_statefunc(x1, y1)  IS NULL AS "t",
+  booland_statefunc(x2, y2)  IS NULL AS "t",
+  booland_statefunc(x3, y3) IS NULL AS "t",
+  booland_statefunc(x4, y4)  IS NULL AS "t",
+  booland_statefunc(x5, y5) IS NULL AS "t",
   -- and actual computations
-  booland_statefunc(TRUE, TRUE) AS "t",
-  NOT booland_statefunc(TRUE, FALSE) AS "t",
-  NOT booland_statefunc(FALSE, TRUE) AS "t",
-  NOT booland_statefunc(FALSE, FALSE) AS "t";
+  booland_statefunc(x6, y6) AS "t",
+  NOT booland_statefunc(x7, y7) AS "t",
+  NOT booland_statefunc(x8, y8) AS "t",
+  NOT booland_statefunc(x9, y9) AS "t" FROM boolean1;
 
 SELECT
   -- boolean or transitions
   -- null because strict
-  boolor_statefunc(NULL, NULL)  IS NULL AS "t",
-  boolor_statefunc(TRUE, NULL)  IS NULL AS "t",
-  boolor_statefunc(FALSE, NULL) IS NULL AS "t",
-  boolor_statefunc(NULL, TRUE)  IS NULL AS "t",
-  boolor_statefunc(NULL, FALSE) IS NULL AS "t",
+  boolor_statefunc(x1, y1)  IS NULL AS "t",
+  boolor_statefunc(x2, y2)  IS NULL AS "t",
+  boolor_statefunc(x3, y3) IS NULL AS "t",
+  boolor_statefunc(x4, y4)  IS NULL AS "t",
+  boolor_statefunc(x5, y5) IS NULL AS "t",
   -- actual computations
-  boolor_statefunc(TRUE, TRUE) AS "t",
-  boolor_statefunc(TRUE, FALSE) AS "t",
-  boolor_statefunc(FALSE, TRUE) AS "t",
-  NOT boolor_statefunc(FALSE, FALSE) AS "t";
+  boolor_statefunc(x6, y6) AS "t",
+  boolor_statefunc(x7, y7) AS "t",
+  boolor_statefunc(x8, y8) AS "t",
+  NOT boolor_statefunc(x9, y9) AS "t" FROM boolean1;
 
 CREATE FOREIGN TABLE bool_test_empty (
   b1 BOOL,
@@ -594,31 +649,23 @@ select aggfns(distinct a,b,c order by a,b,i,c) from multi_arg_agg2, generate_ser
 select aggfns(distinct a,a,c order by a,b) from multi_arg_agg2, generate_series(1,2) i;
 
 -- string_agg tests
--- begin;
--- delete from varchar_tbl;
--- insert into varchar_tbl values ('aaaa'),('bbbb'),('cccc');
--- select string_agg(f1,',') from varchar_tbl;
+create foreign table string_agg1(a1 text, a2 text) server influxdb_svr;
+create foreign table string_agg2(a1 text, a2 text) server influxdb_svr;
+create foreign table string_agg3(a1 text, a2 text) server influxdb_svr;
+create foreign table string_agg4(a1 text, a2 text) server influxdb_svr;
 
--- delete from varchar_tbl;
--- insert into varchar_tbl values ('aaaa'),(null),('bbbb'),('cccc');
--- select string_agg(f1,',') from varchar_tbl;
-
--- delete from varchar_tbl;
--- insert into varchar_tbl values (null),(null),('bbbb'),('cccc');
--- select string_agg(f1,'AB') from varchar_tbl;
-
--- delete from varchar_tbl;
--- insert into varchar_tbl values (null),(null);
--- select string_agg(f1,',') from varchar_tbl;
--- rollback;
+select string_agg(a1,',') from string_agg1;
+select string_agg(a1,',') from string_agg2;
+select string_agg(a1,'AB') from string_agg3;
+select string_agg(a1,',') from string_agg4;
 
 -- check some implicit casting cases, as per bug #5564
-
 select string_agg(distinct f1, ',' order by f1) from varchar_tbl;  -- ok
 select string_agg(distinct f1::text, ',' order by f1) from varchar_tbl;  -- not ok
 select string_agg(distinct f1, ',' order by f1::text) from varchar_tbl;  -- not ok
 select string_agg(distinct f1::text, ',' order by f1::text) from varchar_tbl;  -- ok
 
+-- InfluxDB does not support binary data
 -- string_agg bytea tests
 -- create foreign table bytea_test_table(v bytea) server influxdb_svr;
 
@@ -714,7 +761,7 @@ select percentile_disc(0.5) within group (order by thousand) from tenk1;
 begin;
 select rank(3) within group (order by f1) from INT4_TBL3;
 select cume_dist(3) within group (order by f1) from INT4_TBL3;
-select percent_rank(3) within group (order by f1) from INT4_TBL3;
+select percent_rank(3) within group (order by f1) from INT4_TBL4;
 select dense_rank(3) within group (order by f1) from INT4_TBL3;
 rollback;
 
@@ -724,43 +771,64 @@ select percentile_cont(array[0,0.25,0.5,0.75,1]) within group (order by thousand
 from tenk1;
 select percentile_disc(array[[null,1,0.5],[0.75,0.25,null]]) within group (order by thousand)
 from tenk1;
--- select percentile_cont(array[0,1,0.25,0.75,0.5,1,0.3,0.32,0.35,0.38,0.4]) within group (order by x)
--- from generate_series(1,6) x;
+create foreign table generate_series2 (a int) server influxdb_svr;
+select percentile_cont(array[0,1,0.25,0.75,0.5,1,0.3,0.32,0.35,0.38,0.4]) within group (order by a)
+from generate_series2;
 
 select ten, mode() within group (order by string4) from tenk1 group by ten;
 
-select percentile_disc(array[0.25,0.5,0.75]) within group (order by x)
-from unnest('{fred,jim,fred,jack,jill,fred,jill,jim,jim,sheila,jim,sheila}'::text[]) u(x);
+create foreign table percentile_disc1(x text) server influxdb_svr;
+select percentile_disc(array[0.25,0.5,0.75]) within group (order by unnest)
+from (select unnest(x::text[]) from percentile_disc1) y;
 
 -- check collation propagates up in suitable cases:
+create foreign table pg_collation1 (x text) server influxdb_svr;
 select pg_collation_for(percentile_disc(1) within group (order by x collate "POSIX"))
-  from (values ('fred'),('jim')) v(x);
+  from pg_collation1;
+
+-- test ordered-set aggs using built-in support functions
+create aggregate test_percentile_disc(float8 ORDER BY anyelement) (
+  stype = internal,
+  sfunc = ordered_set_transition,
+  finalfunc = percentile_disc_final,
+  finalfunc_extra = true,
+  finalfunc_modify = read_write
+);
+
+create aggregate test_rank(VARIADIC "any" ORDER BY VARIADIC "any") (
+  stype = internal,
+  sfunc = ordered_set_transition_multi,
+  finalfunc = rank_final,
+  finalfunc_extra = true,
+  hypothetical
+);
 
 -- ordered-set aggs created with CREATE AGGREGATE
--- select test_rank(3) within group (order by x)
--- from (values (1),(1),(2),(2),(3),(3),(4)) v(x);
--- select test_percentile_disc(0.5) within group (order by thousand) from tenk1;
+create foreign table test_rank1 (x int) server influxdb_svr;
+select test_rank(3) within group (order by x) from test_rank1;
+select test_percentile_disc(0.5) within group (order by thousand) from tenk1;
 
 -- ordered-set aggs can't use ungrouped vars in direct args:
-select rank(x) within group (order by x) from generate_series(1,5) x;
+create foreign table generate_series3 (x int) server influxdb_svr;
+select rank(x) within group (order by x) from generate_series3 x;
 
 -- outer-level agg can't use a grouped arg of a lower level, either:
 select array(select percentile_disc(a) within group (order by x)
                from (values (0.3),(0.7)) v(a) group by a)
-  from generate_series(1,5) g(x);
+  from generate_series3;
 
 -- agg in the direct args is a grouping violation, too:
-select rank(sum(x)) within group (order by x) from generate_series(1,5) x;
+select rank(sum(x)) within group (order by x) from generate_series3 x;
 
 -- hypothetical-set type unification and argument-count failures:
--- select rank(3) within group (order by x) from (values ('fred'),('jim')) v(x);
+select rank(3) within group (order by x) from pg_collation1;
 select rank(3) within group (order by stringu1,stringu2) from tenk1;
-select rank('fred') within group (order by x) from generate_series(1,5) x;
--- select rank('adam'::text collate "C") within group (order by x collate "POSIX")
---   from (values ('fred'),('jim')) v(x);
+select rank('fred') within group (order by x) from generate_series3 x;
+select rank('adam'::text collate "C") within group (order by x collate "POSIX")
+  from pg_collation1;
 -- hypothetical-set type unification successes:
-select rank('adam'::varchar) within group (order by x) from (values ('fred'),('jim')) v(x);
-select rank('3') within group (order by x) from generate_series(1,5) x;
+select rank('adam'::varchar) within group (order by x) from pg_collation1;
+select rank('3') within group (order by x) from generate_series3 x;
 
 -- divide by zero check
 select percent_rank(0) within group (order by x) from generate_series(1,0) x;
@@ -777,6 +845,14 @@ select ten,
 select pg_get_viewdef('aggordview1');
 select * from aggordview1 order by ten;
 drop view aggordview1;
+
+-- User defined function for user defined aggregate, VARIADIC
+create function least_accum(anyelement, variadic anyarray)
+returns anyelement language sql as
+  'select least($1, min($2[i])) from generate_subscripts($2,1) g(i)';
+create aggregate least_agg(variadic items anyarray) (
+  stype = anyelement, sfunc = least_accum
+);
 
 -- variadic aggregates
 select least_agg(q1,q2) from int8_tbl;
@@ -847,39 +923,42 @@ create aggregate my_sum(int4)
 );
 
 -- aggregate state should be shared as aggs are the same.
-select my_avg(one),my_avg(one) from (values(1),(3)) t(one);
+create foreign table my_avg1 (one int) server influxdb_svr;
+select my_avg(one),my_avg(one) from my_avg1;
 
 -- aggregate state should be shared as transfn is the same for both aggs.
-select my_avg(one),my_sum(one) from (values(1),(3)) t(one);
+select my_avg(one),my_sum(one) from my_avg1;
 
 -- same as previous one, but with DISTINCT, which requires sorting the input.
-select my_avg(distinct one),my_sum(distinct one) from (values(1),(3),(1)) t(one);
+select my_avg(distinct one),my_sum(distinct one) from my_avg1;
 
 -- shouldn't share states due to the distinctness not matching.
-select my_avg(distinct one),my_sum(one) from (values(1),(3)) t(one);
+select my_avg(distinct one),my_sum(one) from my_avg1;
 
 -- shouldn't share states due to the filter clause not matching.
-select my_avg(one) filter (where one > 1),my_sum(one) from (values(1),(3)) t(one);
+select my_avg(one) filter (where one > 1),my_sum(one) from my_avg1;
 
 -- this should not share the state due to different input columns.
-select my_avg(one),my_sum(two) from (values(1,2),(3,4)) t(one,two);
+create foreign table my_avg2(one int, two int) server influxdb_svr;
+select my_avg(one),my_sum(two) from my_avg2;
 
 -- exercise cases where OSAs share state
+create foreign table percentile_cont1( a int) server influxdb_svr;
 select
   percentile_cont(0.5) within group (order by a),
   percentile_disc(0.5) within group (order by a)
-from (values(1::float8),(3),(5),(7)) t(a);
+from percentile_cont1;
 
 select
   percentile_cont(0.25) within group (order by a),
   percentile_disc(0.5) within group (order by a)
-from (values(1::float8),(3),(5),(7)) t(a);
+from percentile_cont1;
 
 -- these can't share state currently
 select
   rank(4) within group (order by a),
   dense_rank(4) within group (order by a)
-from (values(1),(3),(5),(7)) t(a);
+from percentile_cont1;
 
 -- test that aggs with the same sfunc and initcond share the same agg state
 create aggregate my_sum_init(int4)
@@ -907,10 +986,10 @@ create aggregate my_avg_init2(int4)
 );
 
 -- state should be shared if INITCONDs are matching
-select my_sum_init(one),my_avg_init(one) from (values(1),(3)) t(one);
+select my_sum_init(one),my_avg_init(one) from my_avg1;
 
 -- Varying INITCONDs should cause the states not to be shared.
-select my_sum_init(one),my_avg_init2(one) from (values(1),(3)) t(one);
+select my_sum_init(one),my_avg_init2(one) from my_avg1;
 
 rollback;
 
@@ -963,7 +1042,8 @@ create aggregate my_half_sum(int4)
 );
 
 -- Agg state should be shared even though my_sum has no finalfn
-select my_sum(one),my_half_sum(one) from (values(1),(2),(3),(4)) t(one);
+create foreign table my_sum1(one int) server influxdb_svr;
+select my_sum(one),my_half_sum(one) from my_sum1;
 
 rollback;
 
@@ -1042,15 +1122,39 @@ SET enable_indexonlyscan = off;
 
 -- variance(int4) covers numeric_poly_combine
 -- sum(int8) covers int8_avg_combine
-EXPLAIN (COSTS OFF)
-  SELECT variance(unique1::int4), sum(unique1::int8) FROM tenk1;
+-- regr_count(float8, float8) covers int8inc_float8_float8 and aggregates with > 1 arg
+EXPLAIN (COSTS OFF, VERBOSE)
+  SELECT variance(unique1::int4), sum(unique1::int8), regr_count(unique1::float8, unique1::float8) FROM tenk1;
 
-SELECT variance(unique1::int4), sum(unique1::int8) FROM tenk1;
+SELECT variance(unique1::int4), sum(unique1::int8), regr_count(unique1::float8, unique1::float8) FROM tenk1;
 
 ROLLBACK;
 
 -- test coverage for dense_rank
-SELECT dense_rank(x) WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(1),(2),(2),(3),(3)) v(x) GROUP BY (x) ORDER BY 1;
+create foreign table dense_rank1 (x int) server influxdb_svr;
+SELECT dense_rank(x) WITHIN GROUP (ORDER BY x) FROM dense_rank1 GROUP BY (x) ORDER BY 1;
+
+
+-- Ensure that the STRICT checks for aggregates does not take NULLness
+-- of ORDER BY columns into account. See bug report around
+-- 2a505161-2727-2473-7c46-591ed108ac52@email.cz
+SELECT min(x ORDER BY y) FROM (VALUES(1, NULL)) AS d(x,y);
+SELECT min(x ORDER BY y) FROM (VALUES(1, 2)) AS d(x,y);
+
+-- check collation-sensitive matching between grouping expressions
+select v||'a', case v||'a' when 'aa' then 1 else 0 end, count(*)
+  from unnest(array['a','b']) u(v)
+ group by v||'a' order by 1;
+select v||'a', case when v||'a' = 'aa' then 1 else 0 end, count(*)
+  from unnest(array['a','b']) u(v)
+ group by v||'a' order by 1;
+
+-- Make sure that generation of HashAggregate for uniqification purposes
+-- does not lead to array overflow due to unexpected duplicate hash keys
+-- see CAFeeJoKKu0u+A_A9R9316djW-YW3-+Gtgvy3ju655qRHR3jtdA@mail.gmail.com
+explain (costs off)
+  select 1 from tenk1
+   where (hundred, thousand) in (select twothousand, twothousand from onek);
 
 -- Clean up
 DO $d$

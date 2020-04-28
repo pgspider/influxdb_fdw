@@ -42,7 +42,8 @@ CREATE FOREIGN TABLE tenk1 (
   string4   name
 ) SERVER influxdb_svr OPTIONS (table 'tenk');
 
-ALTER TABLE tenk1 SET WITH OIDS;
+--Does not support on Postgres 12
+--ALTER TABLE tenk1 SET WITH OIDS;
 
 CREATE FOREIGN TABLE tenk2 (
   unique1   int4,
@@ -71,6 +72,11 @@ CREATE FOREIGN TABLE INT8_TBL(
 ) SERVER influxdb_svr;
 CREATE FOREIGN TABLE INT2_TBL(f1 int2) SERVER influxdb_svr;
 
+-- useful in some tests below
+create temp table onerow();
+insert into onerow default values;
+analyze onerow;
+
 --
 -- CORRELATION NAMES
 -- Make sure that table/column aliases are supported
@@ -90,7 +96,7 @@ SELECT '' AS "xxx", *
   FROM J1_TBL t1 (a, b, c);
 
 SELECT '' AS "xxx", *
-  FROM J1_TBL t1 (a, b, c), J2_TBL t2 (d, e) ORDER BY a;
+  FROM J1_TBL t1 (a, b, c), J2_TBL t2 (d, e);
 
 SELECT '' AS "xxx", t1.a, t2.e
   FROM J1_TBL t1 (a, b, c), J2_TBL t2 (d, e)
@@ -323,6 +329,13 @@ NATURAL FULL JOIN
     (SELECT name, n as s3_n FROM t31) as s3
   ) ss2;
 
+-- Constants as join keys can also be problematic
+SELECT * FROM
+  (SELECT name, n as s1_n FROM t11) as s1
+FULL JOIN
+  (SELECT name, 2 as s2_n FROM t21) as s2
+ON (s1_n = s2_n);
+
 
 -- Test for propagation of nullability constraints into sub-joins
 
@@ -483,6 +496,24 @@ DROP FOREIGN TABLE J2_TBL;
 CREATE FOREIGN TABLE t12 (a int, b int) SERVER influxdb_svr;
 CREATE FOREIGN TABLE t22 (a int, b int) SERVER influxdb_svr;
 CREATE FOREIGN TABLE t32 (x int, y int) SERVER influxdb_svr;
+
+-- InfluxDB FDW does not support INSERT/DELETE/UPDATE
+--INSERT INTO t1 VALUES (5, 10);
+--INSERT INTO t1 VALUES (15, 20);
+--INSERT INTO t1 VALUES (100, 100);
+--INSERT INTO t1 VALUES (200, 1000);
+--INSERT INTO t2 VALUES (200, 2000);
+--INSERT INTO t3 VALUES (5, 20);
+--INSERT INTO t3 VALUES (6, 7);
+--INSERT INTO t3 VALUES (7, 8);
+--INSERT INTO t3 VALUES (500, 100);
+
+--DELETE FROM t3 USING t1 table1 WHERE t3.x = table1.a;
+--SELECT * FROM t3;
+--DELETE FROM t3 USING t1 JOIN t2 USING (a) WHERE t3.x > t1.a;
+--SELECT * FROM t3;
+--DELETE FROM t3 USING t3 t3_other WHERE t3.x = t3_other.x AND t3.y = t3_other.y;
+--SELECT * FROM t3;
 
 -- Test join against inheritance tree
 
@@ -737,7 +768,7 @@ LEFT JOIN
 ) sub2
 ON sub1.key1 = sub2.key3;
 
-test the path using join aliases, too
+-- test the path using join aliases, too
 SELECT * FROM
 ( SELECT 1 as key1 ) sub1
 LEFT JOIN
@@ -884,8 +915,8 @@ select t1.unique2, t1.stringu1, t2.unique1, t2.stringu2 from
   tenk1 t1
   inner join int4_tbl i1
     left join (select v1.x2, v2.y1, 11 AS d1
-               from (values(1,0)) v1(x1,x2)
-               left join (values(3,1)) v2(y1,y2)
+               from (select 1,0 from onerow) v1(x1,x2)
+               left join (select 3,1 from onerow) v2(y1,y2)
                on v1.x1 = v2.y2) subq1
     on (i1.f1 = subq1.x2)
   on (t1.unique2 = subq1.d1)
@@ -897,8 +928,8 @@ select t1.unique2, t1.stringu1, t2.unique1, t2.stringu2 from
   tenk1 t1
   inner join int4_tbl i1
     left join (select v1.x2, v2.y1, 11 AS d1
-               from (values(1,0)) v1(x1,x2)
-               left join (values(3,1)) v2(y1,y2)
+               from (select 1,0 from onerow) v1(x1,x2)
+               left join (select 3,1 from onerow) v2(y1,y2)
                on v1.x1 = v2.y2) subq1
     on (i1.f1 = subq1.x2)
   on (t1.unique2 = subq1.d1)
@@ -923,6 +954,35 @@ select ss1.d1 from
     on i8.q1 = i4.f1
   on t1.tenthous = ss1.d1
 where t1.unique1 < i4.f1;
+
+-- this variant is foldable by the remove-useless-RESULT-RTEs code
+
+explain (costs off)
+select t1.unique2, t1.stringu1, t2.unique1, t2.stringu2 from
+  tenk1 t1
+  inner join int4_tbl i1
+    left join (select v1.x2, v2.y1, 11 AS d1
+               from (values(1,0)) v1(x1,x2)
+               left join (values(3,1)) v2(y1,y2)
+               on v1.x1 = v2.y2) subq1
+    on (i1.f1 = subq1.x2)
+  on (t1.unique2 = subq1.d1)
+  left join tenk1 t2
+  on (subq1.y1 = t2.unique1)
+where t1.unique2 < 42 and t1.stringu1 > t2.stringu2;
+
+select t1.unique2, t1.stringu1, t2.unique1, t2.stringu2 from
+  tenk1 t1
+  inner join int4_tbl i1
+    left join (select v1.x2, v2.y1, 11 AS d1
+               from (values(1,0)) v1(x1,x2)
+               left join (values(3,1)) v2(y1,y2)
+               on v1.x1 = v2.y2) subq1
+    on (i1.f1 = subq1.x2)
+  on (t1.unique2 = subq1.d1)
+  left join tenk1 t2
+  on (subq1.y1 = t2.unique1)
+where t1.unique2 < 42 and t1.stringu1 > t2.stringu2;
 
 --
 -- test extraction of restriction OR clauses from join OR clause
@@ -1485,11 +1545,11 @@ select uunique1 from
 -- Take care to reference the correct RTE
 --
 
--- select atts.relid::regclass, s.* from pg_stats s join
---     pg_attribute a on s.attname = a.attname and s.tablename =
---     a.attrelid::regclass::text join (select unnest(indkey) attnum,
---     indexrelid from pg_index i) atts on atts.attnum = a.attnum where
---     schemaname != 'pg_catalog';
+--select atts.relid::regclass, s.* from pg_stats s join
+--    pg_attribute a on s.attname = a.attname and s.tablename =
+--    a.attrelid::regclass::text join (select unnest(indkey) attnum,
+--    indexrelid from pg_index i) atts on atts.attnum = a.attnum where
+--    schemaname != 'pg_catalog';
 
 --
 -- Test LATERAL
@@ -1603,7 +1663,7 @@ analyze dual;
 select v.* from
   (int8_tbl x left join (select q1,(select coalesce(q2,0)) q2 from int8_tbl) y on x.q2 = y.q1)
   left join int4_tbl z on z.f1 = x.q2,
-  lateral (select x.q1,y.q1 from dual union all select x.q2,y.q2 from dual) v(vx,vy);
+  lateral (select x.q1,y.q1 from onerow union all select x.q2,y.q2 from onerow) v(vx,vy);
 
 explain (verbose, costs off)
 select * from
@@ -1629,9 +1689,9 @@ select * from int4_tbl i left join
   lateral (select * from int2_tbl j where i.f1 = j.f1) k on true;
 explain (verbose, costs off)
 select * from int4_tbl i left join
-  lateral (select coalesce(j) from int2_tbl j where i.f1 = j.f1) k on true;
+  lateral (select coalesce(i) from int2_tbl j where i.f1 = j.f1) k on true;
 select * from int4_tbl i left join
-  lateral (select coalesce(j) from int2_tbl j where i.f1 = j.f1) k on true;
+  lateral (select coalesce(i) from int2_tbl j where i.f1 = j.f1) k on true;
 explain (verbose, costs off)
 select * from int4_tbl a,
   lateral (
@@ -1687,7 +1747,15 @@ select * from
     select * from (select 3 as z offset 0) z where z.z = x.x
   ) zz on zz.z = y.y;
 
-check handling of nested appendrels inside LATERAL
+-- check dummy rels with lateral references (bug #15694)
+explain (verbose, costs off)
+select * from int8_tbl i8 left join lateral
+  (select *, i8.q2 from int4_tbl where false) ss on true;
+explain (verbose, costs off)
+select * from int8_tbl i8 left join lateral
+  (select *, i8.q2 from int4_tbl i1, int4_tbl i2 where false) ss on true;
+
+-- check handling of nested appendrels inside LATERAL
 select * from
   ((select 2 as v) union all (select 3 as v)) as q1
   cross join lateral
@@ -1924,6 +1992,7 @@ CREATE FOREIGN TABLE onek (
   string4   name
 ) SERVER influxdb_svr;
 
+-- check that semijoin inner is not seen as unique for a portion of the outerrel
 explain (verbose, costs off)
 select t1.unique1, t2.hundred
 from onek t1, tenk1 t2

@@ -112,6 +112,11 @@ SELECT onek.unique1, onek.string4 FROM onek
 --
 -- test partial btree indexes
 --
+-- As of 7.2, planner probably won't pick an indexscan without stats,
+-- so ANALYZE first.  Also, we want to prevent it from picking a bitmapscan
+-- followed by sort, because that could hide index ordering problems.
+--
+-- ANALYZE onek2;
 
 SET enable_seqscan TO off;
 SET enable_bitmapscan TO off;
@@ -163,6 +168,13 @@ SELECT p.name, p.age FROM person* p;
 SELECT p.name, p.age FROM person* p ORDER BY age using >, name;
 
 --
+-- Test some cases involving whole-row Var referencing a subquery
+--
+select foo from (select 1 offset 0) as foo;
+select foo from (select null offset 0) as foo;
+select foo from (select 'xyzzy',1,null offset 0) as foo;
+
+--
 -- Test VALUES lists
 --
 select * from onek, (values(147, 'RFAAAA'), (931, 'VJAAAA')) as v (i, j)
@@ -182,7 +194,7 @@ select * from onek
     order by unique1;
 
 -- VALUES is also legal as a standalone query or a set-operation member
--- VALUES (1,2), (3,4+4), (7,77.7);
+VALUES (1,2), (3,4+4), (7,77.7);
 
 VALUES (1,2), (3,4+4), (7,77.7)
 UNION ALL
@@ -198,9 +210,9 @@ CREATE FOREIGN TABLE foo (f1 int) SERVER influxdb_svr;
 
 SELECT * FROM foo ORDER BY f1;
 SELECT * FROM foo ORDER BY f1 ASC;	-- same thing
--- SELECT * FROM foo ORDER BY f1 NULLS FIRST;
+SELECT * FROM foo ORDER BY f1 NULLS FIRST;
 SELECT * FROM foo ORDER BY f1 DESC;
--- SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
+SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
 
 -- check if indexscans do the right things
 -- CREATE INDEX fooi ON foo (f1);
@@ -279,30 +291,29 @@ select unique1, unique2 from onek2
 --
 
 -- ORDER BY on a constant doesn't really need any sorting
--- SELECT 1 AS x ORDER BY x;
+SELECT 1 AS x ORDER BY x;
 
 -- But ORDER BY on a set-valued expression does
--- create function sillysrf(int) returns setof int as
---   'values (1),(10),(2),($1)' language sql immutable;
+create function sillysrf(int) returns setof int as
+  'values (1),(10),(2),($1)' language sql immutable;
 
--- select sillysrf(42);
--- select sillysrf(-1) order by 1;
+select sillysrf(42);
+select sillysrf(-1) order by 1;
 
--- drop function sillysrf(int);
+drop function sillysrf(int);
 
 -- X = X isn't a no-op, it's effectively X IS NOT NULL assuming = is strict
 -- (see bug #5084)
--- select * from (values (2),(null),(1)) v(k) where k = k order by k;
--- select * from (values (2),(null),(1)) v(k) where k = k;
+select * from (values (2),(null),(1)) v(k) where k = k order by k;
+select * from (values (2),(null),(1)) v(k) where k = k;
 
 -- Test partitioned tables with no partitions, which should be handled the
 -- same as the non-inheritance case when expanding its RTE.
--- create table list_parted_tbl (a int,b int) partition by list (a);
--- create table list_parted_tbl1 partition of list_parted_tbl
---   for values in (1) partition by list(b);
--- create foreign table list_parted_tbl (a int,b int) server influxdb_svr;
--- explain (costs off) select * from list_parted_tbl;
--- drop table list_parted_tbl;
+create table list_parted_tbl (a int,b int) partition by list (a);
+create table list_parted_tbl1 partition of list_parted_tbl
+  for values in (1) partition by list(b);
+explain (costs off) select * from list_parted_tbl;
+drop table list_parted_tbl;
 
 DROP USER MAPPING FOR CURRENT_USER SERVER influxdb_svr;
 DROP SERVER influxdb_svr CASCADE;
