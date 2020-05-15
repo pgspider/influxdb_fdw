@@ -279,6 +279,7 @@ foreign_expr_walker(Node *node,
 	HeapTuple	tuple;
 	Form_pg_operator form;
 	char	   *cur_opname;
+	static bool check_time_column = false;
 
 	/* Need do nothing for empty subexpressions */
 	if (node == NULL)
@@ -309,9 +310,14 @@ foreign_expr_walker(Node *node,
 					if (var->varattno < 0)
 						return false;
 
+					/* column time is maybe unsafe */
+					if (var->vartype == TIMESTAMPTZOID){
+						check_time_column = true;
+					}
+
 					/* Else check the collation */
-					collation = var->varcollid;
-					state = OidIsValid(collation) ? FDW_COLLATE_SAFE : FDW_COLLATE_NONE;
+					collation = var->varcollid;				
+					state = OidIsValid(collation) ? FDW_COLLATE_SAFE : FDW_COLLATE_NONE;					
 				}
 				else
 				{
@@ -476,6 +482,8 @@ foreign_expr_walker(Node *node,
 					ReleaseSysCache(tuple);
 					return false;
 				}
+
+
 				ReleaseSysCache(tuple);
 
 				/*
@@ -579,6 +587,12 @@ foreign_expr_walker(Node *node,
 				if (!foreign_expr_walker((Node *) b->args,
 										 glob_cxt, &inner_cxt))
 					return false;
+
+				/* Influx do not support OR with condition contain time column */
+				if (b->boolop == OR_EXPR && check_time_column){
+					check_time_column = false;
+					return false;
+				}
 
 				/* Output is always boolean and so noncollatable. */
 				collation = InvalidOid;
