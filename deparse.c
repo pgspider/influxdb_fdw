@@ -477,7 +477,6 @@ foreign_expr_walker(Node *node,
 					return false;
 				}
 
-#if (PG_VERSION_NUM < 120000)
 				/*
 				 * Cannot pushdown to InfluxDB if there is string comparison with:
 				 * "<, >, <=, >=" operators
@@ -530,7 +529,6 @@ foreign_expr_walker(Node *node,
 						break;
 					}
 				}
-#endif
 
 				ReleaseSysCache(tuple);
 
