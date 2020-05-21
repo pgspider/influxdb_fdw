@@ -911,7 +911,7 @@ influxdbIterateForeignScan(ForeignScanState *node)
 	TupleDesc	tupleDescriptor = tupleSlot->tts_tupleDescriptor;
 	influxdb_opt *options;
 	struct InfluxDBQuery_return volatile ret;
-	struct InfluxDBResult volatile *result = NULL;
+	struct InfluxDBResult volatile *result;
 	ForeignScan *fsplan = (ForeignScan *) node->ss.ps.plan;
 	RangeTblEntry *rte;
 	int			rtindex;
