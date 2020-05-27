@@ -1037,7 +1037,7 @@ deparseExplicitTargetList(List *tlist, List **retrieved_attrs,
 	{
 		TargetEntry *tle = lfirst_node(TargetEntry, lc);
 
-		if (IsA((Expr *) tle->expr, Aggref))
+		if (IsA((Expr *) tle->expr, Aggref) || IsA((Expr *) tle->expr, OpExpr))
 		{
 			if (!first)
 				appendStringInfoString(buf, ", ");

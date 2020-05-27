@@ -859,7 +859,7 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 				/* Time column corresponding to influx_time */
 				result_idx = 0;
 			}
-			else if (IsA(target, Aggref))
+			else if (IsA(target, Aggref) || IsA(target, OpExpr))
 			{
 				attid++;
 				result_idx = attid;
