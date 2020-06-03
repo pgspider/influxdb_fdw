@@ -859,7 +859,7 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 				/* Time column corresponding to influx_time */
 				result_idx = 0;
 			}
-			else if (IsA(target, Aggref))
+			else if (IsA(target, Aggref) || IsA(target, OpExpr))
 			{
 				attid++;
 				result_idx = attid;
@@ -911,7 +911,7 @@ influxdbIterateForeignScan(ForeignScanState *node)
 	TupleDesc	tupleDescriptor = tupleSlot->tts_tupleDescriptor;
 	influxdb_opt *options;
 	struct InfluxDBQuery_return volatile ret;
-	struct InfluxDBResult volatile *result;
+	struct InfluxDBResult volatile *result = NULL;
 	ForeignScan *fsplan = (ForeignScan *) node->ss.ps.plan;
 	RangeTblEntry *rte;
 	int			rtindex;

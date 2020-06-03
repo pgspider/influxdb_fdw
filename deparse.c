@@ -476,6 +476,60 @@ foreign_expr_walker(Node *node,
 					ReleaseSysCache(tuple);
 					return false;
 				}
+
+				/*
+				 * Cannot pushdown to InfluxDB if there is string comparison with:
+				 * "<, >, <=, >=" operators
+				 */
+				if (strcmp(cur_opname, "<") == 0
+					|| strcmp(cur_opname, ">") == 0
+					|| strcmp(cur_opname, "<=") == 0
+					|| strcmp(cur_opname, ">=") == 0)
+				{
+					Expr *expr;
+					ListCell *lc;
+					Const *c;
+
+					/*
+					 * Check String type for the operand which is Const
+					 * We do not specific any target OID for string type of constant.
+					 * The implementation is based on implementation of influxdb_deparse_const()
+					 * where default phrase deparses string value of constant.
+					 */
+					foreach(lc, oe->args)
+					{
+						expr = lfirst(lc);
+						if (!IsA(expr, Const))
+							continue;
+
+						c = (Const *)expr;
+						switch (c->consttype)
+						{
+							case INT2OID:
+							case INT4OID:
+							case INT8OID:
+							case OIDOID:
+							case FLOAT4OID:
+							case FLOAT8OID:
+							case NUMERICOID:
+							case BITOID:
+							case VARBITOID:
+							case BOOLOID:
+							case BYTEAOID:
+							case TIMESTAMPTZOID:
+							case INTERVALOID:
+								break;
+							default:
+								{
+									/* A Const expression has string type here */
+									ReleaseSysCache(tuple);
+									return false;
+								}
+						}
+						break;
+					}
+				}
+
 				ReleaseSysCache(tuple);
 
 				/*
@@ -1037,7 +1091,7 @@ deparseExplicitTargetList(List *tlist, List **retrieved_attrs,
 	{
 		TargetEntry *tle = lfirst_node(TargetEntry, lc);
 
-		if (IsA((Expr *) tle->expr, Aggref))
+		if (IsA((Expr *) tle->expr, Aggref) || IsA((Expr *) tle->expr, OpExpr))
 		{
 			if (!first)
 				appendStringInfoString(buf, ", ");
