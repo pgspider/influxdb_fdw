@@ -48,6 +48,9 @@ typedef struct foreign_glob_cxt
 	RelOptInfo *foreignrel;		/* the foreign relation we are planning for */
 	Relids		relids;			/* relids of base relations in the underlying
 								 * scan */
+	unsigned int mixing_aggref_status; /* mixing_aggref_status contains information about whether expression
+										* includes both of aggregate and non-aggregate.
+										*/
 } foreign_glob_cxt;
 
 /*
@@ -79,6 +82,7 @@ typedef struct deparse_expr_cxt
 								 * a base relation. */
 	StringInfo	buf;			/* output buffer to append to */
 	List	  **params_list;	/* exprs that will become remote Params */
+	bool		require_regex;	/* require regex for LIKE operator */
 } deparse_expr_cxt;
 
 /*
@@ -98,7 +102,7 @@ static void influxdb_deparse_const(Const *node, deparse_expr_cxt *context, int s
 static void influxdb_deparse_param(Param *node, deparse_expr_cxt *context);
 static void influxdb_deparse_func_expr(FuncExpr *node, deparse_expr_cxt *context);
 static void influxdb_deparse_op_expr(OpExpr *node, deparse_expr_cxt *context);
-static void influxdb_deparse_operator_name(StringInfo buf, Form_pg_operator opform);
+static void influxdb_deparse_operator_name(StringInfo buf, Form_pg_operator opform, bool *regex);
 
 static void influxdb_deparse_scalar_array_op_expr(ScalarArrayOpExpr *node,
 												  deparse_expr_cxt *context);
@@ -132,6 +136,8 @@ static void deparseExplicitTargetList(List *tlist, List **retrieved_attrs,
 									  deparse_expr_cxt *context);
 static Expr *find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel);
 static bool is_builtin(Oid objectId);
+static bool is_contain_time_column(List *tlist);
+static bool is_grouping_target(TargetEntry *tle, deparse_expr_cxt *context);
 
 /*
  * Local variables.
@@ -207,6 +213,7 @@ influxdb_is_foreign_expr(PlannerInfo *root,
 	 */
 	glob_cxt.root = root;
 	glob_cxt.foreignrel = baserel;
+	glob_cxt.mixing_aggref_status = INFLUXDB_TARGETS_MIXING_AGGREF_SAFE;
 
 	/*
 	 * For an upper relation, use relids from its underneath scan relation,
@@ -279,6 +286,9 @@ foreign_expr_walker(Node *node,
 	HeapTuple	tuple;
 	Form_pg_operator form;
 	char	   *cur_opname;
+	static bool is_time_column = false;     /* Use static variable for save value 
+	                                         * from child node to parent node.
+	                                         * Check column T_Var is time column? */
 
 	/* Need do nothing for empty subexpressions */
 	if (node == NULL)
@@ -308,6 +318,17 @@ foreign_expr_walker(Node *node,
 
 					if (var->varattno < 0)
 						return false;
+
+					/* check column is time column? */
+					if (var->vartype == TIMESTAMPTZOID || 
+						var->vartype == TIMEOID || 
+						var->vartype == TIMESTAMPOID)
+					{
+						is_time_column = true;
+					}
+					
+					/* Mark this target is field/tag */
+					glob_cxt->mixing_aggref_status |= INFLUXDB_TARGETS_MARK_COLUMN;
 
 					/* Else check the collation */
 					collation = var->varcollid;
@@ -530,6 +551,18 @@ foreign_expr_walker(Node *node,
 					}
 				}
 
+				/*
+				 * Cannot pushdown to InfluxDB if compare time column with "!=, <>" operators
+				 */
+				if (strcmp(cur_opname, "!=") == 0 || strcmp(cur_opname, "<>") == 0)
+				{
+					if (is_contain_time_column(oe->args))
+					{
+						ReleaseSysCache(tuple);
+						return false;
+					}
+				}
+
 				ReleaseSysCache(tuple);
 
 				/*
@@ -538,6 +571,18 @@ foreign_expr_walker(Node *node,
 				if (!foreign_expr_walker((Node *) oe->args,
 										 glob_cxt, &inner_cxt))
 					return false;
+
+				/*
+				 * Mixing aggregate and non-aggregate error occurs when SELECT statement
+				 * includes both of aggregate function and standalone field key or tag key.
+				 * It is unsafe to pushdown if target operation expression has mixing aggregate
+				 * and non-aggregate, such as: (1+col1+sum(col2)), (sum(col1)*col2)
+				 */
+				if ((glob_cxt->mixing_aggref_status & INFLUXDB_TARGETS_MIXING_AGGREF_UNSAFE) ==
+					INFLUXDB_TARGETS_MIXING_AGGREF_UNSAFE)
+				{
+					return false;
+				}
 
 				/*
 				 * If operator's input collation is not derived from a foreign
@@ -569,6 +614,15 @@ foreign_expr_walker(Node *node,
 				 */
 				if (!is_builtin(oe->opno))
 					return false;
+
+				/*
+				 * InfluxDB do not support OR with multi time column or time column with !=, <>
+				 * --> Not pushdown time column
+				 */
+				if (is_contain_time_column(oe->args))
+				{
+					return false;
+				}
 
 				/*
 				 * Recurse to input subexpressions.
@@ -620,7 +674,8 @@ foreign_expr_walker(Node *node,
 		case T_BoolExpr:
 			{
 				BoolExpr   *b = (BoolExpr *) node;
-
+				is_time_column = false;
+				
 				if (b->boolop == NOT_EXPR)
 				{
 					/* InfluxDB do not support not operator */
@@ -633,6 +688,12 @@ foreign_expr_walker(Node *node,
 				if (!foreign_expr_walker((Node *) b->args,
 										 glob_cxt, &inner_cxt))
 					return false;
+
+				/* Influx do not support OR with condition contain time column */
+				if (b->boolop == OR_EXPR && is_time_column){
+					is_time_column = false;
+					return false;
+				}
 
 				/* Output is always boolean and so noncollatable. */
 				collation = InvalidOid;
@@ -690,6 +751,18 @@ foreign_expr_walker(Node *node,
 				{
 					return false;
 				}
+
+				/*
+				 * Only sum() and count() are aggregate functions,
+				 * max(), min() and last() are selector functions
+				 */
+				if (strcmp(opername, "sum") == 0
+					  || strcmp(opername, "count") == 0)
+				{
+					/* Mark target as aggregate function */
+					glob_cxt->mixing_aggref_status |= INFLUXDB_TARGETS_MARK_AGGREF;
+				}
+
 				/* Not safe to pushdown when not in grouping context */
 				if (glob_cxt->foreignrel->reloptkind != RELOPT_UPPER_REL)
 					return false;
@@ -728,6 +801,10 @@ foreign_expr_walker(Node *node,
 				{
 					return false;
 				}
+
+				/* influxdb_fdw only supports push-down DISTINCT within aggregate for count() */
+				if (agg->aggdistinct && (strcmp(opername, "count") != 0))
+					return false;
 
 				/*
 				 * If aggregate's input collation is not derived from a
@@ -913,6 +990,7 @@ influxdbDeparseSelectStmtForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *r
 	context.foreignrel = rel;
 	context.scanrel = (rel->reloptkind == RELOPT_UPPER_REL) ? fpinfo->outerrel : rel;
 	context.params_list = params_list;
+	context.require_regex = false;
 	/* Construct SELECT clause */
 	influxdb_deparse_select(tlist, retrieved_attrs, &context);
 
@@ -1084,14 +1162,47 @@ deparseExplicitTargetList(List *tlist, List **retrieved_attrs,
 	StringInfo	buf = context->buf;
 	int			i = 0;
 	bool		first = true;
+	bool		is_col_grouping_target;
+	bool		is_all_target_column;
 
 	*retrieved_attrs = NIL;
 
+	/*
+	 * We do not construct grouping target column in SELECT influxdb SQL.
+	 * We only contruct grouping target columns if all targets in tlist are grouping
+	 * target columns and tlist does not contain other types of target (e.g. aggregate, operation),
+	 * we do this to avoid missing targets in remote SELECT statement,
+	 * e.g. SELECT col1, col2 FROM table GROUP BY col1, col2; (col1 and col2 are tag keys)
+	 * So, firstly we need to check whether all target are columns or not.
+	 */
+	is_all_target_column = true;
 	foreach(lc, tlist)
 	{
 		TargetEntry *tle = lfirst_node(TargetEntry, lc);
 
-		if (IsA((Expr *) tle->expr, Aggref) || IsA((Expr *) tle->expr, OpExpr))
+		if (!IsA((Expr *) tle->expr, Var))
+		{
+			is_all_target_column = false;
+			break;
+		}
+	}
+
+	/* Contruct targets for remote SELECT statement */
+	foreach(lc, tlist)
+	{
+		TargetEntry *tle = lfirst_node(TargetEntry, lc);
+
+		/* Check whether column is a grouping target or not */
+		if (IsA((Expr *) tle->expr, Var))
+		{
+			is_col_grouping_target = is_grouping_target(tle, context);
+		}
+
+		if (IsA((Expr *) tle->expr, Aggref)
+			|| IsA((Expr *) tle->expr, OpExpr)
+			|| (IsA((Expr *) tle->expr, Var)
+				&& (!is_col_grouping_target || (is_col_grouping_target && is_all_target_column)))
+			)
 		{
 			if (!first)
 				appendStringInfoString(buf, ", ");
@@ -1361,8 +1472,83 @@ influxdb_deparse_column_ref(StringInfo buf, int varno, int varattno, Oid vartype
 }
 
 /*
-* Append a SQL string literal representing "val" to buf.
-*/
+ * Append a SQL string regex representing "val" to buf.
+ *
+ * We convert LIKE's pattern on PostgreSQL to regex pattern on
+ * InfluxDB.
+ *
+ * Surround regex pattern by '/' characters.
+ *
+ * PostgreSQL's percent sign is used to matches any sequence of
+ * zero or more characters. We convert '%' sign to "(.*)" regex string.
+ *
+ * PostgreSQL's underscore is used to matches any single character.
+ * We convert '_' character to "(.{1})" regex string.
+ *
+ * Escape regex special characters: "\\^$.|?*+()[{"
+ */
+void
+influxdb_deparse_string_regex(StringInfo buf, const char *val)
+{
+	const char	*regex_special = "\\^$.|?*+()[{";
+	const char	*ptr = val;
+
+	appendStringInfoChar(buf, '/');
+	while (*ptr != '\0')
+	{
+		switch (*ptr)
+		{
+			case '%':
+				/* Change to regex string */
+				appendStringInfoString(buf, "(.*)");
+				break;
+			case '_':
+				/* Change to regex string */
+				appendStringInfoString(buf, "(.{1})");
+				break;
+			case '\\':
+				/*
+				 * Backslash character is the escape character of PostgreSQL.
+				 * We skip backslash, and move to the next character which is
+				 * escaped by backslash and will be escapsed if it is a regex special character.
+				 */
+				ptr++;
+
+				/* Check terminate character */
+				if (*ptr == '\0')
+				{
+					elog(ERROR, "invalid pattern matching");
+				}
+				else
+			default:
+				{
+					char	ch = *ptr;
+
+					/* Check regex special character */
+					if (strchr(regex_special, ch) != NULL)
+					{
+						/* Escape this char */
+						appendStringInfoChar(buf, '\\');
+						appendStringInfoChar(buf, ch);
+					}
+					else
+					{
+						appendStringInfoChar(buf, ch);
+					}
+				}
+				break;
+		}
+
+		ptr++;
+	}
+	appendStringInfoChar(buf, '/');
+
+	return;
+}
+
+/*
+ * Append a SQL string literal representing "val" to buf.
+ */
 void
 influxdb_deparse_string_literal(StringInfo buf, const char *val)
 {
@@ -1603,7 +1789,17 @@ influxdb_deparse_const(Const *node, deparse_expr_cxt *context, int showtype)
 			}
 		default:
 			extval = OidOutputFunctionCall(typoutput, node->constvalue);
-			influxdb_deparse_string_literal(buf, extval);
+			if (context->require_regex)
+			{
+				/*
+				 * Convert LIKE's pattern on PostgreSQL to regex pattern on InfluxDB.
+				 */
+				influxdb_deparse_string_regex(buf, extval);
+			}
+			else
+			{
+				influxdb_deparse_string_literal(buf, extval);
+			}
 			break;
 	}
 }
@@ -1769,7 +1965,7 @@ influxdb_deparse_op_expr(OpExpr *node, deparse_expr_cxt *context)
 	}
 
 	/* Deparse operator name. */
-	influxdb_deparse_operator_name(buf, form);
+	influxdb_deparse_operator_name(buf, form, &context->require_regex);
 
 	/* Deparse right operand. */
 	if (oprkind == 'l' || oprkind == 'b')
@@ -1778,6 +1974,10 @@ influxdb_deparse_op_expr(OpExpr *node, deparse_expr_cxt *context)
 		appendStringInfoChar(buf, ' ');
 		deparseExpr(lfirst(arg), context);
 	}
+
+	/* Reset regex require for next operation */
+	if (context->require_regex)
+		context->require_regex = false;
 
 	appendStringInfoChar(buf, ')');
 
@@ -1788,7 +1988,7 @@ influxdb_deparse_op_expr(OpExpr *node, deparse_expr_cxt *context)
  * Print the name of an operator.
  */
 static void
-influxdb_deparse_operator_name(StringInfo buf, Form_pg_operator opform)
+influxdb_deparse_operator_name(StringInfo buf, Form_pg_operator opform, bool *regex)
 {
 	/* opname is not a SQL identifier, so we should not quote it. */
 	cur_opname = NameStr(opform->oprname);
@@ -1807,11 +2007,13 @@ influxdb_deparse_operator_name(StringInfo buf, Form_pg_operator opform)
 	{
 		if (strcmp(cur_opname, "~~") == 0)
 		{
-			appendStringInfoString(buf, "LIKE");
+			appendStringInfoString(buf, "=~");
+			*regex = true;
 		}
 		else if (strcmp(cur_opname, "!~~") == 0)
 		{
-			appendStringInfoString(buf, "NOT LIKE");
+			appendStringInfoString(buf, "!~");
+			*regex = true;
 		}
 		else if (strcmp(cur_opname, "~~*") == 0 ||
 				 strcmp(cur_opname, "!~~*") == 0 ||
@@ -1881,9 +2083,22 @@ influxdb_deparse_scalar_array_op_expr(ScalarArrayOpExpr *node, deparse_expr_cxt 
 	getTypeOutputInfo(c->consttype,
 					  &typoutput, &typIsVarlena);
 	extval = OidOutputFunctionCall(typoutput, c->constvalue);
-	isstr = true;
-	if (c->consttype == INT4ARRAYOID || c->consttype == OIDARRAYOID)
-		isstr = false;
+	
+	switch (c->consttype)
+	{
+		case BOOLARRAYOID:
+		case INT8ARRAYOID:
+		case INT2ARRAYOID:
+		case INT4ARRAYOID:
+		case OIDARRAYOID:
+		case FLOAT4ARRAYOID:
+		case FLOAT8ARRAYOID:
+			isstr = false;
+			break;
+		default:
+			isstr = true;
+			break;
+	}
 
 	/* Deparse right operand. */
 	deparseLeft = true;
@@ -1900,7 +2115,18 @@ influxdb_deparse_scalar_array_op_expr(ScalarArrayOpExpr *node, deparse_expr_cxt 
 		if (deparseLeft)
 		{
 			arg1 = linitial(node->args);
-			deparseExpr(arg1, context);
+			if (c->consttype == BOOLARRAYOID)
+			{
+				if (arg1 != NULL && IsA(arg1, Var))
+				{
+					Var *var = (Var*) arg1;
+					/* Deparse bool column with convert argument is false */
+					influxdb_deparse_column_ref(buf, var->varno, var->varoattno, var->vartype, context->root, false);
+				}
+			}
+			else{
+				deparseExpr(arg1, context);
+			}
 			if (notIn)
 				appendStringInfo(buf, " <> ");
 			else
@@ -1940,6 +2166,16 @@ influxdb_deparse_scalar_array_op_expr(ScalarArrayOpExpr *node, deparse_expr_cxt 
 			else
 				appendStringInfo(buf, "  OR ");
 			deparseLeft = true;
+			continue;
+		}
+
+		/* Influx only support "= true" or "= false" (not "= 't'"" or "= 'f'") */
+		if (c->consttype == BOOLARRAYOID)
+		{
+			if (ch == 't')
+				appendStringInfo(buf, "true");
+			else
+				appendStringInfo(buf, "false");
 			continue;
 		}
 		appendStringInfoChar(buf, ch);
@@ -2323,4 +2559,62 @@ deparseSortGroupClause(Index ref, List *tlist, deparse_expr_cxt *context)
 	}
 
 	return (Node *) expr;
+}
+
+/*
+ * At least one element in the list is time column
+ * is_contain_time_column function returns true.
+ */
+static bool
+is_contain_time_column(List *tlist)
+{
+	Expr *expr;
+	Var *var;
+	ListCell *lc;
+
+	/* Check Timestamp type for the operand which is Var */
+	foreach(lc, tlist)
+	{
+		expr = (Expr *) lfirst(lc);
+		if (!IsA(expr, Var))
+			continue;
+
+		var = (Var *)expr;
+		if (var->vartype == TIMESTAMPTZOID ||
+			var->vartype == TIMEOID ||
+			var->vartype == TIMESTAMPOID)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/*
+ * is_grouping_target
+ * This function check whether given target entry is grouping target,
+ * if so, return true, otherwise return false.
+ */
+bool is_grouping_target(TargetEntry *tle, deparse_expr_cxt *context)
+{
+	Query	   *query = context->root->parse;
+	ListCell   *lc;
+
+	/* Nothing to be done, if there's no GROUP BY clause in the query. */
+	if (!query->groupClause)
+		return false;
+
+	foreach(lc, query->groupClause)
+	{
+		SortGroupClause *grp = (SortGroupClause *) lfirst(lc);
+
+		/* Check whether target entry is a grouping target or not */
+		if (grp->tleSortGroupRef == tle->ressortgroupref)
+		{
+			return true;
+		}
+	}
+
+	return false;
 }

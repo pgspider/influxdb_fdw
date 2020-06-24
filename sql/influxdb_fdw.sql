@@ -52,6 +52,14 @@ SELECT * FROM cpu WHERE value3 IS NULL;
 SELECT * FROM cpu WHERE tag2 IS NULL;
 SELECT * FROM cpu WHERE value3 IS NOT NULL;
 SELECT * FROM cpu WHERE tag2 IS NOT NULL;
+
+-- InfluxDB not support compare timestamp with OR condition
+SELECT * FROM cpu WHERE time = '2015-08-18 09:48:08+09' OR value2 = 0.5;
+
+-- InfluxDB not support compare timestamp with != or <>
+SELECT * FROM cpu WHERE time != '2015-08-18 09:48:08+09';
+SELECT * FROM cpu WHERE time <> '2015-08-18 09:48:08+09';
+
 -- There is inconsitency for search of missing values between tag and field
 EXPLAIN (verbose,costs off)
 SELECT * FROM cpu WHERE value3 = '';
@@ -67,6 +75,16 @@ EXPLAIN (verbose)  SELECT * FROM cpu WHERE tag1 IN ('tag1_A', 'tag1_B');
 -- Rows which have no tag are considered to have empty string
 SELECT * FROM cpu WHERE tag1 NOT IN ('tag1_A', 'tag1_B');
 EXPLAIN (verbose)  SELECT * FROM cpu WHERE tag1 NOT IN ('tag1_A', 'tag1_B');
+
+-- test IN/NOT IN
+SELECT * FROM cpu WHERE time IN ('2015-08-18 09:48:08+09','2016-08-28 07:44:00+07');
+SELECT * FROM cpu WHERE time NOT IN ('2015-08-18 09:48:08+09','2016-08-28 07:44:00+07');
+SELECT * FROM cpu WHERE value1 NOT IN (100, 97);
+SELECT * FROM cpu WHERE value1 IN (100, 97);
+SELECT * FROM cpu WHERE value2 IN (0.5, 10.9);
+SELECT * FROM cpu WHERE value2 NOT IN (2, 9.7);
+SELECT * FROM cpu WHERE value4 NOT IN ('true', 'true');
+SELECT * FROM cpu WHERE value4 IN ('f', 't');
 
 DROP FOREIGN TABLE cpu;
 

@@ -159,6 +159,7 @@ static bool foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel);
 static void add_foreign_grouping_paths(PlannerInfo *root,
 									   RelOptInfo *input_rel,
 									   RelOptInfo *grouped_rel);
+static bool influxdb_is_tag_key(const char *colname, Oid reloid);
 
 /*
  * Library load-time initialization, sets on_proc_exit() callback for
@@ -840,16 +841,35 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 				int			nfield = result->ncol - result->ntag;
 
 				/*
-				 * Values of GROUP BY tag are stored in the order of
-				 * result->tagkeys at the last of result row. We will find
-				 * that index
+				 * If target is tag, we get its value from GROUP BY tag values,
+				 * otherwise, get target value from result field.
 				 */
-				for (i = 0; i < result->ntag; i++)
+				if (influxdb_is_tag_key(name, relid))
 				{
-					if (strcmp(name, result->tagkeys[i]) == 0)
+					/*
+					 * Values of GROUP BY tag are stored in the order of
+					 * result->tagkeys at the last of result row. We will find
+					 * that index
+					 */
+					for (i = 0; i < result->ntag; i++)
 					{
-						result_idx = nfield + i;
-						break;
+						if (strcmp(name, result->tagkeys[i]) == 0)
+						{
+							result_idx = nfield + i;
+							break;
+						}
+					}
+				}
+				else
+				{
+					if (INFLUXDB_IS_TIME_COLUMN(name))
+					{
+						result_idx = 0;
+					}
+					else
+					{
+						attid++;
+						result_idx = attid;
 					}
 				}
 			}
@@ -954,12 +974,11 @@ influxdbIterateForeignScan(ForeignScanState *node)
 
 	if (festate->rowidx == 0)
 	{
+		MemoryContext oldcontext = NULL;
 		int			i;
 
 		PG_TRY();
 		{
-			MemoryContext oldcontext;
-
 			ret = InfluxDBQuery(festate->query, options->svr_address, options->svr_port,
 								options->svr_username, options->svr_password,
 								options->svr_database,
@@ -1004,6 +1023,9 @@ influxdbIterateForeignScan(ForeignScanState *node)
 			{
 				InfluxDBFreeResult((InfluxDBResult *) result);
 			}
+
+			if (oldcontext)
+				MemoryContextSwitchTo(oldcontext);
 
 			PG_RE_THROW();
 		}
@@ -1201,6 +1223,24 @@ influxdbImportForeignSchema(ImportForeignSchemaStmt *stmt,
 			appendStringInfo(&buf, "\n) SERVER %s\nOPTIONS (table ",
 							 quote_identifier(stmt->server_name));
 			influxdb_deparse_string_literal(&buf, info[table_idx].measurement);
+			if (info[table_idx].tag_len > 0)
+			{
+				bool			is_first = true;
+				StringInfoData	tags_list;
+
+				initStringInfo(&tags_list);
+
+				appendStringInfoString(&buf, ", tags ");
+				for (col_idx = 0; col_idx < info[table_idx].tag_len; col_idx++)
+				{
+					if (!is_first)
+						appendStringInfoChar(&tags_list, ',');
+					appendStringInfo(&tags_list, "%s",info[table_idx].tag[col_idx]);
+					is_first = false;
+				}
+				influxdb_deparse_string_literal(&buf, tags_list.data);
+			}
+
 			appendStringInfoString(&buf, ");");
 			commands = lappend(commands, pstrdup(buf.data));
 
@@ -1279,13 +1319,30 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel)
 		/* Check whether this expression is part of GROUP BY clause */
 		if (sgref && get_sortgroupref_clause_noerr(sgref, query->groupClause))
 		{
-
-
 			/*
 			 * If any of the GROUP BY expression is not shippable we can not
 			 * push down aggregation to the foreign server.
 			 */
 			if (!influxdb_is_foreign_expr(root, grouped_rel, expr))
+				return false;
+
+			/*
+			 * If any of grouping target expression is not tag key, we can not
+			 * push down it to the foreign server.
+			 */
+			if (IsA(expr, Var))
+			{
+				char *colname = get_column_name(ofpinfo->table->relid, ((Var *) expr)->varattno);
+
+				if (!influxdb_is_tag_key(colname, ofpinfo->table->relid))
+					return false;
+			}
+
+			/*
+			 * InfluxDB only support GROUP BY tags and GROUP BY time intervals,
+			 * we can not push down any expression that other than Var and FuncExpr nodes.
+			 */
+			if (!(IsA(expr, Var) || IsA(expr, FuncExpr)))
 				return false;
 
 			/* Pushable, add to tlist */
@@ -1785,4 +1842,33 @@ create_cursor(ForeignScanState *node)
 
 	/* Mark the cursor as created, and show no tuples have been retrieved */
 	festate->cursor_exists = true;
+}
+
+/*
+ * influxdb_is_tag_key
+ * This function check whether column is tag key or not.
+ * Return true if it is tag, otherwise return false.
+ */
+static bool influxdb_is_tag_key(const char *colname, Oid reloid)
+{
+	influxdb_opt	*options;
+	ListCell		*lc;
+
+	/* Get FDW options */
+	options = influxdb_get_options(reloid);
+
+	/* If there is no tag in "tags" option, it means column is field */
+	if (!options->tags_list)
+		return false;
+
+	/* Check whether column is tag or not */
+	foreach(lc, options->tags_list)
+	{
+		char *name = (char*)lfirst(lc);
+
+		if (strcmp(colname, name) == 0)
+			return true;
+	}
+
+	return false;
 }
