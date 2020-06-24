@@ -265,7 +265,7 @@ ANALYZE ft1;
 WARNING:  skipping "ft1" --- cannot analyze this foreign table
 ALTER FOREIGN TABLE ft2 OPTIONS (use_remote_estimate 'true');
 ERROR:  invalid option "use_remote_estimate"
-HINT:  Valid options in this context are: table
+HINT:  Valid options in this context are: table, tags
 -- ===================================================================
 -- simple queries
 -- ===================================================================
@@ -3338,18 +3338,29 @@ select sum(t1.c1), count(t2.c1) from ft1 t1 inner join ft2 t2 on (t1.c1 = t2.c1)
 -- GROUP BY clause having expressions
 explain (verbose, costs off)
 select c2/2, sum(c2) * (c2/2) from ft1 group by c2/2 order by c2/2;
-                           QUERY PLAN                            
------------------------------------------------------------------
+                     QUERY PLAN                      
+-----------------------------------------------------
  Sort
-   Output: ((c2 / 2)), ((sum(c2) * (c2 / 2)))
+   Output: ((c2 / 2)), ((sum(c2) * ((c2 / 2))))
    Sort Key: ((ft1.c2 / 2))
-   ->  Foreign Scan
-         Output: ((c2 / 2)), ((sum(c2) * (c2 / 2)))
-         InfluxDB query: SELECT  FROM "T1" GROUP BY (("c2" / 2))
-(6 rows)
+   ->  HashAggregate
+         Output: ((c2 / 2)), (sum(c2) * ((c2 / 2)))
+         Group Key: (ft1.c2 / 2)
+         ->  Foreign Scan on public.ft1
+               Output: (c2 / 2), c2
+               InfluxDB query: SELECT "c2" FROM "T1"
+(9 rows)
 
 select c2/2, sum(c2) * (c2/2) from ft1 group by c2/2 order by c2/2;
-ERROR:  influxdb_fdw : error parsing query: found FROM, expected identifier, string, number, bool at line 1, char 9
+ ?column? | ?column? 
+----------+----------
+        0 |        0
+        1 |      500
+        2 |     1800
+        3 |     3900
+        4 |     6800
+(5 rows)
+
 -- Aggregates in subquery are pushed down.
 explain (verbose, costs off)
 select count(x.a), sum(x.a) from (select c2 a, sum(c1) b from ft1 group by c2, sqrt(c1) order by 1, 2) x;
@@ -3382,13 +3393,29 @@ select c2 * (random() <= 1)::int as sum1, sum(c1) * c2 as sum2 from ft1 group by
  Sort
    Output: ((c2 * ((random() <= '1'::double precision))::integer)), ((sum(c1) * c2)), c2
    Sort Key: ((ft1.c2 * ((random() <= '1'::double precision))::integer)), ((sum(ft1.c1) * ft1.c2))
-   ->  Foreign Scan
-         Output: (c2 * ((random() <= '1'::double precision))::integer), ((sum(c1) * c2)), c2
-         InfluxDB query: SELECT  FROM "T1" GROUP BY "c2"
-(6 rows)
+   ->  HashAggregate
+         Output: (c2 * ((random() <= '1'::double precision))::integer), (sum(c1) * c2), c2
+         Group Key: ft1.c2
+         ->  Foreign Scan on public.ft1
+               Output: c2, c1
+               InfluxDB query: SELECT "C1", "c2" FROM "T1"
+(9 rows)
 
 select c2 * (random() <= 1)::int as sum1, sum(c1) * c2 as sum2 from ft1 group by c2 order by 1, 2;
-ERROR:  influxdb_fdw : error parsing query: found FROM, expected identifier, string, number, bool at line 1, char 9
+ sum1 |  sum2  
+------+--------
+    0 |      0
+    1 |  49600
+    2 |  99400
+    3 | 149400
+    4 | 199600
+    5 | 250000
+    6 | 300600
+    7 | 351400
+    8 | 402400
+    9 | 453600
+(10 rows)
+
 -- Aggregate with unshippable GROUP BY clause are not pushed
 explain (verbose, costs off)
 select c2 * (random() <= 1)::int as c2 from ft2 group by c2 * (random() <= 1)::int order by 1;
@@ -3408,25 +3435,59 @@ select c2 * (random() <= 1)::int as c2 from ft2 group by c2 * (random() <= 1)::i
 -- GROUP BY clause in various forms, cardinal, alias and constant expression
 explain (verbose, costs off)
 select count(c2) w, c2 x, 5 y, 7.0 z from ft1 group by 2, y, 9.0::int order by 2;
-                                QUERY PLAN                                
---------------------------------------------------------------------------
+                     QUERY PLAN                      
+-----------------------------------------------------
  Sort
    Output: (count(c2)), c2, 5, 7.0, 9
    Sort Key: ft1.c2
-   ->  Foreign Scan
-         Output: (count(c2)), c2, 5, 7.0, 9
-         InfluxDB query: SELECT count("c2") FROM "T1" GROUP BY "c2", 5, 9
-(6 rows)
+   ->  HashAggregate
+         Output: count(c2), c2, (5), 7.0, (9)
+         Group Key: ft1.c2, 5, 9
+         ->  Foreign Scan on public.ft1
+               Output: c2, 5, 9
+               InfluxDB query: SELECT "c2" FROM "T1"
+(9 rows)
 
 select count(c2) w, c2 x, 5 y, 7.0 z from ft1 group by 2, y, 9.0::int order by 2;
-ERROR:  influxdb_fdw : only time and tag dimensions allowed
+  w  | x | y |  z  
+-----+---+---+-----
+ 100 | 0 | 5 | 7.0
+ 100 | 1 | 5 | 7.0
+ 100 | 2 | 5 | 7.0
+ 100 | 3 | 5 | 7.0
+ 100 | 4 | 5 | 7.0
+ 100 | 5 | 5 | 7.0
+ 100 | 6 | 5 | 7.0
+ 100 | 7 | 5 | 7.0
+ 100 | 8 | 5 | 7.0
+ 100 | 9 | 5 | 7.0
+(10 rows)
+
 -- GROUP BY clause referring to same column multiple times
 -- Also, ORDER BY contains an aggregate function
 explain (verbose, costs off)
 select c2, c2 from ft1 where c2 > 6 group by 1, 2 order by sum(c1);
-ERROR:  targetlist item has multiple sortgroupref labels
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ Sort
+   Output: c2, c2, (sum(c1))
+   Sort Key: (sum(ft1.c1))
+   ->  HashAggregate
+         Output: c2, c2, sum(c1)
+         Group Key: ft1.c2, ft1.c2
+         ->  Foreign Scan on public.ft1
+               Output: c2, c2, c1
+               InfluxDB query: SELECT "C1", "c2" FROM "T1" WHERE (("c2" > 6))
+(9 rows)
+
 select c2, c2 from ft1 where c2 > 6 group by 1, 2 order by sum(c1);
-ERROR:  targetlist item has multiple sortgroupref labels
+ c2 | c2 
+----+----
+  7 |  7
+  8 |  8
+  9 |  9
+(3 rows)
+
 -- Testing HAVING clause shippability
 explain (verbose, costs off)
 select c2, sum(c1) from ft2 group by c2 having avg(c1) < 500 and sum(c1) < 49800 order by c2;
@@ -4087,35 +4148,48 @@ select count(t1.c3) from ft2 t1 left join ft2 t2 on (t1.c1 = random() * t2.c2);
 -- Subquery in FROM clause having aggregate
 explain (verbose, costs off)
 select count(*), x.b from ft1, (select c2 a, sum(c1) b from ft1 group by c2) x where ft1.c2 = x.a group by x.b order by 1, 2;
-                                           QUERY PLAN                                           
-------------------------------------------------------------------------------------------------
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
  Sort
    Output: (count(*)), x.b
    Sort Key: (count(*)), x.b
-   ->  GroupAggregate
+   ->  HashAggregate
          Output: count(*), x.b
          Group Key: x.b
-         ->  Sort
+         ->  Hash Join
                Output: x.b
-               Sort Key: x.b
-               ->  Hash Join
-                     Output: x.b
-                     Inner Unique: true
-                     Hash Cond: (ft1.c2 = x.a)
-                     ->  Foreign Scan on public.ft1
-                           Output: ft1.c2
-                           InfluxDB query: SELECT "c2" FROM "T1"
-                     ->  Hash
+               Inner Unique: true
+               Hash Cond: (ft1.c2 = x.a)
+               ->  Foreign Scan on public.ft1
+                     Output: ft1.c2
+                     InfluxDB query: SELECT "c2" FROM "T1"
+               ->  Hash
+                     Output: x.b, x.a
+                     ->  Subquery Scan on x
                            Output: x.b, x.a
-                           ->  Subquery Scan on x
-                                 Output: x.b, x.a
-                                 ->  Foreign Scan
-                                       Output: ft1_1.c2, (sum(ft1_1.c1))
-                                       InfluxDB query: SELECT sum("C1") FROM "T1" GROUP BY "c2"
+                           ->  HashAggregate
+                                 Output: ft1_1.c2, sum(ft1_1.c1)
+                                 Group Key: ft1_1.c2
+                                 ->  Foreign Scan on public.ft1 ft1_1
+                                       Output: ft1_1.c2, ft1_1.c1
+                                       InfluxDB query: SELECT "C1", "c2" FROM "T1"
 (23 rows)
 
 select count(*), x.b from ft1, (select c2 a, sum(c1) b from ft1 group by c2) x where ft1.c2 = x.a group by x.b order by 1, 2;
-ERROR:  invalid input syntax for type integer: ""
+ count |   b   
+-------+-------
+   100 | 49600
+   100 | 49700
+   100 | 49800
+   100 | 49900
+   100 | 50000
+   100 | 50100
+   100 | 50200
+   100 | 50300
+   100 | 50400
+   100 | 50500
+(10 rows)
+
 -- FULL join with IS NULL check in HAVING
 explain (verbose, costs off)
 select avg(t1.c1), sum(t2.c1) from ft4 t1 full join ft5 t2 on (t1.c1 = t2.c1) group by t2.c1 having (avg(t1.c1) is null and sum(t2.c1) < 10) or sum(t2.c1) is null order by 1 nulls last, 2;
@@ -4443,25 +4517,33 @@ select c2, sum(c1), grouping(c2) from ft1 where c2 < 3 group by c2 order by 1 nu
 -- DISTINCT itself is not pushed down, whereas underneath aggregate is pushed
 explain (verbose, costs off)
 select distinct sum(c1)/1000 s from ft2 where c2 < 6 group by c2 order by 1;
-                                    QUERY PLAN                                    
-----------------------------------------------------------------------------------
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
  Unique
    Output: ((sum(c1) / 1000)), c2
    ->  Sort
          Output: ((sum(c1) / 1000)), c2
          Sort Key: ((sum(ft2.c1) / 1000))
-         ->  Foreign Scan
-               Output: ((sum(c1) / 1000)), c2
-               InfluxDB query: SELECT  FROM "T1" WHERE (("c2" < 6)) GROUP BY "c2"
-(8 rows)
+         ->  HashAggregate
+               Output: (sum(c1) / 1000), c2
+               Group Key: ft2.c2
+               ->  Foreign Scan on public.ft2
+                     Output: c2, c1
+                     InfluxDB query: SELECT "C1", "c2" FROM "T1" WHERE (("c2" < 6))
+(11 rows)
 
 select distinct sum(c1)/1000 s from ft2 where c2 < 6 group by c2 order by 1;
-ERROR:  influxdb_fdw : error parsing query: found FROM, expected identifier, string, number, bool at line 1, char 9
+ s  
+----
+ 49
+ 50
+(2 rows)
+
 -- WindowAgg
 explain (verbose, costs off)
 select c2, sum(c2), count(c2) over (partition by c2%2) from ft2 where c2 < 10 group by c2 order by 1;
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
  Sort
    Output: c2, (sum(c2)), (count(c2) OVER (?)), ((c2 % 2))
    Sort Key: ft2.c2
@@ -4470,17 +4552,33 @@ select c2, sum(c2), count(c2) over (partition by c2%2) from ft2 where c2 < 10 gr
          ->  Sort
                Output: c2, ((c2 % 2)), (sum(c2))
                Sort Key: ((ft2.c2 % 2))
-               ->  Foreign Scan
-                     Output: c2, ((c2 % 2)), (sum(c2))
-                     InfluxDB query: SELECT sum("c2") FROM "T1" WHERE (("c2" < 10)) GROUP BY "c2"
-(11 rows)
+               ->  HashAggregate
+                     Output: c2, (c2 % 2), sum(c2)
+                     Group Key: ft2.c2
+                     ->  Foreign Scan on public.ft2
+                           Output: c2
+                           InfluxDB query: SELECT "c2" FROM "T1" WHERE (("c2" < 10))
+(14 rows)
 
 select c2, sum(c2), count(c2) over (partition by c2%2) from ft2 where c2 < 10 group by c2 order by 1;
-ERROR:  invalid input syntax for type integer: ""
+ c2 | sum | count 
+----+-----+-------
+  0 |   0 |     5
+  1 | 100 |     5
+  2 | 200 |     5
+  3 | 300 |     5
+  4 | 400 |     5
+  5 | 500 |     5
+  6 | 600 |     5
+  7 | 700 |     5
+  8 | 800 |     5
+  9 | 900 |     5
+(10 rows)
+
 explain (verbose, costs off)
 select c2, array_agg(c2) over (partition by c2%2 order by c2 desc) from ft1 where c2 < 10 group by c2 order by 1;
-                                       QUERY PLAN                                        
------------------------------------------------------------------------------------------
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
  Sort
    Output: c2, (array_agg(c2) OVER (?)), ((c2 % 2))
    Sort Key: ft1.c2
@@ -4489,17 +4587,33 @@ select c2, array_agg(c2) over (partition by c2%2 order by c2 desc) from ft1 wher
          ->  Sort
                Output: c2, ((c2 % 2))
                Sort Key: ((ft1.c2 % 2)), ft1.c2 DESC
-               ->  Foreign Scan
-                     Output: c2, ((c2 % 2))
-                     InfluxDB query: SELECT  FROM "T1" WHERE (("c2" < 10)) GROUP BY "c2"
-(11 rows)
+               ->  HashAggregate
+                     Output: c2, (c2 % 2)
+                     Group Key: ft1.c2
+                     ->  Foreign Scan on public.ft1
+                           Output: c2
+                           InfluxDB query: SELECT "c2" FROM "T1" WHERE (("c2" < 10))
+(14 rows)
 
 select c2, array_agg(c2) over (partition by c2%2 order by c2 desc) from ft1 where c2 < 10 group by c2 order by 1;
-ERROR:  influxdb_fdw : error parsing query: found FROM, expected identifier, string, number, bool at line 1, char 9
+ c2 |  array_agg  
+----+-------------
+  0 | {8,6,4,2,0}
+  1 | {9,7,5,3,1}
+  2 | {8,6,4,2}
+  3 | {9,7,5,3}
+  4 | {8,6,4}
+  5 | {9,7,5}
+  6 | {8,6}
+  7 | {9,7}
+  8 | {8}
+  9 | {9}
+(10 rows)
+
 explain (verbose, costs off)
 select c2, array_agg(c2) over (partition by c2%2 order by c2 range between current row and unbounded following) from ft1 where c2 < 10 group by c2 order by 1;
-                                       QUERY PLAN                                        
------------------------------------------------------------------------------------------
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
  Sort
    Output: c2, (array_agg(c2) OVER (?)), ((c2 % 2))
    Sort Key: ft1.c2
@@ -4508,13 +4622,29 @@ select c2, array_agg(c2) over (partition by c2%2 order by c2 range between curre
          ->  Sort
                Output: c2, ((c2 % 2))
                Sort Key: ((ft1.c2 % 2)), ft1.c2
-               ->  Foreign Scan
-                     Output: c2, ((c2 % 2))
-                     InfluxDB query: SELECT  FROM "T1" WHERE (("c2" < 10)) GROUP BY "c2"
-(11 rows)
+               ->  HashAggregate
+                     Output: c2, (c2 % 2)
+                     Group Key: ft1.c2
+                     ->  Foreign Scan on public.ft1
+                           Output: c2
+                           InfluxDB query: SELECT "c2" FROM "T1" WHERE (("c2" < 10))
+(14 rows)
 
 select c2, array_agg(c2) over (partition by c2%2 order by c2 range between current row and unbounded following) from ft1 where c2 < 10 group by c2 order by 1;
-ERROR:  influxdb_fdw : error parsing query: found FROM, expected identifier, string, number, bool at line 1, char 9
+ c2 |  array_agg  
+----+-------------
+  0 | {0,2,4,6,8}
+  1 | {1,3,5,7,9}
+  2 | {2,4,6,8}
+  3 | {3,5,7,9}
+  4 | {4,6,8}
+  5 | {5,7,9}
+  6 | {6,8}
+  7 | {7,9}
+  8 | {8}
+  9 | {9}
+(10 rows)
+
 -- ===================================================================
 -- parameterized queries
 -- ===================================================================

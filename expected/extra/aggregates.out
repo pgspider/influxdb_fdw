@@ -369,9 +369,9 @@ SELECT corr(b, a) FROM aggtest;
 CREATE FOREIGN TABLE regr_test1 (x float8, y float8) server influxdb_svr;
 SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
 FROM regr_test1 WHERE x IN (10,20,30,80);
- count | sum | regr_sxx | sum | regr_syy | regr_sxy 
--------+-----+----------+-----+----------+----------
-     0 |     |          |     |          |         
+ count | sum | regr_sxx | sum  | regr_syy | regr_sxy 
+-------+-----+----------+------+----------+----------
+     4 | 140 |     2900 | 1290 |    83075 |    15050
 (1 row)
 
 SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
@@ -398,14 +398,14 @@ SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
 FROM regr_test1 WHERE x IN (10,20,30);
  count | sum | regr_sxx | sum | regr_syy | regr_sxy 
 -------+-----+----------+-----+----------+----------
-     0 |     |          |     |          |         
+     3 |  60 |      200 | 750 |    20000 |     2000
 (1 row)
 
 SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
 FROM regr_test1 WHERE x IN (80,100);
  count | sum | regr_sxx | sum | regr_syy | regr_sxy 
 -------+-----+----------+-----+----------+----------
-     0 |     |          |     |          |         
+     2 | 180 |      200 | 740 |    57800 |    -3400
 (1 row)
 
 SELECT float8_combine(x::float8[], y::float8[]) FROM float8_arr1 WHERE id=3;
@@ -459,10 +459,36 @@ SELECT count(DISTINCT four) AS cnt_4 FROM onek;
 
 select ten, count(*), sum(four) from onek
 group by ten order by ten;
-ERROR:  invalid input syntax for type integer: ""
+ ten | count | sum 
+-----+-------+-----
+   0 |   100 | 100
+   1 |   100 | 200
+   2 |   100 | 100
+   3 |   100 | 200
+   4 |   100 | 100
+   5 |   100 | 200
+   6 |   100 | 100
+   7 |   100 | 200
+   8 |   100 | 100
+   9 |   100 | 200
+(10 rows)
+
 select ten, count(four), sum(DISTINCT four) from onek
 group by ten order by ten;
-ERROR:  influxdb_fdw : expected field argument in sum()
+ ten | count | sum 
+-----+-------+-----
+   0 |   100 |   2
+   1 |   100 |   4
+   2 |   100 |   2
+   3 |   100 |   4
+   4 |   100 |   2
+   5 |   100 |   4
+   6 |   100 |   2
+   7 |   100 |   4
+   8 |   100 |   2
+   9 |   100 |   4
+(10 rows)
+
 -- user-defined aggregates
 CREATE AGGREGATE newavg (
   sfunc = int4_avg_accum, basetype = int4, stype = _int8,
@@ -537,7 +563,15 @@ SELECT sum2(q1,q2) FROM int8_tbl;
 select ten, sum(distinct four) from onek a
 group by ten
 having exists (select 1 from onek b where sum(distinct a.four) = b.four);
-ERROR:  influxdb_fdw : expected field argument in sum()
+ ten | sum 
+-----+-----
+   0 |   2
+   2 |   2
+   4 |   2
+   6 |   2
+   8 |   2
+(5 rows)
+
 -- this should fail because subquery has an agg of its own in WHERE
 select ten, sum(distinct four) from onek a
 group by ten
