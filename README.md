@@ -45,6 +45,10 @@ You need to declare a column named "time" to access InfluxDB time column.
 <pre>
 CREATE FOREIGN TABLE t1(time timestamp with time zone , tag1 text, field1 integer) SERVER influxdb_server OPTIONS (table 'measurement1');
 </pre>
+You can use "tags" option to specify tag keys of a foreign table.
+<pre>
+CREATE FOREIGN TABLE t2(tag1 text, field1 integer, tag2 text, field2 integer) SERVER influxdb_server OPTIONS (tags 'tag1, tag2');
+</pre>
 
 ### Import foreign schema
 <pre>

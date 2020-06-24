@@ -138,7 +138,16 @@ SELECT last(time, value1),last(time, value2) FROM t4 GROUP BY tag1;
 --SELECT sum(value1) FROM t4 GROUP BY value1;
 -- not allowed
 SELECT sum(value1) FROM t4 GROUP BY time;
-ERROR:  influxdb_fdw : time() is a function and expects at least one argument
+ sum 
+-----
+  30
+  20
+  10
+   1
+   2
+   3
+(6 rows)
+
 --last returns NULL for tag
 --SELECT last(time, value1),last(time, value2),last(time, tag1) FROM t4 GROUP BY tag1;
 DROP FOREIGN TABLE t3;
