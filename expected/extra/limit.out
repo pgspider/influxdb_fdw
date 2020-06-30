@@ -45,6 +45,7 @@ CREATE FOREIGN TABLE tenk1 (
 	stringu2 	name,
 	string4	 	name
 ) SERVER influxdb_svr OPTIONS (table 'tenk');
+--Testcase 1:
 SELECT ''::text AS two, unique1, unique2, stringu1
 		FROM onek WHERE unique1 > 50
 		ORDER BY unique1 LIMIT 2;
@@ -54,6 +55,7 @@ SELECT ''::text AS two, unique1, unique2, stringu1
      |      52 |     985 | ACAAAA
 (2 rows)
 
+--Testcase 2:
 SELECT ''::text AS five, unique1, unique2, stringu1
 		FROM onek WHERE unique1 > 60
 		ORDER BY unique1 LIMIT 5;
@@ -66,6 +68,7 @@ SELECT ''::text AS five, unique1, unique2, stringu1
       |      65 |      64 | NCAAAA
 (5 rows)
 
+--Testcase 3:
 SELECT ''::text AS two, unique1, unique2, stringu1
 		FROM onek WHERE unique1 > 60 AND unique1 < 63
 		ORDER BY unique1 LIMIT 5;
@@ -75,6 +78,7 @@ SELECT ''::text AS two, unique1, unique2, stringu1
      |      62 |     633 | KCAAAA
 (2 rows)
 
+--Testcase 4:
 SELECT ''::text AS three, unique1, unique2, stringu1
 		FROM onek WHERE unique1 > 100
 		ORDER BY unique1 LIMIT 3 OFFSET 20;
@@ -85,6 +89,7 @@ SELECT ''::text AS three, unique1, unique2, stringu1
        |     123 |     777 | TEAAAA
 (3 rows)
 
+--Testcase 5:
 SELECT ''::text AS zero, unique1, unique2, stringu1
 		FROM onek WHERE unique1 < 50
 		ORDER BY unique1 DESC LIMIT 8 OFFSET 99;
@@ -92,6 +97,7 @@ SELECT ''::text AS zero, unique1, unique2, stringu1
 ------+---------+---------+----------
 (0 rows)
 
+--Testcase 6:
 SELECT ''::text AS eleven, unique1, unique2, stringu1
 		FROM onek WHERE unique1 < 50
 		ORDER BY unique1 DESC LIMIT 20 OFFSET 39;
@@ -110,6 +116,7 @@ SELECT ''::text AS eleven, unique1, unique2, stringu1
         |       0 |     998 | AAAAAA
 (11 rows)
 
+--Testcase 7:
 SELECT ''::text AS ten, unique1, unique2, stringu1
 		FROM onek
 		ORDER BY unique1 OFFSET 990;
@@ -127,6 +134,7 @@ SELECT ''::text AS ten, unique1, unique2, stringu1
      |     999 |     152 | LMAAAA
 (10 rows)
 
+--Testcase 8:
 SELECT ''::text AS five, unique1, unique2, stringu1
 		FROM onek
 		ORDER BY unique1 OFFSET 990 LIMIT 5;
@@ -139,6 +147,7 @@ SELECT ''::text AS five, unique1, unique2, stringu1
       |     994 |     695 | GMAAAA
 (5 rows)
 
+--Testcase 9:
 SELECT ''::text AS five, unique1, unique2, stringu1
 		FROM onek
 		ORDER BY unique1 LIMIT 5 OFFSET 900;
@@ -153,6 +162,7 @@ SELECT ''::text AS five, unique1, unique2, stringu1
 
 -- Test null limit and offset.  The planner would discard a simple null
 -- constant, so to ensure executor is exercised, do this:
+--Testcase 10:
 select * from int8_tbl limit (case when random() < 0.5 then null::bigint end);
         q1        |        q2         
 ------------------+-------------------
@@ -163,6 +173,7 @@ select * from int8_tbl limit (case when random() < 0.5 then null::bigint end);
  4567890123456789 | -4567890123456789
 (5 rows)
 
+--Testcase 11:
 select * from int8_tbl offset (case when random() < 0.5 then null::bigint end);
         q1        |        q2         
 ------------------+-------------------
@@ -176,6 +187,7 @@ select * from int8_tbl offset (case when random() < 0.5 then null::bigint end);
 -- Test assorted cases involving backwards fetch from a LIMIT plan node
 begin;
 declare c1 scroll cursor for select * from int8_tbl limit 10;
+--Testcase 12:
 fetch all in c1;
         q1        |        q2         
 ------------------+-------------------
@@ -186,17 +198,20 @@ fetch all in c1;
  4567890123456789 | -4567890123456789
 (5 rows)
 
+--Testcase 13:
 fetch 1 in c1;
  q1 | q2 
 ----+----
 (0 rows)
 
+--Testcase 14:
 fetch backward 1 in c1;
         q1        |        q2         
 ------------------+-------------------
  4567890123456789 | -4567890123456789
 (1 row)
 
+--Testcase 15:
 fetch backward all in c1;
         q1        |        q2        
 ------------------+------------------
@@ -206,11 +221,13 @@ fetch backward all in c1;
               123 |              456
 (4 rows)
 
+--Testcase 16:
 fetch backward 1 in c1;
  q1 | q2 
 ----+----
 (0 rows)
 
+--Testcase 17:
 fetch all in c1;
         q1        |        q2         
 ------------------+-------------------
@@ -222,6 +239,7 @@ fetch all in c1;
 (5 rows)
 
 declare c2 scroll cursor for select * from int8_tbl limit 3;
+--Testcase 18:
 fetch all in c2;
         q1        |        q2        
 ------------------+------------------
@@ -230,17 +248,20 @@ fetch all in c2;
  4567890123456789 |              123
 (3 rows)
 
+--Testcase 19:
 fetch 1 in c2;
  q1 | q2 
 ----+----
 (0 rows)
 
+--Testcase 20:
 fetch backward 1 in c2;
         q1        | q2  
 ------------------+-----
  4567890123456789 | 123
 (1 row)
 
+--Testcase 21:
 fetch backward all in c2;
  q1  |        q2        
 -----+------------------
@@ -248,11 +269,13 @@ fetch backward all in c2;
  123 |              456
 (2 rows)
 
+--Testcase 22:
 fetch backward 1 in c2;
  q1 | q2 
 ----+----
 (0 rows)
 
+--Testcase 23:
 fetch all in c2;
         q1        |        q2        
 ------------------+------------------
@@ -262,6 +285,7 @@ fetch all in c2;
 (3 rows)
 
 declare c3 scroll cursor for select * from int8_tbl offset 3;
+--Testcase 24:
 fetch all in c3;
         q1        |        q2         
 ------------------+-------------------
@@ -269,28 +293,33 @@ fetch all in c3;
  4567890123456789 | -4567890123456789
 (2 rows)
 
+--Testcase 25:
 fetch 1 in c3;
  q1 | q2 
 ----+----
 (0 rows)
 
+--Testcase 26:
 fetch backward 1 in c3;
         q1        |        q2         
 ------------------+-------------------
  4567890123456789 | -4567890123456789
 (1 row)
 
+--Testcase 27:
 fetch backward all in c3;
         q1        |        q2        
 ------------------+------------------
  4567890123456789 | 4567890123456789
 (1 row)
 
+--Testcase 28:
 fetch backward 1 in c3;
  q1 | q2 
 ----+----
 (0 rows)
 
+--Testcase 29:
 fetch all in c3;
         q1        |        q2         
 ------------------+-------------------
@@ -299,31 +328,37 @@ fetch all in c3;
 (2 rows)
 
 declare c4 scroll cursor for select * from int8_tbl offset 10;
+--Testcase 30:
 fetch all in c4;
  q1 | q2 
 ----+----
 (0 rows)
 
+--Testcase 31:
 fetch 1 in c4;
  q1 | q2 
 ----+----
 (0 rows)
 
+--Testcase 32:
 fetch backward 1 in c4;
  q1 | q2 
 ----+----
 (0 rows)
 
+--Testcase 33:
 fetch backward all in c4;
  q1 | q2 
 ----+----
 (0 rows)
 
+--Testcase 34:
 fetch backward 1 in c4;
  q1 | q2 
 ----+----
 (0 rows)
 
+--Testcase 35:
 fetch all in c4;
  q1 | q2 
 ----+----
@@ -331,6 +366,7 @@ fetch all in c4;
 
 rollback;
 -- Stress test for variable LIMIT in conjunction with bounded-heap sorting
+--Testcase 36:
 SELECT
   (SELECT n
      FROM (VALUES (1)) AS x,
@@ -356,6 +392,7 @@ SELECT
 -- with ORDER BY and LIMIT.
 --
 create temp sequence testseq;
+--Testcase 37:
 explain (verbose, costs off)
 select unique1, unique2, nextval('testseq')
   from tenk1 order by unique2 limit 10;
@@ -373,6 +410,7 @@ select unique1, unique2, nextval('testseq')
                      InfluxDB query: SELECT "unique1", "unique2" FROM "tenk"
 (10 rows)
 
+--Testcase 38:
 select unique1, unique2, nextval('testseq')
   from tenk1 order by unique2 limit 10;
  unique1 | unique2 | nextval 
@@ -389,12 +427,14 @@ select unique1, unique2, nextval('testseq')
     3043 |       9 |      10
 (10 rows)
 
+--Testcase 39:
 select currval('testseq');
  currval 
 ---------
       10
 (1 row)
 
+--Testcase 40:
 explain (verbose, costs off)
 select unique1, unique2, nextval('testseq')
   from tenk1 order by tenthous limit 10;
@@ -412,6 +452,7 @@ select unique1, unique2, nextval('testseq')
                      InfluxDB query: SELECT "unique1", "unique2", "tenthous" FROM "tenk"
 (10 rows)
 
+--Testcase 41:
 select unique1, unique2, nextval('testseq')
   from tenk1 order by tenthous limit 10;
  unique1 | unique2 | nextval 
@@ -428,12 +469,14 @@ select unique1, unique2, nextval('testseq')
        9 |    4463 |      20
 (10 rows)
 
+--Testcase 42:
 select currval('testseq');
  currval 
 ---------
       20
 (1 row)
 
+--Testcase 43:
 explain (verbose, costs off)
 select unique1, unique2, generate_series(1,10)
   from tenk1 order by unique2 limit 7;
@@ -451,6 +494,7 @@ select unique1, unique2, generate_series(1,10)
                      InfluxDB query: SELECT "unique1", "unique2" FROM "tenk"
 (10 rows)
 
+--Testcase 44:
 select unique1, unique2, generate_series(1,10)
   from tenk1 order by unique2 limit 7;
  unique1 | unique2 | generate_series 
@@ -464,6 +508,7 @@ select unique1, unique2, generate_series(1,10)
     8800 |       0 |               7
 (7 rows)
 
+--Testcase 45:
 explain (verbose, costs off)
 select unique1, unique2, generate_series(1,10)
   from tenk1 order by tenthous limit 7;
@@ -481,6 +526,7 @@ select unique1, unique2, generate_series(1,10)
                      InfluxDB query: SELECT "unique1", "unique2", "tenthous" FROM "tenk"
 (10 rows)
 
+--Testcase 46:
 select unique1, unique2, generate_series(1,10)
   from tenk1 order by tenthous limit 7;
  unique1 | unique2 | generate_series 
@@ -495,6 +541,7 @@ select unique1, unique2, generate_series(1,10)
 (7 rows)
 
 -- use of random() is to keep planner from folding the expressions together
+--Testcase 47:
 explain (verbose, costs off)
 select generate_series(0,2) as s1, generate_series((random()*.1)::int,2) as s2;
                                               QUERY PLAN                                              
@@ -504,6 +551,7 @@ select generate_series(0,2) as s1, generate_series((random()*.1)::int,2) as s2;
    ->  Result
 (3 rows)
 
+--Testcase 48:
 select generate_series(0,2) as s1, generate_series((random()*.1)::int,2) as s2;
  s1 | s2 
 ----+----
@@ -512,6 +560,7 @@ select generate_series(0,2) as s1, generate_series((random()*.1)::int,2) as s2;
   2 |  2
 (3 rows)
 
+--Testcase 49:
 explain (verbose, costs off)
 select generate_series(0,2) as s1, generate_series((random()*.1)::int,2) as s2
 order by s2 desc;
@@ -525,6 +574,7 @@ order by s2 desc;
          ->  Result
 (6 rows)
 
+--Testcase 50:
 select generate_series(0,2) as s1, generate_series((random()*.1)::int,2) as s2
 order by s2 desc;
  s1 | s2 
