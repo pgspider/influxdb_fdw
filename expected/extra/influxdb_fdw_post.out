@@ -114,6 +114,7 @@ ALTER FOREIGN TABLE ft1 OPTIONS (table 'T1');
 ALTER FOREIGN TABLE ft2 OPTIONS (table 'T1');
 ALTER FOREIGN TABLE ft1 ALTER COLUMN c1 OPTIONS (column_name 'C1');
 ALTER FOREIGN TABLE ft2 ALTER COLUMN c1 OPTIONS (column_name 'C1');
+--Testcase 1:
 \det+
                     List of foreign tables
  Schema | Table |    Server     |  FDW options   | Description 
@@ -125,6 +126,7 @@ ALTER FOREIGN TABLE ft2 ALTER COLUMN c1 OPTIONS (column_name 'C1');
  public | ft6   | influxdb_svr2 | ("table" 'T4') | 
 (5 rows)
 
+--Testcase 2:
 SELECT * FROM "S 1"."T1" LIMIT 10;
              time             | C1 | c2 |  c3   | c6 |     c7     | c8  
 ------------------------------+----+----+-------+----+------------+-----
@@ -140,6 +142,7 @@ SELECT * FROM "S 1"."T1" LIMIT 10;
  Sat Jan 10 16:00:00 1970 PST | 10 |  0 | 00010 | 0  | 0          | foo
 (10 rows)
 
+--Testcase 3:
 SELECT * FROM ft1 LIMIT 10;
            time           | c1 | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+----+----+-------+----+------------+-----
@@ -155,6 +158,7 @@ SELECT * FROM ft1 LIMIT 10;
  Sun Jan 11 00:00:00 1970 | 10 |  0 | 00010 | 0  | 0          | foo
 (10 rows)
 
+--Testcase 4:
 SELECT * FROM ft2 LIMIT 10;
            time           | c1 | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+----+----+-------+----+------------+-----
@@ -170,6 +174,7 @@ SELECT * FROM ft2 LIMIT 10;
  Sun Jan 11 00:00:00 1970 | 10 |  0 | 00010 | 0  | 0          | foo
 (10 rows)
 
+--Testcase 5:
 SELECT * FROM ft4 LIMIT 10;
  c1 | c2 |   c3   
 ----+----+--------
@@ -185,6 +190,7 @@ SELECT * FROM ft4 LIMIT 10;
  20 | 21 | AAA020
 (10 rows)
 
+--Testcase 6:
 SELECT * FROM ft5 LIMIT 10;
  c1 | c2 |   c3   
 ----+----+--------
@@ -200,6 +206,7 @@ SELECT * FROM ft5 LIMIT 10;
  30 | 31 | AAA030
 (10 rows)
 
+--Testcase 7:
 SELECT * FROM ft6 LIMIT 10;
  c1 | c2 |   c3   
 ----+----+--------
@@ -218,6 +225,7 @@ SELECT * FROM ft6 LIMIT 10;
 -- Test that alteration of server options causes reconnection
 -- Remote's errors might be non-English, so hide them to ensure stable results
 \set VERBOSITY terse
+--Testcase 8:
 SELECT c3, time FROM ft1 ORDER BY c3, c1 LIMIT 1;  -- should work
   c3   |           time           
 -------+--------------------------
@@ -225,6 +233,7 @@ SELECT c3, time FROM ft1 ORDER BY c3, c1 LIMIT 1;  -- should work
 (1 row)
 
 ALTER SERVER influxdb_svr OPTIONS (SET dbname 'no such database');
+--Testcase 9:
 SELECT c3, time FROM ft1 ORDER BY c3, c1 LIMIT 1;  -- should fail
 ERROR:  influxdb_fdw : database not found: no such database
 DO $d$
@@ -233,6 +242,7 @@ DO $d$
             OPTIONS (SET dbname 'postdb')$$;
     END;
 $d$;
+--Testcase 10:
 SELECT c3, time FROM ft1 ORDER BY c3, c1 LIMIT 1;  -- should work again
   c3   |           time           
 -------+--------------------------
@@ -243,6 +253,7 @@ SELECT c3, time FROM ft1 ORDER BY c3, c1 LIMIT 1;  -- should work again
 ALTER USER MAPPING FOR CURRENT_USER SERVER influxdb_svr
   OPTIONS (ADD user 'no such user');               -- error
 ERROR:  option "user" provided more than once
+--Testcase 11:
 SELECT c3, time FROM ft1 ORDER BY c3, c1 LIMIT 1;  -- should work
   c3   |           time           
 -------+--------------------------
@@ -251,6 +262,7 @@ SELECT c3, time FROM ft1 ORDER BY c3, c1 LIMIT 1;  -- should work
 
 ALTER USER MAPPING FOR CURRENT_USER SERVER influxdb_svr
   OPTIONS (DROP user);
+--Testcase 12:
 SELECT c3, time FROM ft1 ORDER BY c3, c1 LIMIT 1;  -- should work
   c3   |           time           
 -------+--------------------------
@@ -270,6 +282,7 @@ HINT:  Valid options in this context are: table, tags
 -- simple queries
 -- ===================================================================
 -- single table without alias
+--Testcase 13:
 EXPLAIN (COSTS OFF) SELECT * FROM ft1 ORDER BY c3, c1 OFFSET 100 LIMIT 10;
            QUERY PLAN            
 ---------------------------------
@@ -279,6 +292,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM ft1 ORDER BY c3, c1 OFFSET 100 LIMIT 10;
          ->  Foreign Scan on ft1
 (4 rows)
 
+--Testcase 14:
 SELECT * FROM ft1 ORDER BY c3, c1 OFFSET 100 LIMIT 10;
            time           | c1  | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+-----+----+-------+----+------------+-----
@@ -295,6 +309,7 @@ SELECT * FROM ft1 ORDER BY c3, c1 OFFSET 100 LIMIT 10;
 (10 rows)
 
 -- single table with alias - also test that tableoid sort is not pushed to remote side
+--Testcase 15:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 ORDER BY t1.c3, t1.c1, t1.tableoid OFFSET 100 LIMIT 10;
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
@@ -308,6 +323,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 ORDER BY t1.c3, t1.c1, t1.tabl
                InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (8 rows)
 
+--Testcase 16:
 SELECT * FROM ft1 t1 ORDER BY t1.c3, t1.c1, t1.tableoid OFFSET 100 LIMIT 10;
            time           | c1  | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+-----+----+-------+----+------------+-----
@@ -324,6 +340,7 @@ SELECT * FROM ft1 t1 ORDER BY t1.c3, t1.c1, t1.tableoid OFFSET 100 LIMIT 10;
 (10 rows)
 
 -- whole-row reference
+--Testcase 17:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT t1 FROM ft1 t1 ORDER BY t1.c3, t1.c1 OFFSET 100 LIMIT 10;
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
@@ -337,6 +354,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT t1 FROM ft1 t1 ORDER BY t1.c3, t1.c1 OFFSET 
                InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (8 rows)
 
+--Testcase 18:
 SELECT t1 FROM ft1 t1 ORDER BY t1.c3, t1.c1 OFFSET 100 LIMIT 10;
                              t1                              
 -------------------------------------------------------------
@@ -353,12 +371,14 @@ SELECT t1 FROM ft1 t1 ORDER BY t1.c3, t1.c1 OFFSET 100 LIMIT 10;
 (10 rows)
 
 -- empty result
+--Testcase 19:
 SELECT * FROM ft1 WHERE false;
  time | c1 | c2 | c3 | c6 | c7 | c8 
 ------+----+----+----+----+----+----
 (0 rows)
 
 -- with WHERE clause
+--Testcase 20:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE t1.c1 = 101 AND t1.c6 = '1' AND t1.c7 >= '1';
                                                   QUERY PLAN                                                   
 ---------------------------------------------------------------------------------------------------------------
@@ -368,6 +388,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE t1.c1 = 101 AND t1.c6 = 
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1" WHERE (("C1" = 101)) AND (("c6" = '1'))
 (4 rows)
 
+--Testcase 21:
 SELECT * FROM ft1 t1 WHERE t1.c1 = 101 AND t1.c6 = '1' AND t1.c7 >= '1';
            time           | c1  | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+-----+----+-------+----+------------+-----
@@ -375,6 +396,7 @@ SELECT * FROM ft1 t1 WHERE t1.c1 = 101 AND t1.c6 = '1' AND t1.c7 >= '1';
 (1 row)
 
 -- with FOR UPDATE/SHARE
+--Testcase 22:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE c1 = 101 FOR UPDATE;
                                             QUERY PLAN                                            
 --------------------------------------------------------------------------------------------------
@@ -385,12 +407,14 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE c1 = 101 FOR UPDATE;
          InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1" WHERE (("C1" = 101))
 (5 rows)
 
+--Testcase 23:
 SELECT * FROM ft1 t1 WHERE c1 = 101 FOR UPDATE;
            time           | c1  | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+-----+----+-------+----+------------+-----
  Sun Apr 12 00:00:00 1970 | 101 |  1 | 00101 | 1  | 1          | foo
 (1 row)
 
+--Testcase 24:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE c1 = 102 FOR SHARE;
                                             QUERY PLAN                                            
 --------------------------------------------------------------------------------------------------
@@ -401,6 +425,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE c1 = 102 FOR SHARE;
          InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1" WHERE (("C1" = 102))
 (5 rows)
 
+--Testcase 25:
 SELECT * FROM ft1 t1 WHERE c1 = 102 FOR SHARE;
            time           | c1  | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+-----+----+-------+----+------------+-----
@@ -408,6 +433,7 @@ SELECT * FROM ft1 t1 WHERE c1 = 102 FOR SHARE;
 (1 row)
 
 -- aggregate
+--Testcase 26:
 SELECT COUNT(*) FROM ft1 t1;
  count 
 -------
@@ -415,6 +441,7 @@ SELECT COUNT(*) FROM ft1 t1;
 (1 row)
 
 -- subquery
+--Testcase 27:
 SELECT * FROM ft1 t1 WHERE t1.c3 IN (SELECT c3 FROM ft2 t2 WHERE c1 <= 10) ORDER BY c1;
            time           | c1 | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+----+----+-------+----+------------+-----
@@ -433,6 +460,7 @@ SELECT * FROM ft1 t1 WHERE t1.c3 IN (SELECT c3 FROM ft2 t2 WHERE c1 <= 10) ORDER
 -- subquery+MAX
 -- TODO
 -- SELECT * FROM ft1 t1 WHERE t1.c3 = (SELECT MAX(c3) FROM ft2 t2) ORDER BY c1;
+--Testcase 28:
 SELECT * FROM ft1 t1 WHERE t1.c2 = (SELECT MAX(c2) FROM ft2 t2) ORDER BY c1;
            time           | c1  | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+-----+----+-------+----+------------+-----
@@ -539,6 +567,7 @@ SELECT * FROM ft1 t1 WHERE t1.c2 = (SELECT MAX(c2) FROM ft2 t2) ORDER BY c1;
 (100 rows)
 
 -- used in CTE
+--Testcase 29:
 WITH t1 AS (SELECT * FROM ft1 WHERE c1 <= 10) SELECT t2.c1, t2.c2, t2.c3, t2.time FROM t1, ft2 t2 WHERE t1.c1 = t2.c1 ORDER BY t1.c1;
  c1 | c2 |  c3   |           time           
 ----+----+-------+--------------------------
@@ -555,6 +584,7 @@ WITH t1 AS (SELECT * FROM ft1 WHERE c1 <= 10) SELECT t2.c1, t2.c2, t2.c3, t2.tim
 (10 rows)
 
 -- fixed values
+--Testcase 30:
 SELECT 'fixed', NULL FROM ft1 t1 WHERE c1 = 1;
  ?column? | ?column? 
 ----------+----------
@@ -565,6 +595,7 @@ SELECT 'fixed', NULL FROM ft1 t1 WHERE c1 = 1;
 SET enable_hashjoin TO false;
 SET enable_nestloop TO false;
 -- inner join; expressions in the clauses appear in the equivalence class list
+--Testcase 31:
 EXPLAIN (VERBOSE, COSTS OFF)
 	SELECT t1.c1, t2."C1" FROM ft2 t1 JOIN "S 1"."T1" t2 ON (t1.c1 = t2."C1") OFFSET 100 LIMIT 10;
                         QUERY PLAN                         
@@ -588,6 +619,7 @@ EXPLAIN (VERBOSE, COSTS OFF)
                      InfluxDB query: SELECT "C1" FROM "T1"
 (17 rows)
 
+--Testcase 32:
 SELECT t1.c1, t2."C1" FROM ft2 t1 JOIN "S 1"."T1" t2 ON (t1.c1 = t2."C1") OFFSET 100 LIMIT 10;
  c1  | C1  
 -----+-----
@@ -605,6 +637,7 @@ SELECT t1.c1, t2."C1" FROM ft2 t1 JOIN "S 1"."T1" t2 ON (t1.c1 = t2."C1") OFFSET
 
 -- outer join; expressions in the clauses do not appear in equivalence class
 -- list but no output change as compared to the previous query
+--Testcase 33:
 EXPLAIN (VERBOSE, COSTS OFF)
 	SELECT t1.c1, t2."C1" FROM ft2 t1 LEFT JOIN "S 1"."T1" t2 ON (t1.c1 = t2."C1") OFFSET 100 LIMIT 10;
                         QUERY PLAN                         
@@ -628,6 +661,7 @@ EXPLAIN (VERBOSE, COSTS OFF)
                      InfluxDB query: SELECT "C1" FROM "T1"
 (17 rows)
 
+--Testcase 34:
 SELECT t1.c1, t2."C1" FROM ft2 t1 LEFT JOIN "S 1"."T1" t2 ON (t1.c1 = t2."C1") OFFSET 100 LIMIT 10;
  c1  | C1  
 -----+-----
@@ -645,6 +679,7 @@ SELECT t1.c1, t2."C1" FROM ft2 t1 LEFT JOIN "S 1"."T1" t2 ON (t1.c1 = t2."C1") O
 
 -- A join between local table and foreign join. ORDER BY clause is added to the
 -- foreign join so that the local table can be joined using merge join strategy.
+--Testcase 35:
 EXPLAIN (VERBOSE, COSTS OFF)
 	SELECT t1."C1" FROM "S 1"."T1" t1 left join ft1 t2 join ft2 t3 on (t2.c1 = t3.c1) on (t3.c1 = t1."C1") OFFSET 100 LIMIT 10;
                               QUERY PLAN                               
@@ -679,6 +714,7 @@ EXPLAIN (VERBOSE, COSTS OFF)
                                  InfluxDB query: SELECT "C1" FROM "T1"
 (28 rows)
 
+--Testcase 36:
 SELECT t1."C1" FROM "S 1"."T1" t1 left join ft1 t2 join ft2 t3 on (t2.c1 = t3.c1) on (t3.c1 = t1."C1") OFFSET 100 LIMIT 10;
  C1  
 -----
@@ -697,6 +733,7 @@ SELECT t1."C1" FROM "S 1"."T1" t1 left join ft1 t2 join ft2 t3 on (t2.c1 = t3.c1
 -- Test similar to above, except that the full join prevents any equivalence
 -- classes from being merged. This produces single relation equivalence classes
 -- included in join restrictions.
+--Testcase 37:
 EXPLAIN (VERBOSE, COSTS OFF)
 	SELECT t1."C1", t2.c1, t3.c1 FROM "S 1"."T1" t1 left join ft1 t2 full join ft2 t3 on (t2.c1 = t3.c1) on (t3.c1 = t1."C1") OFFSET 100 LIMIT 10;
                               QUERY PLAN                               
@@ -731,6 +768,7 @@ EXPLAIN (VERBOSE, COSTS OFF)
                                  InfluxDB query: SELECT "C1" FROM "T1"
 (28 rows)
 
+--Testcase 38:
 SELECT t1."C1", t2.c1, t3.c1 FROM "S 1"."T1" t1 left join ft1 t2 full join ft2 t3 on (t2.c1 = t3.c1) on (t3.c1 = t1."C1") OFFSET 100 LIMIT 10;
  C1  | c1  | c1  
 -----+-----+-----
@@ -747,6 +785,7 @@ SELECT t1."C1", t2.c1, t3.c1 FROM "S 1"."T1" t1 left join ft1 t2 full join ft2 t
 (10 rows)
 
 -- Test similar to above with all full outer joins
+--Testcase 39:
 EXPLAIN (VERBOSE, COSTS OFF)
 	SELECT t1."C1", t2.c1, t3.c1 FROM "S 1"."T1" t1 full join ft1 t2 full join ft2 t3 on (t2.c1 = t3.c1) on (t3.c1 = t1."C1") OFFSET 100 LIMIT 10;
                               QUERY PLAN                               
@@ -782,6 +821,7 @@ EXPLAIN (VERBOSE, COSTS OFF)
                                  InfluxDB query: SELECT "C1" FROM "T1"
 (29 rows)
 
+--Testcase 40:
 SELECT t1."C1", t2.c1, t3.c1 FROM "S 1"."T1" t1 full join ft1 t2 full join ft2 t3 on (t2.c1 = t3.c1) on (t3.c1 = t1."C1") OFFSET 100 LIMIT 10;
  C1  | c1  | c1  
 -----+-----+-----
@@ -802,6 +842,7 @@ RESET enable_nestloop;
 -- ===================================================================
 -- WHERE with remotely-executable conditions
 -- ===================================================================
+--Testcase 41:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE t1.c1 = 1;         -- Var, OpExpr(b), Const
                                         QUERY PLAN                                        
 ------------------------------------------------------------------------------------------
@@ -810,6 +851,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE t1.c1 = 1;         -- Va
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1" WHERE (("C1" = 1))
 (3 rows)
 
+--Testcase 42:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE t1.c1 = 100 AND t1.c2 = 0; -- BoolExpr
                                                  QUERY PLAN                                                  
 -------------------------------------------------------------------------------------------------------------
@@ -818,6 +860,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE t1.c1 = 100 AND t1.c2 = 
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1" WHERE (("C1" = 100)) AND (("c2" = 0))
 (3 rows)
 
+--Testcase 43:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE c1 IS NULL;        -- NullTest
                               QUERY PLAN                               
 -----------------------------------------------------------------------
@@ -827,6 +870,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE c1 IS NULL;        -- Nu
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (4 rows)
 
+--Testcase 44:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE c1 IS NOT NULL;    -- NullTest
                               QUERY PLAN                               
 -----------------------------------------------------------------------
@@ -836,6 +880,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE c1 IS NOT NULL;    -- Nu
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (4 rows)
 
+--Testcase 45:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE round(abs(c1), 0) = 1; -- FuncExpr
                               QUERY PLAN                               
 -----------------------------------------------------------------------
@@ -845,6 +890,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE round(abs(c1), 0) = 1; -
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (4 rows)
 
+--Testcase 46:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE c1 = -c1;          -- OpExpr(l)
                                            QUERY PLAN                                            
 -------------------------------------------------------------------------------------------------
@@ -853,6 +899,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE c1 = -c1;          -- Op
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1" WHERE (("C1" = (- "C1")))
 (3 rows)
 
+--Testcase 47:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE 1 = c1!;           -- OpExpr(r)
                               QUERY PLAN                               
 -----------------------------------------------------------------------
@@ -862,6 +909,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE 1 = c1!;           -- Op
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (4 rows)
 
+--Testcase 48:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE (c1 IS NOT NULL) IS DISTINCT FROM (c1 IS NOT NULL); -- DistinctExpr
                               QUERY PLAN                               
 -----------------------------------------------------------------------
@@ -871,6 +919,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE (c1 IS NOT NULL) IS DIST
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (4 rows)
 
+--Testcase 49:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE c1 = ANY(ARRAY[c2, 1, c1 + 0]); -- ScalarArrayOpExpr
                               QUERY PLAN                               
 -----------------------------------------------------------------------
@@ -880,6 +929,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE c1 = ANY(ARRAY[c2, 1, c1
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (4 rows)
 
+--Testcase 50:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE c1 = (ARRAY[c1,c2,3])[1]; -- SubscriptingRef
                               QUERY PLAN                               
 -----------------------------------------------------------------------
@@ -889,6 +939,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE c1 = (ARRAY[c1,c2,3])[1]
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (4 rows)
 
+--Testcase 51:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE c6 = E'foo''s\\bar';  -- check special chars
                                               QUERY PLAN                                              
 ------------------------------------------------------------------------------------------------------
@@ -897,6 +948,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE c6 = E'foo''s\\bar';  --
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1" WHERE (("c6" = 'foo''s\\bar'))
 (3 rows)
 
+--Testcase 52:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE c8 = 'foo';  -- can't be sent to remote
                                           QUERY PLAN                                          
 ----------------------------------------------------------------------------------------------
@@ -906,6 +958,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE c8 = 'foo';  -- can't be
 (3 rows)
 
 -- parameterized remote path for foreign table
+--Testcase 53:
 EXPLAIN (VERBOSE, COSTS OFF)
   SELECT * FROM "S 1"."T1" a, ft2 b WHERE a."C1" = 47 AND b.c1 = a.c2;
                                                QUERY PLAN                                               
@@ -923,6 +976,7 @@ EXPLAIN (VERBOSE, COSTS OFF)
                InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1" WHERE (("C1" = 47))
 (11 rows)
 
+--Testcase 54:
 SELECT * FROM ft2 a, ft2 b WHERE a.c1 = 47 AND b.c1 = a.c2;
            time           | c1 | c2 |  c3   | c6 |     c7     | c8  |           time           | c1 | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+----+----+-------+----+------------+-----+--------------------------+----+----+-------+----+------------+-----
@@ -930,6 +984,7 @@ SELECT * FROM ft2 a, ft2 b WHERE a.c1 = 47 AND b.c1 = a.c2;
 (1 row)
 
 -- check both safe and unsafe join conditions
+--Testcase 55:
 EXPLAIN (VERBOSE, COSTS OFF)
   SELECT * FROM ft2 a, ft2 b
   WHERE a.c2 = 6 AND b.c1 = a.c1 AND a.c8 = 'foo' AND b.c7 = upper(a.c7);
@@ -948,6 +1003,7 @@ EXPLAIN (VERBOSE, COSTS OFF)
                InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1" WHERE (("c2" = 6)) AND (("c8" = 'foo'))
 (11 rows)
 
+--Testcase 56:
 SELECT * FROM ft2 a, ft2 b
 WHERE a.c2 = 6 AND b.c1 = a.c1 AND a.c8 = 'foo' AND b.c7 = upper(a.c7);
            time           | c1  | c2 |  c3   | c6 |     c7     | c8  |           time           | c1  | c2 |  c3   | c6 |     c7     | c8  
@@ -1055,6 +1111,7 @@ WHERE a.c2 = 6 AND b.c1 = a.c1 AND a.c8 = 'foo' AND b.c7 = upper(a.c7);
 (100 rows)
 
 -- bug before 9.3.5 due to sloppy handling of remote-estimate parameters
+--Testcase 57:
 SELECT * FROM ft1 WHERE c1 = ANY (ARRAY(SELECT c1 FROM ft2 WHERE c1 < 5));
            time           | c1 | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+----+----+-------+----+------------+-----
@@ -1064,6 +1121,7 @@ SELECT * FROM ft1 WHERE c1 = ANY (ARRAY(SELECT c1 FROM ft2 WHERE c1 < 5));
  Mon Jan 05 00:00:00 1970 |  4 |  4 | 00004 | 4  | 4          | foo
 (4 rows)
 
+--Testcase 58:
 SELECT * FROM ft2 WHERE c1 = ANY (ARRAY(SELECT c1 FROM ft1 WHERE c1 < 5));
            time           | c1 | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+----+----+-------+----+------------+-----
@@ -1075,6 +1133,7 @@ SELECT * FROM ft2 WHERE c1 = ANY (ARRAY(SELECT c1 FROM ft1 WHERE c1 < 5));
 
 -- we should not push order by clause with volatile expressions or unsafe
 -- collations
+--Testcase 59:
 EXPLAIN (VERBOSE, COSTS OFF)
 	SELECT * FROM ft2 ORDER BY ft2.c1, random();
                                  QUERY PLAN                                  
@@ -1087,6 +1146,7 @@ EXPLAIN (VERBOSE, COSTS OFF)
          InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (6 rows)
 
+--Testcase 60:
 EXPLAIN (VERBOSE, COSTS OFF)
 	SELECT * FROM ft2 ORDER BY ft2.c1, ft2.c3 collate "C";
                                  QUERY PLAN                                  
@@ -1112,6 +1172,7 @@ CREATE OPERATOR === (
     COMMUTATOR = ===
 );
 -- built-in operators and functions can be shipped for remote execution
+--Testcase 61:
 EXPLAIN (VERBOSE, COSTS OFF)
   SELECT count(c3) FROM ft1 t1 WHERE t1.c1 = abs(t1.c2);
                         QUERY PLAN                         
@@ -1124,12 +1185,14 @@ EXPLAIN (VERBOSE, COSTS OFF)
          InfluxDB query: SELECT "C1", "c2", "c3" FROM "T1"
 (6 rows)
 
+--Testcase 62:
 SELECT count(c3) FROM ft1 t1 WHERE t1.c1 = abs(t1.c2);
  count 
 -------
      9
 (1 row)
 
+--Testcase 63:
 EXPLAIN (VERBOSE, COSTS OFF)
   SELECT count(c3) FROM ft1 t1 WHERE t1.c1 = t1.c2;
                               QUERY PLAN                              
@@ -1139,6 +1202,7 @@ EXPLAIN (VERBOSE, COSTS OFF)
    InfluxDB query: SELECT count("c3") FROM "T1" WHERE (("C1" = "c2"))
 (3 rows)
 
+--Testcase 64:
 SELECT count(c3) FROM ft1 t1 WHERE t1.c1 = t1.c2;
  count 
 -------
@@ -1146,6 +1210,7 @@ SELECT count(c3) FROM ft1 t1 WHERE t1.c1 = t1.c2;
 (1 row)
 
 -- by default, user-defined ones cannot
+--Testcase 65:
 EXPLAIN (VERBOSE, COSTS OFF)
   SELECT count(c3) FROM ft1 t1 WHERE t1.c1 = influxdb_fdw_abs(t1.c2);
                         QUERY PLAN                         
@@ -1158,12 +1223,14 @@ EXPLAIN (VERBOSE, COSTS OFF)
          InfluxDB query: SELECT "C1", "c2", "c3" FROM "T1"
 (6 rows)
 
+--Testcase 66:
 SELECT count(c3) FROM ft1 t1 WHERE t1.c1 = influxdb_fdw_abs(t1.c2);
  count 
 -------
      9
 (1 row)
 
+--Testcase 67:
 EXPLAIN (VERBOSE, COSTS OFF)
   SELECT count(c3) FROM ft1 t1 WHERE t1.c1 === t1.c2;
                         QUERY PLAN                         
@@ -1176,6 +1243,7 @@ EXPLAIN (VERBOSE, COSTS OFF)
          InfluxDB query: SELECT "C1", "c2", "c3" FROM "T1"
 (6 rows)
 
+--Testcase 68:
 SELECT count(c3) FROM ft1 t1 WHERE t1.c1 === t1.c2;
  count 
 -------
@@ -1183,6 +1251,7 @@ SELECT count(c3) FROM ft1 t1 WHERE t1.c1 === t1.c2;
 (1 row)
 
 -- ORDER BY can be shipped, though
+--Testcase 69:
 EXPLAIN (VERBOSE, COSTS OFF)
   SELECT * FROM ft1 t1 WHERE t1.c1 === t1.c2 order by t1.c2 limit 1;
                                     QUERY PLAN                                     
@@ -1198,6 +1267,7 @@ EXPLAIN (VERBOSE, COSTS OFF)
                InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (9 rows)
 
+--Testcase 70:
 SELECT * FROM ft1 t1 WHERE t1.c1 === t1.c2 order by t1.c2 limit 1;
            time           | c1 | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+----+----+-------+----+------------+-----
@@ -1209,6 +1279,7 @@ ALTER EXTENSION influxdb_fdw ADD FUNCTION influxdb_fdw_abs(int);
 ALTER EXTENSION influxdb_fdw ADD OPERATOR === (int, int);
 -- ALTER SERVER loopback OPTIONS (ADD extensions 'postgres_fdw');
 -- ... now they can be shipped
+--Testcase 71:
 EXPLAIN (VERBOSE, COSTS OFF)
   SELECT count(c3) FROM ft1 t1 WHERE t1.c1 = influxdb_fdw_abs(t1.c2);
                         QUERY PLAN                         
@@ -1221,12 +1292,14 @@ EXPLAIN (VERBOSE, COSTS OFF)
          InfluxDB query: SELECT "C1", "c2", "c3" FROM "T1"
 (6 rows)
 
+--Testcase 72:
 SELECT count(c3) FROM ft1 t1 WHERE t1.c1 = influxdb_fdw_abs(t1.c2);
  count 
 -------
      9
 (1 row)
 
+--Testcase 73:
 EXPLAIN (VERBOSE, COSTS OFF)
   SELECT count(c3) FROM ft1 t1 WHERE t1.c1 === t1.c2;
                         QUERY PLAN                         
@@ -1239,6 +1312,7 @@ EXPLAIN (VERBOSE, COSTS OFF)
          InfluxDB query: SELECT "C1", "c2", "c3" FROM "T1"
 (6 rows)
 
+--Testcase 74:
 SELECT count(c3) FROM ft1 t1 WHERE t1.c1 === t1.c2;
  count 
 -------
@@ -1246,6 +1320,7 @@ SELECT count(c3) FROM ft1 t1 WHERE t1.c1 === t1.c2;
 (1 row)
 
 -- and both ORDER BY and LIMIT can be shipped
+--Testcase 75:
 EXPLAIN (VERBOSE, COSTS OFF)
   SELECT * FROM ft1 t1 WHERE t1.c1 === t1.c2 order by t1.c2 limit 1;
                                     QUERY PLAN                                     
@@ -1261,6 +1336,7 @@ EXPLAIN (VERBOSE, COSTS OFF)
                InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (9 rows)
 
+--Testcase 76:
 SELECT * FROM ft1 t1 WHERE t1.c1 === t1.c2 order by t1.c2 limit 1;
            time           | c1 | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+----+----+-------+----+------------+-----
@@ -1277,6 +1353,7 @@ WARNING:  skipping "ft4" --- cannot analyze this foreign table
 ANALYZE ft5;
 WARNING:  skipping "ft5" --- cannot analyze this foreign table
 -- join two tables
+--Testcase 77:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c3, t1.c1 OFFSET 100 LIMIT 10;
                               QUERY PLAN                               
@@ -1303,6 +1380,7 @@ SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c3, t
                            InfluxDB query: SELECT "C1" FROM "T1"
 (20 rows)
 
+--Testcase 78:
 SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c3, t1.c1 OFFSET 100 LIMIT 10;
  c1  | c1  
 -----+-----
@@ -1319,6 +1397,7 @@ SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c3, t
 (10 rows)
 
 -- join three tables
+--Testcase 79:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c2, t3.c3 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) JOIN ft4 t3 ON (t3.c1 = t1.c1) ORDER BY t1.c3, t1.c1 OFFSET 10 LIMIT 10;
                                     QUERY PLAN                                     
@@ -1356,6 +1435,7 @@ SELECT t1.c1, t2.c2, t3.c3 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) JOIN ft4 t
                                        InfluxDB query: SELECT "c1", "c3" FROM "T3"
 (31 rows)
 
+--Testcase 80:
 SELECT t1.c1, t2.c2, t3.c3 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) JOIN ft4 t3 ON (t3.c1 = t1.c1) ORDER BY t1.c3, t1.c1 OFFSET 10 LIMIT 10;
  c1 | c2 |   c3   
 ----+----+--------
@@ -1372,6 +1452,7 @@ SELECT t1.c1, t2.c2, t3.c3 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) JOIN ft4 t
 (10 rows)
 
 -- left outer join
+--Testcase 81:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c1 FROM ft4 t1 LEFT JOIN ft5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c1, t2.c1 OFFSET 10 LIMIT 10;
                            QUERY PLAN                            
@@ -1398,6 +1479,7 @@ SELECT t1.c1, t2.c1 FROM ft4 t1 LEFT JOIN ft5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.
                            InfluxDB query: SELECT "c1" FROM "T4"
 (20 rows)
 
+--Testcase 82:
 SELECT t1.c1, t2.c1 FROM ft4 t1 LEFT JOIN ft5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c1, t2.c1 OFFSET 10 LIMIT 10;
  c1 | c1 
 ----+----
@@ -1414,6 +1496,7 @@ SELECT t1.c1, t2.c1 FROM ft4 t1 LEFT JOIN ft5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.
 (10 rows)
 
 -- left outer join three tables
+--Testcase 83:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 LEFT JOIN ft2 t2 ON (t1.c1 = t2.c1) LEFT JOIN ft4 t3 ON (t2.c1 = t3.c1) OFFSET 10 LIMIT 10;
                               QUERY PLAN                               
@@ -1441,6 +1524,7 @@ SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 LEFT JOIN ft2 t2 ON (t1.c1 = t2.c1) LEFT 
                      InfluxDB query: SELECT "c1", "c3" FROM "T3"
 (21 rows)
 
+--Testcase 84:
 SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 LEFT JOIN ft2 t2 ON (t1.c1 = t2.c1) LEFT JOIN ft4 t3 ON (t2.c1 = t3.c1) OFFSET 10 LIMIT 10;
  c1 | c2 |   c3   
 ----+----+--------
@@ -1459,6 +1543,7 @@ SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 LEFT JOIN ft2 t2 ON (t1.c1 = t2.c1) LEFT 
 -- left outer join + placement of clauses.
 -- clauses within the nullable side are not pulled up, but top level clause on
 -- non-nullable side is pushed into non-nullable side
+--Testcase 85:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t1.c2, t2.c1, t2.c2 FROM ft4 t1 LEFT JOIN (SELECT * FROM ft5 WHERE c1 < 10) t2 ON (t1.c1 = t2.c1) WHERE t1.c1 < 10;
                                   QUERY PLAN                                   
@@ -1476,6 +1561,7 @@ SELECT t1.c1, t1.c2, t2.c1, t2.c2 FROM ft4 t1 LEFT JOIN (SELECT * FROM ft5 WHERE
                InfluxDB query: SELECT "c1", "c2" FROM "T4" WHERE (("c1" < 10))
 (11 rows)
 
+--Testcase 86:
 SELECT t1.c1, t1.c2, t2.c1, t2.c2 FROM ft4 t1 LEFT JOIN (SELECT * FROM ft5 WHERE c1 < 10) t2 ON (t1.c1 = t2.c1) WHERE t1.c1 < 10;
  c1 | c2 | c1 | c2 
 ----+----+----+----
@@ -1487,6 +1573,7 @@ SELECT t1.c1, t1.c2, t2.c1, t2.c2 FROM ft4 t1 LEFT JOIN (SELECT * FROM ft5 WHERE
 
 -- clauses within the nullable side are not pulled up, but the top level clause
 -- on nullable side is not pushed down into nullable side
+--Testcase 87:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t1.c2, t2.c1, t2.c2 FROM ft4 t1 LEFT JOIN (SELECT * FROM ft5 WHERE c1 < 10) t2 ON (t1.c1 = t2.c1)
 			WHERE (t2.c1 < 10 OR t2.c1 IS NULL) AND t1.c1 < 10;
@@ -1506,6 +1593,7 @@ SELECT t1.c1, t1.c2, t2.c1, t2.c2 FROM ft4 t1 LEFT JOIN (SELECT * FROM ft5 WHERE
                InfluxDB query: SELECT "c1", "c2" FROM "T4" WHERE (("c1" < 10))
 (12 rows)
 
+--Testcase 88:
 SELECT t1.c1, t1.c2, t2.c1, t2.c2 FROM ft4 t1 LEFT JOIN (SELECT * FROM ft5 WHERE c1 < 10) t2 ON (t1.c1 = t2.c1)
 			WHERE (t2.c1 < 10 OR t2.c1 IS NULL) AND t1.c1 < 10;
  c1 | c2 | c1 | c2 
@@ -1517,6 +1605,7 @@ SELECT t1.c1, t1.c2, t2.c1, t2.c2 FROM ft4 t1 LEFT JOIN (SELECT * FROM ft5 WHERE
 (4 rows)
 
 -- right outer join
+--Testcase 89:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c1 FROM ft5 t1 RIGHT JOIN ft4 t2 ON (t1.c1 = t2.c1) ORDER BY t2.c1, t1.c1 OFFSET 10 LIMIT 10;
                            QUERY PLAN                            
@@ -1543,6 +1632,7 @@ SELECT t1.c1, t2.c1 FROM ft5 t1 RIGHT JOIN ft4 t2 ON (t1.c1 = t2.c1) ORDER BY t2
                            InfluxDB query: SELECT "c1" FROM "T4"
 (20 rows)
 
+--Testcase 90:
 SELECT t1.c1, t2.c1 FROM ft5 t1 RIGHT JOIN ft4 t2 ON (t1.c1 = t2.c1) ORDER BY t2.c1, t1.c1 OFFSET 10 LIMIT 10;
  c1 | c1 
 ----+----
@@ -1559,6 +1649,7 @@ SELECT t1.c1, t2.c1 FROM ft5 t1 RIGHT JOIN ft4 t2 ON (t1.c1 = t2.c1) ORDER BY t2
 (10 rows)
 
 -- right outer join three tables
+--Testcase 91:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 RIGHT JOIN ft2 t2 ON (t1.c1 = t2.c1) RIGHT JOIN ft4 t3 ON (t2.c1 = t3.c1) OFFSET 10 LIMIT 10;
                               QUERY PLAN                               
@@ -1586,6 +1677,7 @@ SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 RIGHT JOIN ft2 t2 ON (t1.c1 = t2.c1) RIGH
                      InfluxDB query: SELECT "C1" FROM "T1"
 (21 rows)
 
+--Testcase 92:
 SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 RIGHT JOIN ft2 t2 ON (t1.c1 = t2.c1) RIGHT JOIN ft4 t3 ON (t2.c1 = t3.c1) OFFSET 10 LIMIT 10;
  c1 | c2 |   c3   
 ----+----+--------
@@ -1602,6 +1694,7 @@ SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 RIGHT JOIN ft2 t2 ON (t1.c1 = t2.c1) RIGH
 (10 rows)
 
 -- full outer join
+--Testcase 93:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c1 FROM ft4 t1 FULL JOIN ft5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c1, t2.c1 OFFSET 45 LIMIT 10;
                            QUERY PLAN                            
@@ -1628,6 +1721,7 @@ SELECT t1.c1, t2.c1 FROM ft4 t1 FULL JOIN ft5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.
                            InfluxDB query: SELECT "c1" FROM "T4"
 (20 rows)
 
+--Testcase 94:
 SELECT t1.c1, t2.c1 FROM ft4 t1 FULL JOIN ft5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c1, t2.c1 OFFSET 45 LIMIT 10;
  c1  | c1 
 -----+----
@@ -1645,6 +1739,7 @@ SELECT t1.c1, t2.c1 FROM ft4 t1 FULL JOIN ft5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.
 
 -- full outer join with restrictions on the joining relations
 -- a. the joining relations are both base relations
+--Testcase 95:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c1 FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t1 FULL JOIN (SELECT c1 FROM ft5 WHERE c1 between 50 and 60) t2 ON (t1.c1 = t2.c1) ORDER BY t1.c1, t2.c1;
                                             QUERY PLAN                                             
@@ -1665,6 +1760,7 @@ SELECT t1.c1, t2.c1 FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t1 FULL
                      InfluxDB query: SELECT "c1" FROM "T4" WHERE (("c1" >= 50)) AND (("c1" <= 60))
 (14 rows)
 
+--Testcase 96:
 SELECT t1.c1, t2.c1 FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t1 FULL JOIN (SELECT c1 FROM ft5 WHERE c1 between 50 and 60) t2 ON (t1.c1 = t2.c1) ORDER BY t1.c1, t2.c1;
  c1 | c1 
 ----+----
@@ -1678,6 +1774,7 @@ SELECT t1.c1, t2.c1 FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t1 FULL
     | 57
 (8 rows)
 
+--Testcase 97:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT 1 FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t1 FULL JOIN (SELECT c1 FROM ft5 WHERE c1 between 50 and 60) t2 ON (TRUE) OFFSET 10 LIMIT 10;
                                            QUERY PLAN                                           
@@ -1693,6 +1790,7 @@ SELECT 1 FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t1 FULL JOIN (SELE
                      InfluxDB query: SELECT * FROM "T4" WHERE (("c1" >= 50)) AND (("c1" <= 60))
 (9 rows)
 
+--Testcase 98:
 SELECT 1 FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t1 FULL JOIN (SELECT c1 FROM ft5 WHERE c1 between 50 and 60) t2 ON (TRUE) OFFSET 10 LIMIT 10;
  ?column? 
 ----------
@@ -1710,6 +1808,7 @@ SELECT 1 FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t1 FULL JOIN (SELE
 
 -- b. one of the joining relations is a base relation and the other is a join
 -- relation
+--Testcase 99:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, ss.a, ss.b FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t1 FULL JOIN (SELECT t2.c1, t3.c1 FROM ft4 t2 LEFT JOIN ft5 t3 ON (t2.c1 = t3.c1) WHERE (t2.c1 between 50 and 60)) ss(a, b) ON (t1.c1 = ss.a) ORDER BY t1.c1, ss.a, ss.b;
                                                QUERY PLAN                                                
@@ -1738,6 +1837,7 @@ SELECT t1.c1, ss.a, ss.b FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t1
                      InfluxDB query: SELECT "c1" FROM "T3" WHERE (("c1" >= 50)) AND (("c1" <= 60))
 (22 rows)
 
+--Testcase 100:
 SELECT t1.c1, ss.a, ss.b FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t1 FULL JOIN (SELECT t2.c1, t3.c1 FROM ft4 t2 LEFT JOIN ft5 t3 ON (t2.c1 = t3.c1) WHERE (t2.c1 between 50 and 60)) ss(a, b) ON (t1.c1 = ss.a) ORDER BY t1.c1, ss.a, ss.b;
  c1 | a  | b  
 ----+----+----
@@ -1750,6 +1850,7 @@ SELECT t1.c1, ss.a, ss.b FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t1
 (6 rows)
 
 -- c. test deparsing the remote query as nested subqueries
+--Testcase 101:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, ss.a, ss.b FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t1 FULL JOIN (SELECT t2.c1, t3.c1 FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t2 FULL JOIN (SELECT c1 FROM ft5 WHERE c1 between 50 and 60) t3 ON (t2.c1 = t3.c1) WHERE t2.c1 IS NULL OR t2.c1 IS NOT NULL) ss(a, b) ON (t1.c1 = ss.a) ORDER BY t1.c1, ss.a, ss.b;
                                                QUERY PLAN                                                
@@ -1779,6 +1880,7 @@ SELECT t1.c1, ss.a, ss.b FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t1
                      InfluxDB query: SELECT "c1" FROM "T3" WHERE (("c1" >= 50)) AND (("c1" <= 60))
 (23 rows)
 
+--Testcase 102:
 SELECT t1.c1, ss.a, ss.b FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t1 FULL JOIN (SELECT t2.c1, t3.c1 FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t2 FULL JOIN (SELECT c1 FROM ft5 WHERE c1 between 50 and 60) t3 ON (t2.c1 = t3.c1) WHERE t2.c1 IS NULL OR t2.c1 IS NOT NULL) ss(a, b) ON (t1.c1 = ss.a) ORDER BY t1.c1, ss.a, ss.b;
  c1 | a  | b  
 ----+----+----
@@ -1793,6 +1895,7 @@ SELECT t1.c1, ss.a, ss.b FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t1
 (8 rows)
 
 -- d. test deparsing rowmarked relations as subqueries
+--Testcase 103:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, ss.a, ss.b FROM (SELECT c1 FROM "S 1"."T3" WHERE c1 = 50) t1 INNER JOIN (SELECT t2.c1, t3.c1 FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t2 FULL JOIN (SELECT c1 FROM ft5 WHERE c1 between 50 and 60) t3 ON (t2.c1 = t3.c1) WHERE t2.c1 IS NULL OR t2.c1 IS NOT NULL) ss(a, b) ON (TRUE) ORDER BY t1.c1, ss.a, ss.b FOR UPDATE OF t1;
                                                            QUERY PLAN                                                            
@@ -1827,6 +1930,7 @@ SELECT t1.c1, ss.a, ss.b FROM (SELECT c1 FROM "S 1"."T3" WHERE c1 = 50) t1 INNER
                                        InfluxDB query: SELECT "c1", "c2", "c3" FROM "T4" WHERE (("c1" >= 50)) AND (("c1" <= 60))
 (28 rows)
 
+--Testcase 104:
 SELECT t1.c1, ss.a, ss.b FROM (SELECT c1 FROM "S 1"."T3" WHERE c1 = 50) t1 INNER JOIN (SELECT t2.c1, t3.c1 FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t2 FULL JOIN (SELECT c1 FROM ft5 WHERE c1 between 50 and 60) t3 ON (t2.c1 = t3.c1) WHERE t2.c1 IS NULL OR t2.c1 IS NOT NULL) ss(a, b) ON (TRUE) ORDER BY t1.c1, ss.a, ss.b FOR UPDATE OF t1;
  c1 | a  | b  
 ----+----+----
@@ -1841,6 +1945,7 @@ SELECT t1.c1, ss.a, ss.b FROM (SELECT c1 FROM "S 1"."T3" WHERE c1 = 50) t1 INNER
 (8 rows)
 
 -- full outer join + inner join
+--Testcase 105:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c1, t3.c1 FROM ft4 t1 INNER JOIN ft5 t2 ON (t1.c1 = t2.c1 + 1 and t1.c1 between 50 and 60) FULL JOIN ft4 t3 ON (t2.c1 = t3.c1) ORDER BY t1.c1, t2.c1, t3.c1 LIMIT 10;
                                                      QUERY PLAN                                                      
@@ -1871,6 +1976,7 @@ SELECT t1.c1, t2.c1, t3.c1 FROM ft4 t1 INNER JOIN ft5 t2 ON (t1.c1 = t2.c1 + 1 a
                                        InfluxDB query: SELECT "c1" FROM "T3" WHERE (("c1" >= 50)) AND (("c1" <= 60))
 (24 rows)
 
+--Testcase 106:
 SELECT t1.c1, t2.c1, t3.c1 FROM ft4 t1 INNER JOIN ft5 t2 ON (t1.c1 = t2.c1 + 1 and t1.c1 between 50 and 60) FULL JOIN ft4 t3 ON (t2.c1 = t3.c1) ORDER BY t1.c1, t2.c1, t3.c1 LIMIT 10;
  c1 | c1 | c1 
 ----+----+----
@@ -1887,6 +1993,7 @@ SELECT t1.c1, t2.c1, t3.c1 FROM ft4 t1 INNER JOIN ft5 t2 ON (t1.c1 = t2.c1 + 1 a
 (10 rows)
 
 -- full outer join three tables
+--Testcase 107:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 FULL JOIN ft2 t2 ON (t1.c1 = t2.c1) FULL JOIN ft4 t3 ON (t2.c1 = t3.c1) OFFSET 10 LIMIT 10;
                               QUERY PLAN                               
@@ -1914,6 +2021,7 @@ SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 FULL JOIN ft2 t2 ON (t1.c1 = t2.c1) FULL 
                      InfluxDB query: SELECT "c1", "c3" FROM "T3"
 (21 rows)
 
+--Testcase 108:
 SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 FULL JOIN ft2 t2 ON (t1.c1 = t2.c1) FULL JOIN ft4 t3 ON (t2.c1 = t3.c1) OFFSET 10 LIMIT 10;
  c1 | c2 |   c3   
 ----+----+--------
@@ -1930,6 +2038,7 @@ SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 FULL JOIN ft2 t2 ON (t1.c1 = t2.c1) FULL 
 (10 rows)
 
 -- full outer join + right outer join
+--Testcase 109:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 FULL JOIN ft2 t2 ON (t1.c1 = t2.c1) RIGHT JOIN ft4 t3 ON (t2.c1 = t3.c1) OFFSET 10 LIMIT 10;
                               QUERY PLAN                               
@@ -1957,6 +2066,7 @@ SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 FULL JOIN ft2 t2 ON (t1.c1 = t2.c1) RIGHT
                      InfluxDB query: SELECT "C1" FROM "T1"
 (21 rows)
 
+--Testcase 110:
 SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 FULL JOIN ft2 t2 ON (t1.c1 = t2.c1) RIGHT JOIN ft4 t3 ON (t2.c1 = t3.c1) OFFSET 10 LIMIT 10;
  c1 | c2 |   c3   
 ----+----+--------
@@ -1973,6 +2083,7 @@ SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 FULL JOIN ft2 t2 ON (t1.c1 = t2.c1) RIGHT
 (10 rows)
 
 -- right outer join + full outer join
+--Testcase 111:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 RIGHT JOIN ft2 t2 ON (t1.c1 = t2.c1) FULL JOIN ft4 t3 ON (t2.c1 = t3.c1) OFFSET 10 LIMIT 10;
                            QUERY PLAN                            
@@ -2000,6 +2111,7 @@ SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 RIGHT JOIN ft2 t2 ON (t1.c1 = t2.c1) FULL
                      InfluxDB query: SELECT "c1", "c3" FROM "T3"
 (21 rows)
 
+--Testcase 112:
 SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 RIGHT JOIN ft2 t2 ON (t1.c1 = t2.c1) FULL JOIN ft4 t3 ON (t2.c1 = t3.c1) OFFSET 10 LIMIT 10;
  c1 | c2 |   c3   
 ----+----+--------
@@ -2016,6 +2128,7 @@ SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 RIGHT JOIN ft2 t2 ON (t1.c1 = t2.c1) FULL
 (10 rows)
 
 -- full outer join + left outer join
+--Testcase 113:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 FULL JOIN ft2 t2 ON (t1.c1 = t2.c1) LEFT JOIN ft4 t3 ON (t2.c1 = t3.c1) OFFSET 10 LIMIT 10;
                               QUERY PLAN                               
@@ -2043,6 +2156,7 @@ SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 FULL JOIN ft2 t2 ON (t1.c1 = t2.c1) LEFT 
                      InfluxDB query: SELECT "c1", "c3" FROM "T3"
 (21 rows)
 
+--Testcase 114:
 SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 FULL JOIN ft2 t2 ON (t1.c1 = t2.c1) LEFT JOIN ft4 t3 ON (t2.c1 = t3.c1) OFFSET 10 LIMIT 10;
  c1 | c2 |   c3   
 ----+----+--------
@@ -2059,6 +2173,7 @@ SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 FULL JOIN ft2 t2 ON (t1.c1 = t2.c1) LEFT 
 (10 rows)
 
 -- left outer join + full outer join
+--Testcase 115:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 LEFT JOIN ft2 t2 ON (t1.c1 = t2.c1) FULL JOIN ft4 t3 ON (t2.c1 = t3.c1) OFFSET 10 LIMIT 10;
                               QUERY PLAN                               
@@ -2086,6 +2201,7 @@ SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 LEFT JOIN ft2 t2 ON (t1.c1 = t2.c1) FULL 
                      InfluxDB query: SELECT "c1", "c3" FROM "T3"
 (21 rows)
 
+--Testcase 116:
 SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 LEFT JOIN ft2 t2 ON (t1.c1 = t2.c1) FULL JOIN ft4 t3 ON (t2.c1 = t3.c1) OFFSET 10 LIMIT 10;
  c1 | c2 |   c3   
 ----+----+--------
@@ -2102,6 +2218,7 @@ SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 LEFT JOIN ft2 t2 ON (t1.c1 = t2.c1) FULL 
 (10 rows)
 
 -- right outer join + left outer join
+--Testcase 117:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 RIGHT JOIN ft2 t2 ON (t1.c1 = t2.c1) LEFT JOIN ft4 t3 ON (t2.c1 = t3.c1) OFFSET 10 LIMIT 10;
                               QUERY PLAN                               
@@ -2129,6 +2246,7 @@ SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 RIGHT JOIN ft2 t2 ON (t1.c1 = t2.c1) LEFT
                      InfluxDB query: SELECT "C1" FROM "T1"
 (21 rows)
 
+--Testcase 118:
 SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 RIGHT JOIN ft2 t2 ON (t1.c1 = t2.c1) LEFT JOIN ft4 t3 ON (t2.c1 = t3.c1) OFFSET 10 LIMIT 10;
  c1 | c2 |   c3   
 ----+----+--------
@@ -2145,6 +2263,7 @@ SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 RIGHT JOIN ft2 t2 ON (t1.c1 = t2.c1) LEFT
 (10 rows)
 
 -- left outer join + right outer join
+--Testcase 119:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 LEFT JOIN ft2 t2 ON (t1.c1 = t2.c1) RIGHT JOIN ft4 t3 ON (t2.c1 = t3.c1) OFFSET 10 LIMIT 10;
                               QUERY PLAN                               
@@ -2172,6 +2291,7 @@ SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 LEFT JOIN ft2 t2 ON (t1.c1 = t2.c1) RIGHT
                      InfluxDB query: SELECT "c1", "c3" FROM "T3"
 (21 rows)
 
+--Testcase 120:
 SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 LEFT JOIN ft2 t2 ON (t1.c1 = t2.c1) RIGHT JOIN ft4 t3 ON (t2.c1 = t3.c1) OFFSET 10 LIMIT 10;
  c1 | c2 |   c3   
 ----+----+--------
@@ -2188,6 +2308,7 @@ SELECT t1.c1, t2.c2, t3.c3 FROM ft2 t1 LEFT JOIN ft2 t2 ON (t1.c1 = t2.c1) RIGHT
 (10 rows)
 
 -- full outer join + WHERE clause, only matched rows
+--Testcase 121:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c1 FROM ft4 t1 FULL JOIN ft5 t2 ON (t1.c1 = t2.c1) WHERE (t1.c1 = t2.c1 OR t1.c1 IS NULL) ORDER BY t1.c1, t2.c1 OFFSET 10 LIMIT 10;
                            QUERY PLAN                            
@@ -2215,6 +2336,7 @@ SELECT t1.c1, t2.c1 FROM ft4 t1 FULL JOIN ft5 t2 ON (t1.c1 = t2.c1) WHERE (t1.c1
                            InfluxDB query: SELECT "c1" FROM "T4"
 (21 rows)
 
+--Testcase 122:
 SELECT t1.c1, t2.c1 FROM ft4 t1 FULL JOIN ft5 t2 ON (t1.c1 = t2.c1) WHERE (t1.c1 = t2.c1 OR t1.c1 IS NULL) ORDER BY t1.c1, t2.c1 OFFSET 10 LIMIT 10;
  c1 | c1 
 ----+----
@@ -2231,6 +2353,7 @@ SELECT t1.c1, t2.c1 FROM ft4 t1 FULL JOIN ft5 t2 ON (t1.c1 = t2.c1) WHERE (t1.c1
 (10 rows)
 
 -- full outer join + WHERE clause with shippable extensions set
+--Testcase 123:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c2, t1.c3 FROM ft1 t1 FULL JOIN ft2 t2 ON (t1.c1 = t2.c1) WHERE influxdb_fdw_abs(t1.c1) > 0 OFFSET 10 LIMIT 10;
                            QUERY PLAN                            
@@ -2259,6 +2382,7 @@ SELECT t1.c1, t2.c2, t1.c3 FROM ft1 t1 FULL JOIN ft2 t2 ON (t1.c1 = t2.c1) WHERE
 -- ALTER SERVER loopback OPTIONS (ADD extensions 'postgres_fdw');
 -- join two tables with FOR UPDATE clause
 -- tests whole-row reference for row marks
+--Testcase 124:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c3, t1.c1 OFFSET 100 LIMIT 10 FOR UPDATE OF t1;
                                              QUERY PLAN                                              
@@ -2283,6 +2407,7 @@ SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c3, t
                                  InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (18 rows)
 
+--Testcase 125:
 SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c3, t1.c1 OFFSET 100 LIMIT 10 FOR UPDATE OF t1;
  c1  | c1  
 -----+-----
@@ -2298,6 +2423,7 @@ SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c3, t
  110 | 110
 (10 rows)
 
+--Testcase 126:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c3, t1.c1 OFFSET 100 LIMIT 10 FOR UPDATE;
                                              QUERY PLAN                                              
@@ -2322,6 +2448,7 @@ SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c3, t
                                  InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (18 rows)
 
+--Testcase 127:
 SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c3, t1.c1 OFFSET 100 LIMIT 10 FOR UPDATE;
  c1  | c1  
 -----+-----
@@ -2338,6 +2465,7 @@ SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c3, t
 (10 rows)
 
 -- join two tables with FOR SHARE clause
+--Testcase 128:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c3, t1.c1 OFFSET 100 LIMIT 10 FOR SHARE OF t1;
                                              QUERY PLAN                                              
@@ -2362,6 +2490,7 @@ SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c3, t
                                  InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (18 rows)
 
+--Testcase 129:
 SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c3, t1.c1 OFFSET 100 LIMIT 10 FOR SHARE OF t1;
  c1  | c1  
 -----+-----
@@ -2377,6 +2506,7 @@ SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c3, t
  110 | 110
 (10 rows)
 
+--Testcase 130:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c3, t1.c1 OFFSET 100 LIMIT 10 FOR SHARE;
                                              QUERY PLAN                                              
@@ -2401,6 +2531,7 @@ SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c3, t
                                  InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (18 rows)
 
+--Testcase 131:
 SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c3, t1.c1 OFFSET 100 LIMIT 10 FOR SHARE;
  c1  | c1  
 -----+-----
@@ -2417,6 +2548,7 @@ SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c3, t
 (10 rows)
 
 -- join in CTE
+--Testcase 132:
 EXPLAIN (VERBOSE, COSTS OFF)
 WITH t (c1_1, c1_3, c2_1) AS MATERIALIZED (SELECT t1.c1, t1.c3, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1)) SELECT c1_1, c2_1 FROM t ORDER BY c1_3, c1_1 OFFSET 100 LIMIT 10;
                             QUERY PLAN                             
@@ -2446,6 +2578,7 @@ WITH t (c1_1, c1_3, c2_1) AS MATERIALIZED (SELECT t1.c1, t1.c3, t2.c1 FROM ft1 t
                Output: t.c1_1, t.c2_1, t.c1_3
 (23 rows)
 
+--Testcase 133:
 WITH t (c1_1, c1_3, c2_1) AS MATERIALIZED (SELECT t1.c1, t1.c3, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1)) SELECT c1_1, c2_1 FROM t ORDER BY c1_3, c1_1 OFFSET 100 LIMIT 10;
  c1_1 | c2_1 
 ------+------
@@ -2462,6 +2595,7 @@ WITH t (c1_1, c1_3, c2_1) AS MATERIALIZED (SELECT t1.c1, t1.c3, t2.c1 FROM ft1 t
 (10 rows)
 
 -- ctid with whole-row reference
+--Testcase 134:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.ctid, t1, t2, t1.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c3, t1.c1 OFFSET 100 LIMIT 10;
                                           QUERY PLAN                                           
@@ -2485,6 +2619,7 @@ SELECT t1.ctid, t1, t2, t1.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) ORDER B
 (16 rows)
 
 -- SEMI JOIN, not pushed down
+--Testcase 135:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1 FROM ft1 t1 WHERE EXISTS (SELECT 1 FROM ft2 t2 WHERE t1.c1 = t2.c1) ORDER BY t1.c1 OFFSET 100 LIMIT 10;
                               QUERY PLAN                               
@@ -2511,6 +2646,7 @@ SELECT t1.c1 FROM ft1 t1 WHERE EXISTS (SELECT 1 FROM ft2 t2 WHERE t1.c1 = t2.c1)
                                  InfluxDB query: SELECT "C1" FROM "T1"
 (20 rows)
 
+--Testcase 136:
 SELECT t1.c1 FROM ft1 t1 WHERE EXISTS (SELECT 1 FROM ft2 t2 WHERE t1.c1 = t2.c1) ORDER BY t1.c1 OFFSET 100 LIMIT 10;
  c1  
 -----
@@ -2527,6 +2663,7 @@ SELECT t1.c1 FROM ft1 t1 WHERE EXISTS (SELECT 1 FROM ft2 t2 WHERE t1.c1 = t2.c1)
 (10 rows)
 
 -- ANTI JOIN, not pushed down
+--Testcase 137:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1 FROM ft1 t1 WHERE NOT EXISTS (SELECT 1 FROM ft2 t2 WHERE t1.c1 = t2.c2) ORDER BY t1.c1 OFFSET 100 LIMIT 10;
                            QUERY PLAN                            
@@ -2549,6 +2686,7 @@ SELECT t1.c1 FROM ft1 t1 WHERE NOT EXISTS (SELECT 1 FROM ft2 t2 WHERE t1.c1 = t2
                            InfluxDB query: SELECT "c2" FROM "T1"
 (16 rows)
 
+--Testcase 138:
 SELECT t1.c1 FROM ft1 t1 WHERE NOT EXISTS (SELECT 1 FROM ft2 t2 WHERE t1.c1 = t2.c2) ORDER BY t1.c1 OFFSET 100 LIMIT 10;
  c1  
 -----
@@ -2565,6 +2703,7 @@ SELECT t1.c1 FROM ft1 t1 WHERE NOT EXISTS (SELECT 1 FROM ft2 t2 WHERE t1.c1 = t2
 (10 rows)
 
 -- CROSS JOIN can be pushed down
+--Testcase 139:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c1 FROM ft1 t1 CROSS JOIN ft2 t2 ORDER BY t1.c1, t2.c1 OFFSET 100 LIMIT 10;
                            QUERY PLAN                            
@@ -2586,6 +2725,7 @@ SELECT t1.c1, t2.c1 FROM ft1 t1 CROSS JOIN ft2 t2 ORDER BY t1.c1, t2.c1 OFFSET 1
                            InfluxDB query: SELECT "C1" FROM "T1"
 (15 rows)
 
+--Testcase 140:
 SELECT t1.c1, t2.c1 FROM ft1 t1 CROSS JOIN ft2 t2 ORDER BY t1.c1, t2.c1 OFFSET 100 LIMIT 10;
  c1 | c1  
 ----+-----
@@ -2602,6 +2742,7 @@ SELECT t1.c1, t2.c1 FROM ft1 t1 CROSS JOIN ft2 t2 ORDER BY t1.c1, t2.c1 OFFSET 1
 (10 rows)
 
 -- different server, not pushed down. No result expected.
+--Testcase 141:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c1 FROM ft5 t1 JOIN ft6 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c1, t2.c1 OFFSET 100 LIMIT 10;
                         QUERY PLAN                         
@@ -2625,6 +2766,7 @@ SELECT t1.c1, t2.c1 FROM ft5 t1 JOIN ft6 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c1, t
                      InfluxDB query: SELECT "c1" FROM "T4"
 (17 rows)
 
+--Testcase 142:
 SELECT t1.c1, t2.c1 FROM ft5 t1 JOIN ft6 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c1, t2.c1 OFFSET 100 LIMIT 10;
  c1 | c1 
 ----+----
@@ -2632,6 +2774,7 @@ SELECT t1.c1, t2.c1 FROM ft5 t1 JOIN ft6 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c1, t
 
 -- unsafe join conditions (c8 has a UDT), not pushed down. Practically a CROSS
 -- JOIN since c8 in both tables has same value.
+--Testcase 143:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c1 FROM ft1 t1 LEFT JOIN ft2 t2 ON (t1.c8 = t2.c8) ORDER BY t1.c1, t2.c1 OFFSET 100 LIMIT 10;
                               QUERY PLAN                               
@@ -2658,6 +2801,7 @@ SELECT t1.c1, t2.c1 FROM ft1 t1 LEFT JOIN ft2 t2 ON (t1.c8 = t2.c8) ORDER BY t1.
                            InfluxDB query: SELECT "C1", "c8" FROM "T1"
 (20 rows)
 
+--Testcase 144:
 SELECT t1.c1, t2.c1 FROM ft1 t1 LEFT JOIN ft2 t2 ON (t1.c8 = t2.c8) ORDER BY t1.c1, t2.c1 OFFSET 100 LIMIT 10;
  c1 | c1  
 ----+-----
@@ -2674,6 +2818,7 @@ SELECT t1.c1, t2.c1 FROM ft1 t1 LEFT JOIN ft2 t2 ON (t1.c8 = t2.c8) ORDER BY t1.
 (10 rows)
 
 -- unsafe conditions on one side (c8 has a UDT), not pushed down.
+--Testcase 145:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c1 FROM ft1 t1 LEFT JOIN ft2 t2 ON (t1.c1 = t2.c1) WHERE t1.c8 = 'foo' ORDER BY t1.c3, t1.c1 OFFSET 100 LIMIT 10;
                                           QUERY PLAN                                          
@@ -2696,6 +2841,7 @@ SELECT t1.c1, t2.c1 FROM ft1 t1 LEFT JOIN ft2 t2 ON (t1.c1 = t2.c1) WHERE t1.c8 
                            InfluxDB query: SELECT "C1", "c3" FROM "T1" WHERE (("c8" = 'foo'))
 (16 rows)
 
+--Testcase 146:
 SELECT t1.c1, t2.c1 FROM ft1 t1 LEFT JOIN ft2 t2 ON (t1.c1 = t2.c1) WHERE t1.c8 = 'foo' ORDER BY t1.c3, t1.c1 OFFSET 100 LIMIT 10;
  c1  | c1  
 -----+-----
@@ -2715,6 +2861,7 @@ SELECT t1.c1, t2.c1 FROM ft1 t1 LEFT JOIN ft2 t2 ON (t1.c1 = t2.c1) WHERE t1.c8 
 -- in the SELECT clause. In this test unsafe clause needs to have column
 -- references from both joining sides so that the clause is not pushed down
 -- into one of the joining sides.
+--Testcase 147:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) WHERE t1.c8 = t2.c8 ORDER BY t1.c3, t1.c1 OFFSET 100 LIMIT 10;
                                  QUERY PLAN                                  
@@ -2741,6 +2888,7 @@ SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) WHERE t1.c8 = t2.
                            InfluxDB query: SELECT "C1", "c8" FROM "T1"
 (20 rows)
 
+--Testcase 148:
 SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) WHERE t1.c8 = t2.c8 ORDER BY t1.c3, t1.c1 OFFSET 100 LIMIT 10;
  c1  | c1  
 -----+-----
@@ -2757,6 +2905,7 @@ SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) WHERE t1.c8 = t2.
 (10 rows)
 
 -- Aggregate after UNION, for testing setrefs
+--Testcase 149:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1c1, avg(t1c1 + t2c1) FROM (SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) UNION SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1)) AS t (t1c1, t2c1) GROUP BY t1c1 ORDER BY t1c1 OFFSET 100 LIMIT 10;
                                     QUERY PLAN                                     
@@ -2805,6 +2954,7 @@ SELECT t1c1, avg(t1c1 + t2c1) FROM (SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 
                                              InfluxDB query: SELECT "C1" FROM "T1"
 (42 rows)
 
+--Testcase 150:
 SELECT t1c1, avg(t1c1 + t2c1) FROM (SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1) UNION SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1)) AS t (t1c1, t2c1) GROUP BY t1c1 ORDER BY t1c1 OFFSET 100 LIMIT 10;
  t1c1 |         avg          
 ------+----------------------
@@ -2821,6 +2971,7 @@ SELECT t1c1, avg(t1c1 + t2c1) FROM (SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 
 (10 rows)
 
 -- join with lateral reference
+--Testcase 151:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1."C1" FROM "S 1"."T1" t1, LATERAL (SELECT DISTINCT t2.c1, t3.c1 FROM ft1 t2, ft2 t3 WHERE t2.c1 = t3.c1 AND t2.c2 = t1.c2) q ORDER BY t1."C1" OFFSET 10 LIMIT 10;
                                               QUERY PLAN                                               
@@ -2853,6 +3004,7 @@ SELECT t1."C1" FROM "S 1"."T1" t1, LATERAL (SELECT DISTINCT t2.c1, t3.c1 FROM ft
                                              InfluxDB query: SELECT "C1" FROM "T1" WHERE (("c2" = $1))
 (26 rows)
 
+--Testcase 152:
 SELECT t1."C1" FROM "S 1"."T1" t1, LATERAL (SELECT DISTINCT t2.c1, t3.c1 FROM ft1 t2, ft2 t3 WHERE t2.c1 = t3.c1 AND t2.c2 = t1.c2) q ORDER BY t1."C1" OFFSET 10 LIMIT 10;
  C1 
 ----
@@ -2871,6 +3023,7 @@ SELECT t1."C1" FROM "S 1"."T1" t1, LATERAL (SELECT DISTINCT t2.c1, t3.c1 FROM ft
 -- non-Var items in targetlist of the nullable rel of a join preventing
 -- push-down in some cases
 -- unable to push {ft1, ft2}
+--Testcase 153:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT q.a, ft2.c1 FROM (SELECT 13 FROM ft1 WHERE c1 = 13) q(a) RIGHT JOIN ft2 ON (q.a = ft2.c1) WHERE ft2.c1 BETWEEN 10 AND 15;
                                       QUERY PLAN                                       
@@ -2888,6 +3041,7 @@ SELECT q.a, ft2.c1 FROM (SELECT 13 FROM ft1 WHERE c1 = 13) q(a) RIGHT JOIN ft2 O
                InfluxDB query: SELECT * FROM "T1" WHERE (("C1" = 13))
 (11 rows)
 
+--Testcase 154:
 SELECT q.a, ft2.c1 FROM (SELECT 13 FROM ft1 WHERE c1 = 13) q(a) RIGHT JOIN ft2 ON (q.a = ft2.c1) WHERE ft2.c1 BETWEEN 10 AND 15;
  a  | c1 
 ----+----
@@ -2900,6 +3054,7 @@ SELECT q.a, ft2.c1 FROM (SELECT 13 FROM ft1 WHERE c1 = 13) q(a) RIGHT JOIN ft2 O
 (6 rows)
 
 -- ok to push {ft1, ft2} but not {ft1, ft2, ft4}
+--Testcase 155:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT ft4.c1, q.* FROM ft4 LEFT JOIN (SELECT 13, ft1.c1, ft2.c1 FROM ft1 RIGHT JOIN ft2 ON (ft1.c1 = ft2.c1) WHERE ft1.c1 = 12) q(a, b, c) ON (ft4.c1 = q.b) WHERE ft4.c1 BETWEEN 10 AND 15;
                                          QUERY PLAN                                          
@@ -2924,6 +3079,7 @@ SELECT ft4.c1, q.* FROM ft4 LEFT JOIN (SELECT 13, ft1.c1, ft2.c1 FROM ft1 RIGHT 
                InfluxDB query: SELECT "c1" FROM "T3" WHERE (("c1" >= 10)) AND (("c1" <= 15))
 (18 rows)
 
+--Testcase 156:
 SELECT ft4.c1, q.* FROM ft4 LEFT JOIN (SELECT 13, ft1.c1, ft2.c1 FROM ft1 RIGHT JOIN ft2 ON (ft1.c1 = ft2.c1) WHERE ft1.c1 = 12) q(a, b, c) ON (ft4.c1 = q.b) WHERE ft4.c1 BETWEEN 10 AND 15;
  c1 | a  | b  | c  
 ----+----+----+----
@@ -2934,6 +3090,7 @@ SELECT ft4.c1, q.* FROM ft4 LEFT JOIN (SELECT 13, ft1.c1, ft2.c1 FROM ft1 RIGHT 
 
 -- join with nullable side with some columns with null values
 -- UPDATE ft5 SET c3 = null where c1 % 9 = 0;
+--Testcase 157:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT ft5, ft5.c1, ft5.c2, ft5.c3, ft4.c1, ft4.c2 FROM ft5 left join ft4 on ft5.c1 = ft4.c1 WHERE ft4.c1 BETWEEN 10 and 30 ORDER BY ft5.c1, ft4.c1;
                                                QUERY PLAN                                                
@@ -2954,6 +3111,7 @@ SELECT ft5, ft5.c1, ft5.c2, ft5.c3, ft4.c1, ft4.c2 FROM ft5 left join ft4 on ft5
                      InfluxDB query: SELECT "c1", "c2" FROM "T3" WHERE (("c1" >= 10)) AND (("c1" <= 30))
 (14 rows)
 
+--Testcase 158:
 SELECT ft5, ft5.c1, ft5.c2, ft5.c3, ft4.c1, ft4.c2 FROM ft5 left join ft4 on ft5.c1 = ft4.c1 WHERE ft4.c1 BETWEEN 10 and 30 ORDER BY ft5.c1, ft4.c1;
       ft5       | c1 | c2 |   c3   | c1 | c2 
 ----------------+----+----+--------+----+----
@@ -2966,10 +3124,12 @@ SELECT ft5, ft5.c1, ft5.c2, ft5.c3, ft4.c1, ft4.c2 FROM ft5 left join ft4 on ft5
 -- multi-way join involving multiple merge joins
 -- (this case used to have EPQ-related planning problems)
 CREATE TABLE local_tbl (c1 int NOT NULL, c2 int NOT NULL, c3 text, CONSTRAINT local_tbl_pkey PRIMARY KEY (c1));
+--Testcase 159:
 INSERT INTO local_tbl SELECT id, id % 10, to_char(id, 'FM0000') FROM generate_series(1, 1000) id;
 ANALYZE local_tbl;
 SET enable_nestloop TO false;
 SET enable_hashjoin TO false;
+--Testcase 160:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT * FROM ft1, ft2, ft4, ft5, local_tbl WHERE ft1.c1 = ft2.c1 AND ft1.c2 = ft4.c1
     AND ft1.c2 = ft5.c1 AND ft1.c2 = local_tbl.c1 AND ft1.c1 < 100 AND ft2.c1 < 100 FOR UPDATE;
@@ -3020,6 +3180,7 @@ SELECT * FROM ft1, ft2, ft4, ft5, local_tbl WHERE ft1.c1 = ft2.c1 AND ft1.c2 = f
                      InfluxDB query: SELECT "c1", "c2", "c3" FROM "T4"
 (43 rows)
 
+--Testcase 161:
 SELECT * FROM ft1, ft2, ft4, ft5, local_tbl WHERE ft1.c1 = ft2.c1 AND ft1.c2 = ft4.c1
     AND ft1.c2 = ft5.c1 AND ft1.c2 = local_tbl.c1 AND ft1.c1 < 100 AND ft2.c1 < 100 FOR UPDATE;
            time           | c1 | c2 |  c3   | c6 |     c7     | c8  |           time           | c1 | c2 |  c3   | c6 |     c7     | c8  | c1 | c2 |   c3   | c1 | c2 |   c3   | c1 | c2 |  c3  
@@ -3047,6 +3208,7 @@ GRANT SELECT ON ft5 TO regress_view_owner;
 CREATE VIEW v4 AS SELECT * FROM ft4;
 CREATE VIEW v5 AS SELECT * FROM ft5;
 ALTER VIEW v5 OWNER TO regress_view_owner;
+--Testcase 162:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c2 FROM v4 t1 LEFT JOIN v5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c1, t2.c1 OFFSET 10 LIMIT 10;  -- can't be pushed down, different view owners
                               QUERY PLAN                               
@@ -3073,6 +3235,7 @@ SELECT t1.c1, t2.c2 FROM v4 t1 LEFT JOIN v5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c1
                            InfluxDB query: SELECT "c1" FROM "T3"
 (20 rows)
 
+--Testcase 163:
 SELECT t1.c1, t2.c2 FROM v4 t1 LEFT JOIN v5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c1, t2.c1 OFFSET 10 LIMIT 10;
  c1 | c2 
 ----+----
@@ -3089,6 +3252,7 @@ SELECT t1.c1, t2.c2 FROM v4 t1 LEFT JOIN v5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c1
 (10 rows)
 
 ALTER VIEW v4 OWNER TO regress_view_owner;
+--Testcase 164:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c2 FROM v4 t1 LEFT JOIN v5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c1, t2.c1 OFFSET 10 LIMIT 10;  -- can be pushed down
                               QUERY PLAN                               
@@ -3115,6 +3279,7 @@ SELECT t1.c1, t2.c2 FROM v4 t1 LEFT JOIN v5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c1
                            InfluxDB query: SELECT "c1" FROM "T3"
 (20 rows)
 
+--Testcase 165:
 SELECT t1.c1, t2.c2 FROM v4 t1 LEFT JOIN v5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c1, t2.c1 OFFSET 10 LIMIT 10;
  c1 | c2 
 ----+----
@@ -3130,6 +3295,7 @@ SELECT t1.c1, t2.c2 FROM v4 t1 LEFT JOIN v5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c1
  40 |   
 (10 rows)
 
+--Testcase 166:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c2 FROM v4 t1 LEFT JOIN ft5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c1, t2.c1 OFFSET 10 LIMIT 10;  -- can't be pushed down, view owner not current user
                               QUERY PLAN                               
@@ -3156,6 +3322,7 @@ SELECT t1.c1, t2.c2 FROM v4 t1 LEFT JOIN ft5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c
                            InfluxDB query: SELECT "c1" FROM "T3"
 (20 rows)
 
+--Testcase 167:
 SELECT t1.c1, t2.c2 FROM v4 t1 LEFT JOIN ft5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c1, t2.c1 OFFSET 10 LIMIT 10;
  c1 | c2 
 ----+----
@@ -3172,6 +3339,7 @@ SELECT t1.c1, t2.c2 FROM v4 t1 LEFT JOIN ft5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c
 (10 rows)
 
 ALTER VIEW v4 OWNER TO CURRENT_USER;
+--Testcase 168:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, t2.c2 FROM v4 t1 LEFT JOIN ft5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c1, t2.c1 OFFSET 10 LIMIT 10;  -- can be pushed down
                               QUERY PLAN                               
@@ -3198,6 +3366,7 @@ SELECT t1.c1, t2.c2 FROM v4 t1 LEFT JOIN ft5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c
                            InfluxDB query: SELECT "c1" FROM "T3"
 (20 rows)
 
+--Testcase 169:
 SELECT t1.c1, t2.c2 FROM v4 t1 LEFT JOIN ft5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c1, t2.c1 OFFSET 10 LIMIT 10;
  c1 | c2 
 ----+----
@@ -3221,6 +3390,7 @@ DROP ROLE regress_view_owner;
 -- Aggregate and grouping queries
 -- ===================================================================
 -- Simple aggregates
+--Testcase 170:
 explain (verbose, costs off)
 select count(c6), sum(c1), avg(c1), min(c2), max(c1), stddev(c2), sum(c1) * (random() <= 1)::int as sum2 from ft1 where c2 < 5 group by c2 order by 1, 2;
                                                                     QUERY PLAN                                                                     
@@ -3238,6 +3408,7 @@ select count(c6), sum(c1), avg(c1), min(c2), max(c1), stddev(c2), sum(c1) * (ran
                      InfluxDB query: SELECT "C1", "c2", "c6" FROM "T1" WHERE (("c2" < 5))
 (11 rows)
 
+--Testcase 171:
 select count(c6), sum(c1), avg(c1), min(c2), max(c1), stddev(c2), sum(c1) * (random() <= 1)::int as sum2 from ft1 where c2 < 5 group by c2 order by 1, 2;
  count |  sum  |         avg          | min | max  | stddev | sum2  
 -------+-------+----------------------+-----+------+--------+-------
@@ -3248,6 +3419,7 @@ select count(c6), sum(c1), avg(c1), min(c2), max(c1), stddev(c2), sum(c1) * (ran
    100 | 50500 | 505.0000000000000000 |   0 | 1000 |      0 | 50500
 (5 rows)
 
+--Testcase 172:
 explain (verbose, costs off)
 select count(c6), sum(c1), avg(c1), min(c2), max(c1), stddev(c2), sum(c1) * (random() <= 1)::int as sum2 from ft1 where c2 < 5 group by c2 order by 1, 2 limit 1;
                                                                        QUERY PLAN                                                                        
@@ -3267,6 +3439,7 @@ select count(c6), sum(c1), avg(c1), min(c2), max(c1), stddev(c2), sum(c1) * (ran
                            InfluxDB query: SELECT "C1", "c2", "c6" FROM "T1" WHERE (("c2" < 5))
 (13 rows)
 
+--Testcase 173:
 select count(c6), sum(c1), avg(c1), min(c2), max(c1), stddev(c2), sum(c1) * (random() <= 1)::int as sum2 from ft1 where c2 < 5 group by c2 order by 1, 2 limit 1;
  count |  sum  |         avg          | min | max | stddev | sum2  
 -------+-------+----------------------+-----+-----+--------+-------
@@ -3274,6 +3447,7 @@ select count(c6), sum(c1), avg(c1), min(c2), max(c1), stddev(c2), sum(c1) * (ran
 (1 row)
 
 -- Aggregate is not pushed down as aggregation contains random()
+--Testcase 174:
 explain (verbose, costs off)
 select sum(c1 * (random() <= 1)::int) as sum, avg(c1) from ft1;
                                   QUERY PLAN                                   
@@ -3286,6 +3460,7 @@ select sum(c1 * (random() <= 1)::int) as sum, avg(c1) from ft1;
 (5 rows)
 
 -- Aggregate over join query
+--Testcase 175:
 explain (verbose, costs off)
 select count(*), sum(t1.c1), avg(t2.c1) from ft1 t1 inner join ft1 t2 on (t1.c2 = t2.c2) where t1.c2 = 6;
                                      QUERY PLAN                                     
@@ -3304,6 +3479,7 @@ select count(*), sum(t1.c1), avg(t2.c1) from ft1 t1 inner join ft1 t2 on (t1.c2 
                      InfluxDB query: SELECT "C1", "c2" FROM "T1" WHERE (("c2" = 6))
 (12 rows)
 
+--Testcase 176:
 select count(*), sum(t1.c1), avg(t2.c1) from ft1 t1 inner join ft1 t2 on (t1.c2 = t2.c2) where t1.c2 = 6;
  count |   sum   |         avg          
 -------+---------+----------------------
@@ -3311,6 +3487,7 @@ select count(*), sum(t1.c1), avg(t2.c1) from ft1 t1 inner join ft1 t2 on (t1.c2 
 (1 row)
 
 -- Not pushed down due to local conditions present in underneath input rel
+--Testcase 177:
 explain (verbose, costs off)
 select sum(t1.c1), count(t2.c1) from ft1 t1 inner join ft2 t2 on (t1.c1 = t2.c1) where ((t1.c1 * t2.c1)/(t1.c1 * t2.c1)) * random() <= 1;
                                                       QUERY PLAN                                                      
@@ -3336,6 +3513,7 @@ select sum(t1.c1), count(t2.c1) from ft1 t1 inner join ft2 t2 on (t1.c1 = t2.c1)
 (18 rows)
 
 -- GROUP BY clause having expressions
+--Testcase 178:
 explain (verbose, costs off)
 select c2/2, sum(c2) * (c2/2) from ft1 group by c2/2 order by c2/2;
                      QUERY PLAN                      
@@ -3351,6 +3529,7 @@ select c2/2, sum(c2) * (c2/2) from ft1 group by c2/2 order by c2/2;
                InfluxDB query: SELECT "c2" FROM "T1"
 (9 rows)
 
+--Testcase 179:
 select c2/2, sum(c2) * (c2/2) from ft1 group by c2/2 order by c2/2;
  ?column? | ?column? 
 ----------+----------
@@ -3362,6 +3541,7 @@ select c2/2, sum(c2) * (c2/2) from ft1 group by c2/2 order by c2/2;
 (5 rows)
 
 -- Aggregates in subquery are pushed down.
+--Testcase 180:
 explain (verbose, costs off)
 select count(x.a), sum(x.a) from (select c2 a, sum(c1) b from ft1 group by c2, sqrt(c1) order by 1, 2) x;
                                   QUERY PLAN                                   
@@ -3379,6 +3559,7 @@ select count(x.a), sum(x.a) from (select c2 a, sum(c1) b from ft1 group by c2, s
                      InfluxDB query: SELECT "C1", "c2" FROM "T1"
 (11 rows)
 
+--Testcase 181:
 select count(x.a), sum(x.a) from (select c2 a, sum(c1) b from ft1 group by c2, sqrt(c1) order by 1, 2) x;
  count | sum  
 -------+------
@@ -3386,6 +3567,7 @@ select count(x.a), sum(x.a) from (select c2 a, sum(c1) b from ft1 group by c2, s
 (1 row)
 
 -- Aggregate is still pushed down by taking unshippable expression out
+--Testcase 182:
 explain (verbose, costs off)
 select c2 * (random() <= 1)::int as sum1, sum(c1) * c2 as sum2 from ft1 group by c2 order by 1, 2;
                                             QUERY PLAN                                             
@@ -3401,6 +3583,7 @@ select c2 * (random() <= 1)::int as sum1, sum(c1) * c2 as sum2 from ft1 group by
                InfluxDB query: SELECT "C1", "c2" FROM "T1"
 (9 rows)
 
+--Testcase 183:
 select c2 * (random() <= 1)::int as sum1, sum(c1) * c2 as sum2 from ft1 group by c2 order by 1, 2;
  sum1 |  sum2  
 ------+--------
@@ -3417,6 +3600,7 @@ select c2 * (random() <= 1)::int as sum1, sum(c1) * c2 as sum2 from ft1 group by
 (10 rows)
 
 -- Aggregate with unshippable GROUP BY clause are not pushed
+--Testcase 184:
 explain (verbose, costs off)
 select c2 * (random() <= 1)::int as c2 from ft2 group by c2 * (random() <= 1)::int order by 1;
                                   QUERY PLAN                                  
@@ -3433,6 +3617,7 @@ select c2 * (random() <= 1)::int as c2 from ft2 group by c2 * (random() <= 1)::i
 (9 rows)
 
 -- GROUP BY clause in various forms, cardinal, alias and constant expression
+--Testcase 185:
 explain (verbose, costs off)
 select count(c2) w, c2 x, 5 y, 7.0 z from ft1 group by 2, y, 9.0::int order by 2;
                      QUERY PLAN                      
@@ -3448,6 +3633,7 @@ select count(c2) w, c2 x, 5 y, 7.0 z from ft1 group by 2, y, 9.0::int order by 2
                InfluxDB query: SELECT "c2" FROM "T1"
 (9 rows)
 
+--Testcase 186:
 select count(c2) w, c2 x, 5 y, 7.0 z from ft1 group by 2, y, 9.0::int order by 2;
   w  | x | y |  z  
 -----+---+---+-----
@@ -3465,6 +3651,7 @@ select count(c2) w, c2 x, 5 y, 7.0 z from ft1 group by 2, y, 9.0::int order by 2
 
 -- GROUP BY clause referring to same column multiple times
 -- Also, ORDER BY contains an aggregate function
+--Testcase 187:
 explain (verbose, costs off)
 select c2, c2 from ft1 where c2 > 6 group by 1, 2 order by sum(c1);
                                   QUERY PLAN                                  
@@ -3480,6 +3667,7 @@ select c2, c2 from ft1 where c2 > 6 group by 1, 2 order by sum(c1);
                InfluxDB query: SELECT "C1", "c2" FROM "T1" WHERE (("c2" > 6))
 (9 rows)
 
+--Testcase 188:
 select c2, c2 from ft1 where c2 > 6 group by 1, 2 order by sum(c1);
  c2 | c2 
 ----+----
@@ -3489,6 +3677,7 @@ select c2, c2 from ft1 where c2 > 6 group by 1, 2 order by sum(c1);
 (3 rows)
 
 -- Testing HAVING clause shippability
+--Testcase 189:
 explain (verbose, costs off)
 select c2, sum(c1) from ft2 group by c2 having avg(c1) < 500 and sum(c1) < 49800 order by c2;
                                  QUERY PLAN                                 
@@ -3505,6 +3694,7 @@ select c2, sum(c1) from ft2 group by c2 having avg(c1) < 500 and sum(c1) < 49800
                InfluxDB query: SELECT "C1", "c2" FROM "T1"
 (10 rows)
 
+--Testcase 190:
 select c2, sum(c1) from ft2 group by c2 having avg(c1) < 500 and sum(c1) < 49800 order by c2;
  c2 |  sum  
 ----+-------
@@ -3513,6 +3703,7 @@ select c2, sum(c1) from ft2 group by c2 having avg(c1) < 500 and sum(c1) < 49800
 (2 rows)
 
 -- Unshippable HAVING clause will be evaluated locally, and other qual in HAVING clause is pushed down
+--Testcase 191:
 explain (verbose, costs off)
 select count(*) from (select time, count(c1) from ft1 group by time, sqrt(c2) having (avg(c1) / avg(c1)) * random() <= 1 and avg(c1) < 500) x;
                                                                   QUERY PLAN                                                                  
@@ -3528,6 +3719,7 @@ select count(*) from (select time, count(c1) from ft1 group by time, sqrt(c2) ha
                InfluxDB query: SELECT "C1", "c2" FROM "T1"
 (9 rows)
 
+--Testcase 192:
 select count(*) from (select time, count(c1) from ft1 group by time, sqrt(c2) having (avg(c1) / avg(c1)) * random() <= 1 and avg(c1) < 500) x;
  count 
 -------
@@ -3535,6 +3727,7 @@ select count(*) from (select time, count(c1) from ft1 group by time, sqrt(c2) ha
 (1 row)
 
 -- Aggregate in HAVING clause is not pushable, and thus aggregation is not pushed down
+--Testcase 193:
 explain (verbose, costs off)
 select sum(c1) from ft1 group by c2 having avg(c1 * (random() <= 1)::int) > 100 order by 1;
                                             QUERY PLAN                                             
@@ -3553,6 +3746,7 @@ select sum(c1) from ft1 group by c2 having avg(c1 * (random() <= 1)::int) > 100 
 
 -- Remote aggregate in combination with a local Param (for the output
 -- of an initplan) can be trouble, per bug #15781
+--Testcase 194:
 explain (verbose, costs off)
 select exists(select 1 from pg_enum), sum(c1) from ft1;
                   QUERY PLAN                  
@@ -3564,12 +3758,14 @@ select exists(select 1 from pg_enum), sum(c1) from ft1;
      ->  Seq Scan on pg_catalog.pg_enum
 (5 rows)
 
+--Testcase 195:
 select exists(select 1 from pg_enum), sum(c1) from ft1;
  exists |  sum   
 --------+--------
  t      | 500500
 (1 row)
 
+--Testcase 196:
 explain (verbose, costs off)
 select exists(select 1 from pg_enum), sum(c1) from ft1 group by 1;
                   QUERY PLAN                   
@@ -3584,6 +3780,7 @@ select exists(select 1 from pg_enum), sum(c1) from ft1 group by 1;
          InfluxDB query: SELECT "C1" FROM "T1"
 (8 rows)
 
+--Testcase 197:
 select exists(select 1 from pg_enum), sum(c1) from ft1 group by 1;
  exists |  sum   
 --------+--------
@@ -3592,6 +3789,7 @@ select exists(select 1 from pg_enum), sum(c1) from ft1 group by 1;
 
 -- Testing ORDER BY, DISTINCT, FILTER, Ordered-sets and VARIADIC within aggregates
 -- ORDER BY within aggregate, same column used to order
+--Testcase 198:
 explain (verbose, costs off)
 select array_agg(c1 order by c1) from ft1 where c1 < 100 group by c2 order by 1;
                                       QUERY PLAN                                      
@@ -3610,6 +3808,7 @@ select array_agg(c1 order by c1) from ft1 where c1 < 100 group by c2 order by 1;
                      InfluxDB query: SELECT "C1", "c2" FROM "T1" WHERE (("C1" < 100))
 (12 rows)
 
+--Testcase 199:
 select array_agg(c1 order by c1) from ft1 where c1 < 100 group by c2 order by 1;
            array_agg            
 --------------------------------
@@ -3626,6 +3825,7 @@ select array_agg(c1 order by c1) from ft1 where c1 < 100 group by c2 order by 1;
 (10 rows)
 
 -- ORDER BY within aggregate, different column used to order also using DESC
+--Testcase 200:
 explain (verbose, costs off)
 select array_agg(time order by c1 desc) from ft2 where c2 = 6 and c1 < 50;
                                      QUERY PLAN                                     
@@ -3637,6 +3837,7 @@ select array_agg(time order by c1 desc) from ft2 where c2 = 6 and c1 < 50;
          InfluxDB query: SELECT "C1" FROM "T1" WHERE (("C1" < 50)) AND (("c2" = 6))
 (5 rows)
 
+--Testcase 201:
 select array_agg(time order by c1 desc) from ft2 where c2 = 6 and c1 < 50;
                                                                 array_agg                                                                 
 ------------------------------------------------------------------------------------------------------------------------------------------
@@ -3644,6 +3845,7 @@ select array_agg(time order by c1 desc) from ft2 where c2 = 6 and c1 < 50;
 (1 row)
 
 -- DISTINCT within aggregate
+--Testcase 202:
 explain (verbose, costs off)
 select array_agg(distinct (t1.c1)%5) from ft4 t1 full join ft5 t2 on (t1.c1 = t2.c1) where t1.c1 < 20 or (t1.c1 is null and t2.c1 < 5) group by (t2.c1)%3 order by 1;
                                    QUERY PLAN                                    
@@ -3675,6 +3877,7 @@ select array_agg(distinct (t1.c1)%5) from ft4 t1 full join ft5 t2 on (t1.c1 = t2
                                  InfluxDB query: SELECT "c1" FROM "T4"
 (25 rows)
 
+--Testcase 203:
 select array_agg(distinct (t1.c1)%5) from ft4 t1 full join ft5 t2 on (t1.c1 = t2.c1) where t1.c1 < 20 or (t1.c1 is null and t2.c1 < 5) group by (t2.c1)%3 order by 1;
   array_agg   
 --------------
@@ -3683,6 +3886,7 @@ select array_agg(distinct (t1.c1)%5) from ft4 t1 full join ft5 t2 on (t1.c1 = t2
 (2 rows)
 
 -- DISTINCT combined with ORDER BY within aggregate
+--Testcase 204:
 explain (verbose, costs off)
 select array_agg(distinct (t1.c1)%5 order by (t1.c1)%5) from ft4 t1 full join ft5 t2 on (t1.c1 = t2.c1) where t1.c1 < 20 or (t1.c1 is null and t2.c1 < 5) group by (t2.c1)%3 order by 1;
                                      QUERY PLAN                                      
@@ -3714,6 +3918,7 @@ select array_agg(distinct (t1.c1)%5 order by (t1.c1)%5) from ft4 t1 full join ft
                                  InfluxDB query: SELECT "c1" FROM "T4"
 (25 rows)
 
+--Testcase 205:
 select array_agg(distinct (t1.c1)%5 order by (t1.c1)%5) from ft4 t1 full join ft5 t2 on (t1.c1 = t2.c1) where t1.c1 < 20 or (t1.c1 is null and t2.c1 < 5) group by (t2.c1)%3 order by 1;
   array_agg   
 --------------
@@ -3721,6 +3926,7 @@ select array_agg(distinct (t1.c1)%5 order by (t1.c1)%5) from ft4 t1 full join ft
  {1,2,3,NULL}
 (2 rows)
 
+--Testcase 206:
 explain (verbose, costs off)
 select array_agg(distinct (t1.c1)%5 order by (t1.c1)%5 desc nulls last) from ft4 t1 full join ft5 t2 on (t1.c1 = t2.c1) where t1.c1 < 20 or (t1.c1 is null and t2.c1 < 5) group by (t2.c1)%3 order by 1;
                                              QUERY PLAN                                              
@@ -3752,6 +3958,7 @@ select array_agg(distinct (t1.c1)%5 order by (t1.c1)%5 desc nulls last) from ft4
                                  InfluxDB query: SELECT "c1" FROM "T4"
 (25 rows)
 
+--Testcase 207:
 select array_agg(distinct (t1.c1)%5 order by (t1.c1)%5 desc nulls last) from ft4 t1 full join ft5 t2 on (t1.c1 = t2.c1) where t1.c1 < 20 or (t1.c1 is null and t2.c1 < 5) group by (t2.c1)%3 order by 1;
   array_agg   
 --------------
@@ -3760,6 +3967,7 @@ select array_agg(distinct (t1.c1)%5 order by (t1.c1)%5 desc nulls last) from ft4
 (2 rows)
 
 -- FILTER within aggregate
+--Testcase 208:
 explain (verbose, costs off)
 select sum(c1) filter (where c1 < 100 and c2 > 5) from ft1 group by c2 order by 1 nulls last;
                                  QUERY PLAN                                 
@@ -3775,6 +3983,7 @@ select sum(c1) filter (where c1 < 100 and c2 > 5) from ft1 group by c2 order by 
                InfluxDB query: SELECT "C1", "c2" FROM "T1"
 (9 rows)
 
+--Testcase 209:
 select sum(c1) filter (where c1 < 100 and c2 > 5) from ft1 group by c2 order by 1 nulls last;
  sum 
 -----
@@ -3791,6 +4000,7 @@ select sum(c1) filter (where c1 < 100 and c2 > 5) from ft1 group by c2 order by 
 (10 rows)
 
 -- DISTINCT, ORDER BY and FILTER within aggregate
+--Testcase 210:
 explain (verbose, costs off)
 select sum(c1%3), sum(distinct c1%3 order by c1%3) filter (where c1%3 < 2), c2 from ft1 where c2 = 6 group by c2;
                                              QUERY PLAN                                              
@@ -3803,6 +4013,7 @@ select sum(c1%3), sum(distinct c1%3 order by c1%3) filter (where c1%3 < 2), c2 f
          InfluxDB query: SELECT "C1", "c2" FROM "T1" WHERE (("c2" = 6))
 (6 rows)
 
+--Testcase 211:
 select sum(c1%3), sum(distinct c1%3 order by c1%3) filter (where c1%3 < 2), c2 from ft1 where c2 = 6 group by c2;
  sum | sum | c2 
 -----+-----+----
@@ -3810,6 +4021,7 @@ select sum(c1%3), sum(distinct c1%3 order by c1%3) filter (where c1%3 < 2), c2 f
 (1 row)
 
 -- Outer query is aggregation query
+--Testcase 212:
 explain (verbose, costs off)
 select distinct (select count(*) filter (where t2.c2 = 6 and t2.c1 < 10) from ft1 t1 where t1.c1 = 6) from ft2 t2 where t2.c2 % 6 = 0 order by 1;
                                         QUERY PLAN                                        
@@ -3830,6 +4042,7 @@ select distinct (select count(*) filter (where t2.c2 = 6 and t2.c1 < 10) from ft
                        InfluxDB query: SELECT * FROM "T1" WHERE (("C1" = 6))
 (14 rows)
 
+--Testcase 213:
 select distinct (select count(*) filter (where t2.c2 = 6 and t2.c1 < 10) from ft1 t1 where t1.c1 = 6) from ft2 t2 where t2.c2 % 6 = 0 order by 1;
  count 
 -------
@@ -3837,6 +4050,7 @@ select distinct (select count(*) filter (where t2.c2 = 6 and t2.c1 < 10) from ft
 (1 row)
 
 -- Inner query is aggregation query
+--Testcase 214:
 explain (verbose, costs off)
 select distinct (select count(t1.c1) filter (where t2.c2 = 6 and t2.c1 < 10) from ft1 t1 where t1.c1 = 6) from ft2 t2 where t2.c2 % 6 = 0 order by 1;
                                         QUERY PLAN                                        
@@ -3857,6 +4071,7 @@ select distinct (select count(t1.c1) filter (where t2.c2 = 6 and t2.c1 < 10) fro
                              InfluxDB query: SELECT "C1" FROM "T1" WHERE (("C1" = 6))
 (14 rows)
 
+--Testcase 215:
 select distinct (select count(t1.c1) filter (where t2.c2 = 6 and t2.c1 < 10) from ft1 t1 where t1.c1 = 6) from ft2 t2 where t2.c2 % 6 = 0 order by 1;
  count 
 -------
@@ -3865,6 +4080,7 @@ select distinct (select count(t1.c1) filter (where t2.c2 = 6 and t2.c1 < 10) fro
 (2 rows)
 
 -- Aggregate not pushed down as FILTER condition is not pushable
+--Testcase 216:
 explain (verbose, costs off)
 select sum(c1) filter (where (c1 / c1) * random() <= 1) from ft1 group by c2 order by 1;
                                                        QUERY PLAN                                                       
@@ -3880,6 +4096,7 @@ select sum(c1) filter (where (c1 / c1) * random() <= 1) from ft1 group by c2 ord
                InfluxDB query: SELECT "C1", "c2" FROM "T1"
 (9 rows)
 
+--Testcase 217:
 explain (verbose, costs off)
 select sum(c2) filter (where c2 in (select c2 from ft1 where c2 < 5)) from ft1;
                              QUERY PLAN                             
@@ -3896,6 +4113,7 @@ select sum(c2) filter (where c2 in (select c2 from ft1 where c2 < 5)) from ft1;
 (9 rows)
 
 -- Ordered-sets within aggregate
+--Testcase 218:
 explain (verbose, costs off)
 select c2, rank('10'::varchar) within group (order by c6), percentile_cont(c2/10::numeric) within group (order by c1) from ft1 where c2 < 10 group by c2 having percentile_cont(c2/10::numeric) within group (order by c1) < 500 order by c2;
                                                                                           QUERY PLAN                                                                                           
@@ -3912,6 +4130,7 @@ select c2, rank('10'::varchar) within group (order by c6), percentile_cont(c2/10
                InfluxDB query: SELECT "C1", "c2", "c6" FROM "T1" WHERE (("c2" < 10))
 (10 rows)
 
+--Testcase 219:
 select c2, rank('10'::varchar) within group (order by c6), percentile_cont(c2/10::numeric) within group (order by c1) from ft1 where c2 < 10 group by c2 having percentile_cont(c2/10::numeric) within group (order by c1) < 500 order by c2;
  c2 | rank | percentile_cont 
 ----+------+-----------------
@@ -3923,6 +4142,7 @@ select c2, rank('10'::varchar) within group (order by c6), percentile_cont(c2/10
 (5 rows)
 
 -- Using multiple arguments within aggregates
+--Testcase 220:
 explain (verbose, costs off)
 select c1, rank(c1, c2) within group (order by c1, c2) from ft1 group by c1, c2 having c1 = 6 order by 1;
                                   QUERY PLAN                                  
@@ -3938,6 +4158,7 @@ select c1, rank(c1, c2) within group (order by c1, c2) from ft1 group by c1, c2 
                InfluxDB query: SELECT "C1", "c2" FROM "T1" WHERE (("C1" = 6))
 (9 rows)
 
+--Testcase 221:
 select c1, rank(c1, c2) within group (order by c1, c2) from ft1 group by c1, c2 having c1 = 6 order by 1;
  c1 | rank 
 ----+------
@@ -3954,6 +4175,7 @@ create aggregate least_agg1(variadic items anyarray) (
 -- Disable hash aggregation for plan stability.
 set enable_hashagg to false;
 -- Not pushed down due to user defined aggregate
+--Testcase 222:
 explain (verbose, costs off)
 select c2, least_agg1(c1) from ft1 group by c2 order by c2;
                         QUERY PLAN                         
@@ -3973,6 +4195,7 @@ select c2, least_agg1(c1) from ft1 group by c2 order by c2;
 alter extension influxdb_fdw add function least_accum1(anyelement, variadic anyarray);
 alter extension influxdb_fdw add aggregate least_agg1(variadic items anyarray);
 -- Now aggregate will be pushed.  Aggregate will display VARIADIC argument.
+--Testcase 223:
 explain (verbose, costs off)
 select c2, least_agg1(c1) from ft1 where c2 < 100 group by c2 order by c2;
                                    QUERY PLAN                                   
@@ -3988,6 +4211,7 @@ select c2, least_agg1(c1) from ft1 where c2 < 100 group by c2 order by c2;
                InfluxDB query: SELECT "C1", "c2" FROM "T1" WHERE (("c2" < 100))
 (9 rows)
 
+--Testcase 224:
 select c2, least_agg1(c1) from ft1 where c2 < 100 group by c2 order by c2;
  c2 | least_agg1 
 ----+------------
@@ -4007,6 +4231,7 @@ select c2, least_agg1(c1) from ft1 where c2 < 100 group by c2 order by c2;
 alter extension influxdb_fdw drop function least_accum1(anyelement, variadic anyarray);
 alter extension influxdb_fdw drop aggregate least_agg1(variadic items anyarray);
 -- Not pushed down as we have dropped objects from extension.
+--Testcase 225:
 explain (verbose, costs off)
 select c2, least_agg1(c1) from ft1 group by c2 order by c2;
                         QUERY PLAN                         
@@ -4056,6 +4281,7 @@ create operator class my_op_class for type int using btree family my_op_family a
  function 1 my_op_cmp(int, int);
 -- This will not be pushed as user defined sort operator is not part of the
 -- extension yet.
+--Testcase 226:
 explain (verbose, costs off)
 select array_agg(c1 order by c1 using operator(public.<^)) from ft2 where c2 = 6 and c1 < 100 group by c2;
                                         QUERY PLAN                                         
@@ -4079,6 +4305,7 @@ alter extension influxdb_fdw add operator public.<^(int, int);
 alter extension influxdb_fdw add operator public.=^(int, int);
 alter extension influxdb_fdw add operator public.>^(int, int);
 -- Now this will be pushed as sort operator is part of the extension.
+--Testcase 227:
 explain (verbose, costs off)
 select array_agg(c1 order by c1 using operator(public.<^)) from ft2 where c2 = 6 and c1 < 100 group by c2;
                                         QUERY PLAN                                         
@@ -4091,6 +4318,7 @@ select array_agg(c1 order by c1 using operator(public.<^)) from ft2 where c2 = 6
          InfluxDB query: SELECT "C1", "c2" FROM "T1" WHERE (("C1" < 100)) AND (("c2" = 6))
 (6 rows)
 
+--Testcase 228:
 select array_agg(c1 order by c1 using operator(public.<^)) from ft2 where c2 = 6 and c1 < 100 group by c2;
            array_agg            
 --------------------------------
@@ -4105,6 +4333,7 @@ alter extension influxdb_fdw drop operator public.<^(int, int);
 alter extension influxdb_fdw drop operator public.=^(int, int);
 alter extension influxdb_fdw drop operator public.>^(int, int);
 -- This will not be pushed as sort operator is now removed from the extension.
+--Testcase 229:
 explain (verbose, costs off)
 select array_agg(c1 order by c1 using operator(public.<^)) from ft2 where c2 = 6 and c1 < 100 group by c2;
                                         QUERY PLAN                                         
@@ -4126,6 +4355,7 @@ drop operator public.=^(int, int);
 drop operator public.<^(int, int);
 -- Input relation to aggregate push down hook is not safe to pushdown and thus
 -- the aggregate cannot be pushed down to foreign server.
+--Testcase 230:
 explain (verbose, costs off)
 select count(t1.c3) from ft2 t1 left join ft2 t2 on (t1.c1 = random() * t2.c2);
                                         QUERY PLAN                                         
@@ -4146,6 +4376,7 @@ select count(t1.c3) from ft2 t1 left join ft2 t2 on (t1.c1 = random() * t2.c2);
 (13 rows)
 
 -- Subquery in FROM clause having aggregate
+--Testcase 231:
 explain (verbose, costs off)
 select count(*), x.b from ft1, (select c2 a, sum(c1) b from ft1 group by c2) x where ft1.c2 = x.a group by x.b order by 1, 2;
                                     QUERY PLAN                                     
@@ -4175,6 +4406,7 @@ select count(*), x.b from ft1, (select c2 a, sum(c1) b from ft1 group by c2) x w
                                        InfluxDB query: SELECT "C1", "c2" FROM "T1"
 (23 rows)
 
+--Testcase 232:
 select count(*), x.b from ft1, (select c2 a, sum(c1) b from ft1 group by c2) x where ft1.c2 = x.a group by x.b order by 1, 2;
  count |   b   
 -------+-------
@@ -4191,6 +4423,7 @@ select count(*), x.b from ft1, (select c2 a, sum(c1) b from ft1 group by c2) x w
 (10 rows)
 
 -- FULL join with IS NULL check in HAVING
+--Testcase 233:
 explain (verbose, costs off)
 select avg(t1.c1), sum(t2.c1) from ft4 t1 full join ft5 t2 on (t1.c1 = t2.c1) group by t2.c1 having (avg(t1.c1) is null and sum(t2.c1) < 10) or sum(t2.c1) is null order by 1 nulls last, 2;
                                        QUERY PLAN                                       
@@ -4219,6 +4452,7 @@ select avg(t1.c1), sum(t2.c1) from ft4 t1 full join ft5 t2 on (t1.c1 = t2.c1) gr
                            InfluxDB query: SELECT "c1" FROM "T4"
 (22 rows)
 
+--Testcase 234:
 select avg(t1.c1), sum(t2.c1) from ft4 t1 full join ft5 t2 on (t1.c1 = t2.c1) group by t2.c1 having (avg(t1.c1) is null and sum(t2.c1) < 10) or sum(t2.c1) is null order by 1 nulls last, 2;
          avg         | sum 
 ---------------------+-----
@@ -4229,6 +4463,7 @@ select avg(t1.c1), sum(t2.c1) from ft4 t1 full join ft5 t2 on (t1.c1 = t2.c1) gr
 
 -- Aggregate over FULL join needing to deparse the joining relations as
 -- subqueries.
+--Testcase 235:
 explain (verbose, costs off)
 select count(*), sum(t1.c1), avg(t2.c1) from (select c1 from ft4 where c1 between 50 and 60) t1 full join (select c1 from ft5 where c1 between 50 and 60) t2 on (t1.c1 = t2.c1);
                                             QUERY PLAN                                             
@@ -4248,6 +4483,7 @@ select count(*), sum(t1.c1), avg(t2.c1) from (select c1 from ft4 where c1 betwee
                      InfluxDB query: SELECT "c1" FROM "T4" WHERE (("c1" >= 50)) AND (("c1" <= 60))
 (13 rows)
 
+--Testcase 236:
 select count(*), sum(t1.c1), avg(t2.c1) from (select c1 from ft4 where c1 between 50 and 60) t1 full join (select c1 from ft5 where c1 between 50 and 60) t2 on (t1.c1 = t2.c1);
  count | sum |         avg         
 -------+-----+---------------------
@@ -4256,6 +4492,7 @@ select count(*), sum(t1.c1), avg(t2.c1) from (select c1 from ft4 where c1 betwee
 
 -- ORDER BY expression is part of the target list but not pushed down to
 -- foreign server.
+--Testcase 237:
 explain (verbose, costs off)
 select sum(c2) * (random() <= 1)::int as sum from ft1 order by 1;
                                    QUERY PLAN                                   
@@ -4268,6 +4505,7 @@ select sum(c2) * (random() <= 1)::int as sum from ft1 order by 1;
          InfluxDB query: SELECT sum("c2") FROM "T1"
 (6 rows)
 
+--Testcase 238:
 select sum(c2) * (random() <= 1)::int as sum from ft1 order by 1;
  sum  
 ------
@@ -4276,6 +4514,7 @@ select sum(c2) * (random() <= 1)::int as sum from ft1 order by 1;
 
 -- LATERAL join, with parameterization
 set enable_hashagg to false;
+--Testcase 239:
 explain (verbose, costs off)
 select c2, sum from "S 1"."T1" t1, lateral (select sum(t2.c1 + t1."C1") sum from ft2 t2 group by t2.c1) qry where t1.c2 * 2 = qry.sum and t1.c2 < 3 and t1."C1" < 100 order by 1;
                                            QUERY PLAN                                            
@@ -4302,6 +4541,7 @@ select c2, sum from "S 1"."T1" t1, lateral (select sum(t2.c1 + t1."C1") sum from
                                  InfluxDB query: SELECT "C1" FROM "T1"
 (20 rows)
 
+--Testcase 240:
 select c2, sum from "S 1"."T1" t1, lateral (select sum(t2.c1 + t1."C1") sum from ft2 t2 group by t2.c1) qry where t1.c2 * 2 = qry.sum and t1.c2 < 3 and t1."C1" < 100 order by 1;
  c2 | sum 
 ----+-----
@@ -4311,6 +4551,7 @@ select c2, sum from "S 1"."T1" t1, lateral (select sum(t2.c1 + t1."C1") sum from
 
 reset enable_hashagg;
 -- bug #15613: bad plan for foreign table scan with lateral reference
+--Testcase 241:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT ref_0.c2, subq_1.*
 FROM
@@ -4345,6 +4586,7 @@ ORDER BY ref_0."C1";
                      InfluxDB query: SELECT "c3" FROM "T1" WHERE (("c3" = '00001'))
 (18 rows)
 
+--Testcase 242:
 SELECT ref_0.c2, subq_1.*
 FROM
     "S 1"."T1" AS ref_0,
@@ -4370,6 +4612,7 @@ ORDER BY ref_0."C1";
 (9 rows)
 
 -- Check with placeHolderVars
+--Testcase 243:
 explain (verbose, costs off)
 select sum(q.a), count(q.b) from ft4 left join (select 13, avg(ft1.c1), sum(ft2.c1) from ft1 right join ft2 on (ft1.c1 = ft2.c1)) q(a, b, c) on (ft4.c1 <= q.b);
                                     QUERY PLAN                                     
@@ -4406,6 +4649,7 @@ select sum(q.a), count(q.b) from ft4 left join (select 13, avg(ft1.c1), sum(ft2.
                                              InfluxDB query: SELECT "C1" FROM "T1"
 (30 rows)
 
+--Testcase 244:
 select sum(q.a), count(q.b) from ft4 left join (select 13, avg(ft1.c1), sum(ft2.c1) from ft1 right join ft2 on (ft1.c1 = ft2.c1)) q(a, b, c) on (ft4.c1 <= q.b);
  sum | count 
 -----+-------
@@ -4414,6 +4658,7 @@ select sum(q.a), count(q.b) from ft4 left join (select 13, avg(ft1.c1), sum(ft2.
 
 -- Not supported cases
 -- Grouping sets
+--Testcase 245:
 explain (verbose, costs off)
 select c2, sum(c1) from ft1 where c2 < 3 group by rollup(c2) order by 1 nulls last;
                                   QUERY PLAN                                  
@@ -4430,6 +4675,7 @@ select c2, sum(c1) from ft1 where c2 < 3 group by rollup(c2) order by 1 nulls la
                InfluxDB query: SELECT "C1", "c2" FROM "T1" WHERE (("c2" < 3))
 (10 rows)
 
+--Testcase 246:
 select c2, sum(c1) from ft1 where c2 < 3 group by rollup(c2) order by 1 nulls last;
  c2 |  sum   
 ----+--------
@@ -4439,6 +4685,7 @@ select c2, sum(c1) from ft1 where c2 < 3 group by rollup(c2) order by 1 nulls la
     | 149800
 (4 rows)
 
+--Testcase 247:
 explain (verbose, costs off)
 select c2, sum(c1) from ft1 where c2 < 3 group by cube(c2) order by 1 nulls last;
                                   QUERY PLAN                                  
@@ -4455,6 +4702,7 @@ select c2, sum(c1) from ft1 where c2 < 3 group by cube(c2) order by 1 nulls last
                InfluxDB query: SELECT "C1", "c2" FROM "T1" WHERE (("c2" < 3))
 (10 rows)
 
+--Testcase 248:
 select c2, sum(c1) from ft1 where c2 < 3 group by cube(c2) order by 1 nulls last;
  c2 |  sum   
 ----+--------
@@ -4464,6 +4712,7 @@ select c2, sum(c1) from ft1 where c2 < 3 group by cube(c2) order by 1 nulls last
     | 149800
 (4 rows)
 
+--Testcase 249:
 explain (verbose, costs off)
 select c2, c6, sum(c1) from ft1 where c2 < 3 group by grouping sets(c2, c6) order by 1 nulls last, 2 nulls last;
                                      QUERY PLAN                                     
@@ -4480,6 +4729,7 @@ select c2, c6, sum(c1) from ft1 where c2 < 3 group by grouping sets(c2, c6) orde
                InfluxDB query: SELECT "C1", "c2", "c6" FROM "T1" WHERE (("c2" < 3))
 (10 rows)
 
+--Testcase 250:
 select c2, c6, sum(c1) from ft1 where c2 < 3 group by grouping sets(c2, c6) order by 1 nulls last, 2 nulls last;
  c2 | c6 |  sum  
 ----+----+-------
@@ -4491,6 +4741,7 @@ select c2, c6, sum(c1) from ft1 where c2 < 3 group by grouping sets(c2, c6) orde
     | 2  | 49700
 (6 rows)
 
+--Testcase 251:
 explain (verbose, costs off)
 select c2, sum(c1), grouping(c2) from ft1 where c2 < 3 group by c2 order by 1 nulls last;
                                   QUERY PLAN                                  
@@ -4506,6 +4757,7 @@ select c2, sum(c1), grouping(c2) from ft1 where c2 < 3 group by c2 order by 1 nu
                InfluxDB query: SELECT "C1", "c2" FROM "T1" WHERE (("c2" < 3))
 (9 rows)
 
+--Testcase 252:
 select c2, sum(c1), grouping(c2) from ft1 where c2 < 3 group by c2 order by 1 nulls last;
  c2 |  sum  | grouping 
 ----+-------+----------
@@ -4515,6 +4767,7 @@ select c2, sum(c1), grouping(c2) from ft1 where c2 < 3 group by c2 order by 1 nu
 (3 rows)
 
 -- DISTINCT itself is not pushed down, whereas underneath aggregate is pushed
+--Testcase 253:
 explain (verbose, costs off)
 select distinct sum(c1)/1000 s from ft2 where c2 < 6 group by c2 order by 1;
                                      QUERY PLAN                                     
@@ -4532,6 +4785,7 @@ select distinct sum(c1)/1000 s from ft2 where c2 < 6 group by c2 order by 1;
                      InfluxDB query: SELECT "C1", "c2" FROM "T1" WHERE (("c2" < 6))
 (11 rows)
 
+--Testcase 254:
 select distinct sum(c1)/1000 s from ft2 where c2 < 6 group by c2 order by 1;
  s  
 ----
@@ -4540,6 +4794,7 @@ select distinct sum(c1)/1000 s from ft2 where c2 < 6 group by c2 order by 1;
 (2 rows)
 
 -- WindowAgg
+--Testcase 255:
 explain (verbose, costs off)
 select c2, sum(c2), count(c2) over (partition by c2%2) from ft2 where c2 < 10 group by c2 order by 1;
                                      QUERY PLAN                                      
@@ -4560,6 +4815,7 @@ select c2, sum(c2), count(c2) over (partition by c2%2) from ft2 where c2 < 10 gr
                            InfluxDB query: SELECT "c2" FROM "T1" WHERE (("c2" < 10))
 (14 rows)
 
+--Testcase 256:
 select c2, sum(c2), count(c2) over (partition by c2%2) from ft2 where c2 < 10 group by c2 order by 1;
  c2 | sum | count 
 ----+-----+-------
@@ -4575,6 +4831,7 @@ select c2, sum(c2), count(c2) over (partition by c2%2) from ft2 where c2 < 10 gr
   9 | 900 |     5
 (10 rows)
 
+--Testcase 257:
 explain (verbose, costs off)
 select c2, array_agg(c2) over (partition by c2%2 order by c2 desc) from ft1 where c2 < 10 group by c2 order by 1;
                                      QUERY PLAN                                      
@@ -4595,6 +4852,7 @@ select c2, array_agg(c2) over (partition by c2%2 order by c2 desc) from ft1 wher
                            InfluxDB query: SELECT "c2" FROM "T1" WHERE (("c2" < 10))
 (14 rows)
 
+--Testcase 258:
 select c2, array_agg(c2) over (partition by c2%2 order by c2 desc) from ft1 where c2 < 10 group by c2 order by 1;
  c2 |  array_agg  
 ----+-------------
@@ -4610,6 +4868,7 @@ select c2, array_agg(c2) over (partition by c2%2 order by c2 desc) from ft1 wher
   9 | {9}
 (10 rows)
 
+--Testcase 259:
 explain (verbose, costs off)
 select c2, array_agg(c2) over (partition by c2%2 order by c2 range between current row and unbounded following) from ft1 where c2 < 10 group by c2 order by 1;
                                      QUERY PLAN                                      
@@ -4630,6 +4889,7 @@ select c2, array_agg(c2) over (partition by c2%2 order by c2 range between curre
                            InfluxDB query: SELECT "c2" FROM "T1" WHERE (("c2" < 10))
 (14 rows)
 
+--Testcase 260:
 select c2, array_agg(c2) over (partition by c2%2 order by c2 range between current row and unbounded following) from ft1 where c2 < 10 group by c2 order by 1;
  c2 |  array_agg  
 ----+-------------
@@ -4649,7 +4909,9 @@ select c2, array_agg(c2) over (partition by c2%2 order by c2 range between curre
 -- parameterized queries
 -- ===================================================================
 -- simple join
+--Testcase 261:
 PREPARE st1(int, int) AS SELECT t1.c3, t2.c3 FROM ft1 t1, ft2 t2 WHERE t1.c1 = $1 AND t2.c1 = $2;
+--Testcase 262:
 EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st1(1, 2);
                                QUERY PLAN                               
 ------------------------------------------------------------------------
@@ -4665,12 +4927,14 @@ EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st1(1, 2);
                InfluxDB query: SELECT "c3" FROM "T1" WHERE (("C1" = 2))
 (10 rows)
 
+--Testcase 263:
 EXECUTE st1(1, 1);
   c3   |  c3   
 -------+-------
  00001 | 00001
 (1 row)
 
+--Testcase 264:
 EXECUTE st1(101, 101);
   c3   |  c3   
 -------+-------
@@ -4678,7 +4942,9 @@ EXECUTE st1(101, 101);
 (1 row)
 
 -- subquery using stable function (can't be sent to remote)
+--Testcase 265:
 PREPARE st2(int) AS SELECT * FROM ft1 t1 WHERE t1.c1 < $2 AND t1.c3 IN (SELECT c3 FROM ft2 t2 WHERE c1 > $1 AND date(time) = '1970-01-17'::date) ORDER BY c1;
+--Testcase 266:
 EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st2(10, 20);
                                               QUERY PLAN                                               
 -------------------------------------------------------------------------------------------------------
@@ -4699,19 +4965,23 @@ EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st2(10, 20);
                      InfluxDB query: SELECT "c3" FROM "T1" WHERE (("C1" > 10))
 (15 rows)
 
+--Testcase 267:
 EXECUTE st2(10, 20);
            time           | c1 | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+----+----+-------+----+------------+-----
  Sat Jan 17 00:00:00 1970 | 16 |  6 | 00016 | 6  | 6          | foo
 (1 row)
 
+--Testcase 268:
 EXECUTE st2(101, 121);
  time | c1 | c2 | c3 | c6 | c7 | c8 
 ------+----+----+----+----+----+----
 (0 rows)
 
 -- subquery using immutable function (can be sent to remote)
+--Testcase 269:
 PREPARE st3(int) AS SELECT * FROM ft1 t1 WHERE t1.c1 < $2 AND t1.c3 IN (SELECT c3 FROM ft2 t2 WHERE c1 > $1 AND date(time) = '1970-01-17'::date) ORDER BY c1;
+--Testcase 270:
 EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st3(10, 20);
                                               QUERY PLAN                                               
 -------------------------------------------------------------------------------------------------------
@@ -4732,19 +5002,23 @@ EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st3(10, 20);
                      InfluxDB query: SELECT "c3" FROM "T1" WHERE (("C1" > 10))
 (15 rows)
 
+--Testcase 271:
 EXECUTE st3(10, 20);
            time           | c1 | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+----+----+-------+----+------------+-----
  Sat Jan 17 00:00:00 1970 | 16 |  6 | 00016 | 6  | 6          | foo
 (1 row)
 
+--Testcase 272:
 EXECUTE st3(20, 30);
  time | c1 | c2 | c3 | c6 | c7 | c8 
 ------+----+----+----+----+----+----
 (0 rows)
 
 -- custom plan should be chosen initially
+--Testcase 273:
 PREPARE st4(int) AS SELECT * FROM ft1 t1 WHERE t1.c1 = $1;
+--Testcase 274:
 EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st4(1);
                                         QUERY PLAN                                        
 ------------------------------------------------------------------------------------------
@@ -4753,6 +5027,7 @@ EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st4(1);
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1" WHERE (("C1" = 1))
 (3 rows)
 
+--Testcase 275:
 EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st4(1);
                                         QUERY PLAN                                        
 ------------------------------------------------------------------------------------------
@@ -4761,6 +5036,7 @@ EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st4(1);
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1" WHERE (("C1" = 1))
 (3 rows)
 
+--Testcase 276:
 EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st4(1);
                                         QUERY PLAN                                        
 ------------------------------------------------------------------------------------------
@@ -4769,6 +5045,7 @@ EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st4(1);
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1" WHERE (("C1" = 1))
 (3 rows)
 
+--Testcase 277:
 EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st4(1);
                                         QUERY PLAN                                        
 ------------------------------------------------------------------------------------------
@@ -4777,6 +5054,7 @@ EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st4(1);
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1" WHERE (("C1" = 1))
 (3 rows)
 
+--Testcase 278:
 EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st4(1);
                                         QUERY PLAN                                        
 ------------------------------------------------------------------------------------------
@@ -4786,6 +5064,7 @@ EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st4(1);
 (3 rows)
 
 -- once we try it enough times, should switch to generic plan
+--Testcase 279:
 EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st4(1);
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
@@ -4795,7 +5074,9 @@ EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st4(1);
 (3 rows)
 
 -- value of $1 should not be sent to remote
+--Testcase 280:
 PREPARE st5(text,int) AS SELECT * FROM ft1 t1 WHERE c8 = $1 and c1 = $2;
+--Testcase 281:
 EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st5('foo', 1);
                                                   QUERY PLAN                                                   
 ---------------------------------------------------------------------------------------------------------------
@@ -4804,6 +5085,7 @@ EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st5('foo', 1);
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1" WHERE (("c8" = 'foo')) AND (("C1" = 1))
 (3 rows)
 
+--Testcase 282:
 EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st5('foo', 1);
                                                   QUERY PLAN                                                   
 ---------------------------------------------------------------------------------------------------------------
@@ -4812,6 +5094,7 @@ EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st5('foo', 1);
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1" WHERE (("c8" = 'foo')) AND (("C1" = 1))
 (3 rows)
 
+--Testcase 283:
 EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st5('foo', 1);
                                                   QUERY PLAN                                                   
 ---------------------------------------------------------------------------------------------------------------
@@ -4820,6 +5103,7 @@ EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st5('foo', 1);
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1" WHERE (("c8" = 'foo')) AND (("C1" = 1))
 (3 rows)
 
+--Testcase 284:
 EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st5('foo', 1);
                                                   QUERY PLAN                                                   
 ---------------------------------------------------------------------------------------------------------------
@@ -4828,6 +5112,7 @@ EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st5('foo', 1);
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1" WHERE (("c8" = 'foo')) AND (("C1" = 1))
 (3 rows)
 
+--Testcase 285:
 EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st5('foo', 1);
                                                   QUERY PLAN                                                   
 ---------------------------------------------------------------------------------------------------------------
@@ -4836,6 +5121,7 @@ EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st5('foo', 1);
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1" WHERE (("c8" = 'foo')) AND (("C1" = 1))
 (3 rows)
 
+--Testcase 286:
 EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st5('foo', 1);
                                                  QUERY PLAN                                                  
 -------------------------------------------------------------------------------------------------------------
@@ -4844,6 +5130,7 @@ EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st5('foo', 1);
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1" WHERE (("c8" = $1)) AND (("C1" = $2))
 (3 rows)
 
+--Testcase 287:
 EXECUTE st5('foo', 1);
            time           | c1 | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+----+----+-------+----+------------+-----
@@ -4851,7 +5138,9 @@ EXECUTE st5('foo', 1);
 (1 row)
 
 -- altering FDW options requires replanning
+--Testcase 288:
 PREPARE st6 AS SELECT * FROM ft1 t1 WHERE t1.c1 = t1.c2;
+--Testcase 289:
 EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st6;
                                          QUERY PLAN                                          
 ---------------------------------------------------------------------------------------------
@@ -4865,6 +5154,7 @@ EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st6;
 -- EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st7;
 ALTER TABLE "S 1"."T1" RENAME TO "T0";
 ALTER FOREIGN TABLE ft1 OPTIONS (SET table 'T0');
+--Testcase 290:
 EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st6;
                                          QUERY PLAN                                          
 ---------------------------------------------------------------------------------------------
@@ -4873,6 +5163,7 @@ EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st6;
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T0" WHERE (("C1" = "c2"))
 (3 rows)
 
+--Testcase 291:
 EXECUTE st6;
  time | c1 | c2 | c3 | c6 | c7 | c8 
 ------+----+----+----+----+----+----
@@ -4881,7 +5172,9 @@ EXECUTE st6;
 -- EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st7;
 ALTER TABLE "S 1"."T0" RENAME TO "T1";
 ALTER FOREIGN TABLE ft1 OPTIONS (SET table 'T1');
+--Testcase 292:
 PREPARE st8 AS SELECT count(c3) FROM ft1 t1 WHERE t1.c1 === t1.c2;
+--Testcase 293:
 EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st8;
                         QUERY PLAN                         
 -----------------------------------------------------------
@@ -4908,6 +5201,7 @@ DEALLOCATE st6;
 -- DEALLOCATE st7;
 DEALLOCATE st8;
 -- System columns, except ctid and oid, should not be sent to remote
+--Testcase 294:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT * FROM ft1 t1 WHERE t1.tableoid = 'pg_class'::regclass LIMIT 1;
                                  QUERY PLAN                                  
@@ -4920,12 +5214,14 @@ SELECT * FROM ft1 t1 WHERE t1.tableoid = 'pg_class'::regclass LIMIT 1;
          InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (6 rows)
 
+--Testcase 295:
 SELECT * FROM ft1 t1 WHERE t1.tableoid = 'ft1'::regclass LIMIT 1;
            time           | c1 | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+----+----+-------+----+------------+-----
  Fri Jan 02 00:00:00 1970 |  1 |  1 | 00001 | 1  | 1          | foo
 (1 row)
 
+--Testcase 296:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT tableoid::regclass, * FROM ft1 t1 LIMIT 1;
                                  QUERY PLAN                                  
@@ -4937,12 +5233,14 @@ SELECT tableoid::regclass, * FROM ft1 t1 LIMIT 1;
          InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (5 rows)
 
+--Testcase 297:
 SELECT tableoid::regclass, * FROM ft1 t1 LIMIT 1;
  tableoid |           time           | c1 | c2 |  c3   | c6 |     c7     | c8  
 ----------+--------------------------+----+----+-------+----+------------+-----
  ft1      | Fri Jan 02 00:00:00 1970 |  1 |  1 | 00001 | 1  | 1          | foo
 (1 row)
 
+--Testcase 298:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT * FROM ft1 t1 WHERE t1.ctid = '(0,2)';
                               QUERY PLAN                               
@@ -4953,11 +5251,13 @@ SELECT * FROM ft1 t1 WHERE t1.ctid = '(0,2)';
    InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (4 rows)
 
+--Testcase 299:
 SELECT * FROM ft1 t1 WHERE t1.ctid = '(0,2)';
  time | c1 | c2 | c3 | c6 | c7 | c8 
 ------+----+----+----+----+----+----
 (0 rows)
 
+--Testcase 300:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT ctid, * FROM ft1 t1 LIMIT 1;
                                  QUERY PLAN                                  
@@ -4969,6 +5269,7 @@ SELECT ctid, * FROM ft1 t1 LIMIT 1;
          InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (5 rows)
 
+--Testcase 301:
 SELECT ctid, * FROM ft1 t1 LIMIT 1;
       ctid      |           time           | c1 | c2 |  c3   | c6 |     c7     | c8  
 ----------------+--------------------------+----+----+-------+----+------------+-----
@@ -4987,6 +5288,7 @@ BEGIN
     RETURN v_c1;
 END;
 $$ LANGUAGE plpgsql;
+--Testcase 302:
 SELECT f_test(100);
  f_test 
 --------
@@ -4998,15 +5300,20 @@ DROP FUNCTION f_test(int);
 -- conversion error
 -- ===================================================================
 ALTER FOREIGN TABLE ft1 ALTER COLUMN c8 TYPE int;
+--Testcase 303:
 SELECT * FROM ft1 WHERE c1 = 1;  -- ERROR
 ERROR:  invalid input syntax for type integer: "foo"
+--Testcase 304:
 SELECT  ft1.c1,  ft2.c2, ft1.c8 FROM ft1, ft2 WHERE ft1.c1 = ft2.c1 AND ft1.c1 = 1; -- ERROR
 ERROR:  invalid input syntax for type integer: "foo"
+--Testcase 305:
 SELECT  ft1.c1,  ft2.c2, ft1 FROM ft1, ft2 WHERE ft1.c1 = ft2.c1 AND ft1.c1 = 1; -- ERROR
 ERROR:  invalid input syntax for type integer: "foo"
+--Testcase 306:
 SELECT sum(c2), array_agg(c8) FROM ft1 GROUP BY c8; -- ERROR
 ERROR:  invalid input syntax for type integer: "foo"
 ALTER FOREIGN TABLE ft1 ALTER COLUMN c8 TYPE text;
+--Testcase 307:
 SELECT * FROM ft1 WHERE c1 = 1;  -- Should work
            time           | c1 | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+----+----+-------+----+------------+-----
@@ -5019,6 +5326,7 @@ SELECT * FROM ft1 WHERE c1 = 1;  -- Should work
 -- ===================================================================
 BEGIN;
 DECLARE c CURSOR FOR SELECT * FROM ft1 ORDER BY c1;
+--Testcase 308:
 FETCH c;
            time           | c1 | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+----+----+-------+----+------------+-----
@@ -5031,6 +5339,7 @@ ERROR:  syntax error at or near "ERROR"
 LINE 1: ERROR OUT;
         ^
 ROLLBACK TO s;
+--Testcase 309:
 FETCH c;
            time           | c1 | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+----+----+-------+----+------------+-----
@@ -5038,6 +5347,7 @@ FETCH c;
 (1 row)
 
 SAVEPOINT s;
+--Testcase 310:
 SELECT * FROM ft1 WHERE 1 / (c1 - 1) > 0;  -- ERROR
            time           | c1 | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+----+----+-------+----+------------+-----
@@ -5045,12 +5355,14 @@ SELECT * FROM ft1 WHERE 1 / (c1 - 1) > 0;  -- ERROR
 (1 row)
 
 ROLLBACK TO s;
+--Testcase 311:
 FETCH c;
            time           | c1 | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+----+----+-------+----+------------+-----
  Sun Jan 04 00:00:00 1970 |  3 |  3 | 00003 | 3  | 3          | foo
 (1 row)
 
+--Testcase 312:
 SELECT * FROM ft1 ORDER BY c1 LIMIT 1;
            time           | c1 | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+----+----+-------+----+------------+-----
@@ -5065,6 +5377,7 @@ create table loct3 (f1 text collate "C" unique, f2 text, f3 varchar(10) unique);
 create foreign table ft3 (f1 text collate "C", f2 text, f3 varchar(10))
   server influxdb_svr options (table 'loct3');
 -- can be sent to remote
+--Testcase 313:
 explain (verbose, costs off) select * from ft3 where f1 = 'foo';
                                   QUERY PLAN                                   
 -------------------------------------------------------------------------------
@@ -5073,6 +5386,7 @@ explain (verbose, costs off) select * from ft3 where f1 = 'foo';
    InfluxDB query: SELECT "f1", "f2", "f3" FROM "loct3" WHERE (("f1" = 'foo'))
 (3 rows)
 
+--Testcase 314:
 explain (verbose, costs off) select * from ft3 where f1 COLLATE "C" = 'foo';
                                   QUERY PLAN                                   
 -------------------------------------------------------------------------------
@@ -5081,6 +5395,7 @@ explain (verbose, costs off) select * from ft3 where f1 COLLATE "C" = 'foo';
    InfluxDB query: SELECT "f1", "f2", "f3" FROM "loct3" WHERE (("f1" = 'foo'))
 (3 rows)
 
+--Testcase 315:
 explain (verbose, costs off) select * from ft3 where f2 = 'foo';
                                   QUERY PLAN                                   
 -------------------------------------------------------------------------------
@@ -5089,6 +5404,7 @@ explain (verbose, costs off) select * from ft3 where f2 = 'foo';
    InfluxDB query: SELECT "f1", "f2", "f3" FROM "loct3" WHERE (("f2" = 'foo'))
 (3 rows)
 
+--Testcase 316:
 explain (verbose, costs off) select * from ft3 where f3 = 'foo';
                                   QUERY PLAN                                   
 -------------------------------------------------------------------------------
@@ -5097,6 +5413,7 @@ explain (verbose, costs off) select * from ft3 where f3 = 'foo';
    InfluxDB query: SELECT "f1", "f2", "f3" FROM "loct3" WHERE (("f3" = 'foo'))
 (3 rows)
 
+--Testcase 317:
 explain (verbose, costs off) select * from ft3 f, loct3 l
   where f.f3 = l.f3 and l.f1 = 'foo';
                           QUERY PLAN                          
@@ -5113,6 +5430,7 @@ explain (verbose, costs off) select * from ft3 f, loct3 l
 (9 rows)
 
 -- can't be sent to remote
+--Testcase 318:
 explain (verbose, costs off) select * from ft3 where f1 COLLATE "POSIX" = 'foo';
                        QUERY PLAN                       
 --------------------------------------------------------
@@ -5122,6 +5440,7 @@ explain (verbose, costs off) select * from ft3 where f1 COLLATE "POSIX" = 'foo';
    InfluxDB query: SELECT "f1", "f2", "f3" FROM "loct3"
 (4 rows)
 
+--Testcase 319:
 explain (verbose, costs off) select * from ft3 where f1 = 'foo' COLLATE "C";
                        QUERY PLAN                       
 --------------------------------------------------------
@@ -5131,6 +5450,7 @@ explain (verbose, costs off) select * from ft3 where f1 = 'foo' COLLATE "C";
    InfluxDB query: SELECT "f1", "f2", "f3" FROM "loct3"
 (4 rows)
 
+--Testcase 320:
 explain (verbose, costs off) select * from ft3 where f2 COLLATE "C" = 'foo';
                        QUERY PLAN                       
 --------------------------------------------------------
@@ -5140,6 +5460,7 @@ explain (verbose, costs off) select * from ft3 where f2 COLLATE "C" = 'foo';
    InfluxDB query: SELECT "f1", "f2", "f3" FROM "loct3"
 (4 rows)
 
+--Testcase 321:
 explain (verbose, costs off) select * from ft3 where f2 = 'foo' COLLATE "C";
                        QUERY PLAN                       
 --------------------------------------------------------
@@ -5149,6 +5470,7 @@ explain (verbose, costs off) select * from ft3 where f2 = 'foo' COLLATE "C";
    InfluxDB query: SELECT "f1", "f2", "f3" FROM "loct3"
 (4 rows)
 
+--Testcase 322:
 explain (verbose, costs off) select * from ft3 f, loct3 l
   where f.f3 = l.f3 COLLATE "POSIX" and l.f1 = 'foo';
                           QUERY PLAN                          
@@ -5305,6 +5627,7 @@ explain (verbose, costs off) select * from ft3 f, loct3 l
 -- Above DMLs add data with c6 as NULL in ft1, so test ORDER BY NULLS LAST and NULLs
 -- FIRST behavior here.
 -- ORDER BY DESC NULLS LAST options
+--Testcase 323:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 ORDER BY c6 DESC NULLS LAST, c1 OFFSET 795 LIMIT 10;
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
@@ -5318,6 +5641,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 ORDER BY c6 DESC NULLS LAST, c1 O
                InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (8 rows)
 
+--Testcase 324:
 SELECT * FROM ft1 ORDER BY c6 DESC NULLS LAST, c1 OFFSET 795  LIMIT 10;
            time           | c1  | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+-----+----+-------+----+------------+-----
@@ -5334,6 +5658,7 @@ SELECT * FROM ft1 ORDER BY c6 DESC NULLS LAST, c1 OFFSET 795  LIMIT 10;
 (10 rows)
 
 -- ORDER BY DESC NULLS FIRST options
+--Testcase 325:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 ORDER BY c6 DESC NULLS FIRST, c1 OFFSET 15 LIMIT 10;
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
@@ -5347,6 +5672,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 ORDER BY c6 DESC NULLS FIRST, c1 
                InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (8 rows)
 
+--Testcase 326:
 SELECT * FROM ft1 ORDER BY c6 DESC NULLS FIRST, c1 OFFSET 15 LIMIT 10;
            time           | c1  | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+-----+----+-------+----+------------+-----
@@ -5363,6 +5689,7 @@ SELECT * FROM ft1 ORDER BY c6 DESC NULLS FIRST, c1 OFFSET 15 LIMIT 10;
 (10 rows)
 
 -- ORDER BY ASC NULLS FIRST options
+--Testcase 327:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 ORDER BY c6 ASC NULLS FIRST, c1 OFFSET 15 LIMIT 10;
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
@@ -5376,6 +5703,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 ORDER BY c6 ASC NULLS FIRST, c1 O
                InfluxDB query: SELECT "C1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (8 rows)
 
+--Testcase 328:
 SELECT * FROM ft1 ORDER BY c6 ASC NULLS FIRST, c1 OFFSET 15 LIMIT 10;
            time           | c1  | c2 |  c3   | c6 |     c7     | c8  
 --------------------------+-----+----+-------+----+------------+-----
@@ -5396,6 +5724,7 @@ SELECT * FROM ft1 ORDER BY c6 ASC NULLS FIRST, c1 OFFSET 15 LIMIT 10;
 -- ===================================================================
 -- Consistent check constraints provide consistent results
 ALTER FOREIGN TABLE ft1 ADD CONSTRAINT ft1_c2positive CHECK (c2 >= 0);
+--Testcase 329:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT count(*) FROM ft1 WHERE c2 < 0;
                            QUERY PLAN                           
 ----------------------------------------------------------------
@@ -5404,12 +5733,14 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT count(*) FROM ft1 WHERE c2 < 0;
    InfluxDB query: SELECT count(*) FROM "T1" WHERE (("c2" < 0))
 (3 rows)
 
+--Testcase 330:
 SELECT count(*) FROM ft1 WHERE c2 < 0;
  count 
 -------
 (0 rows)
 
 SET constraint_exclusion = 'on';
+--Testcase 331:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT count(*) FROM ft1 WHERE c2 < 0;
            QUERY PLAN           
 --------------------------------
@@ -5419,6 +5750,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT count(*) FROM ft1 WHERE c2 < 0;
          One-Time Filter: false
 (4 rows)
 
+--Testcase 332:
 SELECT count(*) FROM ft1 WHERE c2 < 0;
  count 
 -------
@@ -5432,6 +5764,7 @@ RESET constraint_exclusion;
 ALTER FOREIGN TABLE ft1 DROP CONSTRAINT ft1_c2positive;
 -- But inconsistent check constraints provide inconsistent results
 ALTER FOREIGN TABLE ft1 ADD CONSTRAINT ft1_c2negative CHECK (c2 < 0);
+--Testcase 333:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT count(*) FROM ft1 WHERE c2 >= 0;
                            QUERY PLAN                            
 -----------------------------------------------------------------
@@ -5440,6 +5773,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT count(*) FROM ft1 WHERE c2 >= 0;
    InfluxDB query: SELECT count(*) FROM "T1" WHERE (("c2" >= 0))
 (3 rows)
 
+--Testcase 334:
 SELECT count(*) FROM ft1 WHERE c2 >= 0;
  count 
 -------
@@ -5447,6 +5781,7 @@ SELECT count(*) FROM ft1 WHERE c2 >= 0;
 (1 row)
 
 SET constraint_exclusion = 'on';
+--Testcase 335:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT count(*) FROM ft1 WHERE c2 >= 0;
            QUERY PLAN           
 --------------------------------
@@ -5456,6 +5791,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT count(*) FROM ft1 WHERE c2 >= 0;
          One-Time Filter: false
 (4 rows)
 
+--Testcase 336:
 SELECT count(*) FROM ft1 WHERE c2 >= 0;
  count 
 -------
@@ -5497,6 +5833,7 @@ View definition:
   WHERE base_tbl.a < base_tbl.b;
 Options: check_option=cascaded
 
+--Testcase 337:
 EXPLAIN (VERBOSE, COSTS OFF)
 INSERT INTO rw_view VALUES (0, 5);
         QUERY PLAN         
@@ -5506,9 +5843,11 @@ INSERT INTO rw_view VALUES (0, 5);
          Output: 0, 5
 (3 rows)
 
+--Testcase 338:
 INSERT INTO rw_view VALUES (0, 5); -- should fail
 ERROR:  new row violates check option for view "rw_view"
 DETAIL:  Failing row contains (10, 5).
+--Testcase 339:
 EXPLAIN (VERBOSE, COSTS OFF)
 INSERT INTO rw_view VALUES (0, 15);
         QUERY PLAN         
@@ -5518,13 +5857,16 @@ INSERT INTO rw_view VALUES (0, 15);
          Output: 0, 15
 (3 rows)
 
+--Testcase 340:
 INSERT INTO rw_view VALUES (0, 15); -- ok
+--Testcase 341:
 SELECT * FROM base_tbl;
  a  | b  
 ----+----
  10 | 15
 (1 row)
 
+--Testcase 342:
 EXPLAIN (VERBOSE, COSTS OFF)
 UPDATE rw_view SET b = b + 5;
                          QUERY PLAN                          
@@ -5535,9 +5877,11 @@ UPDATE rw_view SET b = b + 5;
          Filter: (base_tbl.a < base_tbl.b)
 (4 rows)
 
+--Testcase 343:
 UPDATE rw_view SET b = b + 5; -- should fail
 ERROR:  new row violates check option for view "rw_view"
 DETAIL:  Failing row contains (20, 20).
+--Testcase 344:
 EXPLAIN (VERBOSE, COSTS OFF)
 UPDATE rw_view SET b = b + 15;
                           QUERY PLAN                          
@@ -5548,7 +5892,9 @@ UPDATE rw_view SET b = b + 15;
          Filter: (base_tbl.a < base_tbl.b)
 (4 rows)
 
+--Testcase 345:
 UPDATE rw_view SET b = b + 15; -- ok
+--Testcase 346:
 SELECT * FROM base_tbl;
  a  | b  
 ----+----
@@ -5584,6 +5930,7 @@ View definition:
   WHERE parent_tbl.a < parent_tbl.b;
 Options: check_option=cascaded
 
+--Testcase 347:
 EXPLAIN (VERBOSE, COSTS OFF)
 INSERT INTO rw_view VALUES (0, 5);
          QUERY PLAN          
@@ -5593,9 +5940,11 @@ INSERT INTO rw_view VALUES (0, 5);
          Output: 0, 5
 (3 rows)
 
+--Testcase 348:
 INSERT INTO rw_view VALUES (0, 5); -- should fail
 ERROR:  new row violates check option for view "rw_view"
 DETAIL:  Failing row contains (10, 5).
+--Testcase 349:
 EXPLAIN (VERBOSE, COSTS OFF)
 INSERT INTO rw_view VALUES (0, 15);
          QUERY PLAN          
@@ -5605,13 +5954,16 @@ INSERT INTO rw_view VALUES (0, 15);
          Output: 0, 15
 (3 rows)
 
+--Testcase 350:
 INSERT INTO rw_view VALUES (0, 15); -- ok
+--Testcase 351:
 SELECT * FROM child_tbl;
  a  | b  
 ----+----
  10 | 15
 (1 row)
 
+--Testcase 352:
 EXPLAIN (VERBOSE, COSTS OFF)
 UPDATE rw_view SET b = b + 5;
                            QUERY PLAN                           
@@ -5623,9 +5975,11 @@ UPDATE rw_view SET b = b + 5;
          Filter: (child_tbl.a < child_tbl.b)
 (5 rows)
 
+--Testcase 353:
 UPDATE rw_view SET b = b + 5; -- should fail
 ERROR:  new row violates check option for view "rw_view"
 DETAIL:  Failing row contains (20, 20).
+--Testcase 354:
 EXPLAIN (VERBOSE, COSTS OFF)
 UPDATE rw_view SET b = b + 15;
                            QUERY PLAN                            
@@ -5637,7 +5991,9 @@ UPDATE rw_view SET b = b + 15;
          Filter: (child_tbl.a < child_tbl.b)
 (5 rows)
 
+--Testcase 355:
 UPDATE rw_view SET b = b + 15; -- ok
+--Testcase 356:
 SELECT * FROM child_tbl;
  a  | b  
 ----+----
@@ -5656,14 +6012,20 @@ create table loc1 (f1 serial, f2 text);
 alter table loc1 set (autovacuum_enabled = 'false');
 --create foreign table rem1 (f1 serial, f2 text)
 --  server influxdb_svr options(table 'loc1');
+--Testcase 357:
 select pg_catalog.setval('rem1_f1_seq', 10, false);
 ERROR:  relation "rem1_f1_seq" does not exist
 LINE 1: select pg_catalog.setval('rem1_f1_seq', 10, false);
                                  ^
+--Testcase 358:
 insert into loc1(f2) values('hi');
+--Testcase 359:
 insert into loc1(f2) values('hi remote');
+--Testcase 360:
 insert into loc1(f2) values('bye');
+--Testcase 361:
 insert into loc1(f2) values('bye remote');
+--Testcase 362:
 select * from loc1;
  f1 |     f2     
 ----+------------
@@ -5683,8 +6045,11 @@ alter table gloc1 set (autovacuum_enabled = 'false');
 --  a int,
 --  b int generated always as (a * 2) stored)
 --  server influxdb_svr options(table 'gloc1');
+--Testcase 363:
 insert into gloc1 (a) values (1), (2);
+--Testcase 364:
 update gloc1 set a = 22 where a = 2;
+--Testcase 365:
 select * from gloc1;
  a  | b  
 ----+----
@@ -5754,6 +6119,7 @@ FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
 CREATE TRIGGER trig_row_after
 AFTER INSERT OR UPDATE OR DELETE ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
+--Testcase 366:
 delete from loc1;
 NOTICE:  trig_row_before(23, skidoo) BEFORE ROW DELETE ON loc1
 NOTICE:  OLD: (1,hi)
@@ -5771,16 +6137,19 @@ NOTICE:  trig_row_after(23, skidoo) AFTER ROW DELETE ON loc1
 NOTICE:  OLD: (3,bye)
 NOTICE:  trig_row_after(23, skidoo) AFTER ROW DELETE ON loc1
 NOTICE:  OLD: (4,"bye remote")
+--Testcase 367:
 insert into loc1 values(1,'insert');
 NOTICE:  trig_row_before(23, skidoo) BEFORE ROW INSERT ON loc1
 NOTICE:  NEW: (1,insert)
 NOTICE:  trig_row_after(23, skidoo) AFTER ROW INSERT ON loc1
 NOTICE:  NEW: (1,insert)
+--Testcase 368:
 update loc1 set f2  = 'update' where f1 = 1;
 NOTICE:  trig_row_before(23, skidoo) BEFORE ROW UPDATE ON loc1
 NOTICE:  OLD: (1,insert),NEW: (1,update)
 NOTICE:  trig_row_after(23, skidoo) AFTER ROW UPDATE ON loc1
 NOTICE:  OLD: (1,insert),NEW: (1,update)
+--Testcase 369:
 update loc1 set f2 = f2 || f2;
 NOTICE:  trig_row_before(23, skidoo) BEFORE ROW UPDATE ON loc1
 NOTICE:  OLD: (1,update),NEW: (1,updateupdate)
@@ -5793,27 +6162,34 @@ DROP TRIGGER trig_stmt_before ON loc1;
 ERROR:  trigger "trig_stmt_before" for table "loc1" does not exist
 DROP TRIGGER trig_stmt_after ON loc1;
 ERROR:  trigger "trig_stmt_after" for table "loc1" does not exist
+--Testcase 370:
 DELETE from loc1;
 -- Test WHEN conditions
 CREATE TRIGGER trig_row_before_insupd
 BEFORE INSERT OR UPDATE ON loc1
 FOR EACH ROW
 WHEN (NEW.f2 like '%update%')
+--Testcase 371:
 EXECUTE PROCEDURE trigger_data(23,'skidoo');
 CREATE TRIGGER trig_row_after_insupd
 AFTER INSERT OR UPDATE ON loc1
 FOR EACH ROW
 WHEN (NEW.f2 like '%update%')
+--Testcase 372:
 EXECUTE PROCEDURE trigger_data(23,'skidoo');
 -- Insert or update not matching: nothing happens
+--Testcase 373:
 INSERT INTO loc1 values(1, 'insert');
+--Testcase 374:
 UPDATE loc1 set f2 = 'test';
 -- Insert or update matching: triggers are fired
+--Testcase 375:
 INSERT INTO loc1 values(2, 'update');
 NOTICE:  trig_row_before_insupd(23, skidoo) BEFORE ROW INSERT ON loc1
 NOTICE:  NEW: (2,update)
 NOTICE:  trig_row_after_insupd(23, skidoo) AFTER ROW INSERT ON loc1
 NOTICE:  NEW: (2,update)
+--Testcase 376:
 UPDATE loc1 set f2 = 'update update' where f1 = '2';
 NOTICE:  trig_row_before_insupd(23, skidoo) BEFORE ROW UPDATE ON loc1
 NOTICE:  OLD: (2,update),NEW: (2,"update update")
@@ -5823,13 +6199,16 @@ CREATE TRIGGER trig_row_before_delete
 BEFORE DELETE ON loc1
 FOR EACH ROW
 WHEN (OLD.f2 like '%update%')
+--Testcase 377:
 EXECUTE PROCEDURE trigger_data(23,'skidoo');
 CREATE TRIGGER trig_row_after_delete
 AFTER DELETE ON loc1
 FOR EACH ROW
 WHEN (OLD.f2 like '%update%')
+--Testcase 378:
 EXECUTE PROCEDURE trigger_data(23,'skidoo');
 -- Trigger is fired for f1=2, not for f1=1
+--Testcase 379:
 DELETE FROM loc1;
 NOTICE:  trig_row_before_delete(23, skidoo) BEFORE ROW DELETE ON loc1
 NOTICE:  OLD: (2,"update update")
@@ -5851,19 +6230,23 @@ CREATE TRIGGER trig_row_before_insupd
 BEFORE INSERT OR UPDATE ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trig_row_before_insupdate();
 -- The new values should have 'triggered' appended
+--Testcase 380:
 INSERT INTO loc1 values(1, 'insert');
+--Testcase 381:
 SELECT * from loc1;
  f1 |         f2         
 ----+--------------------
   1 | insert triggered !
 (1 row)
 
+--Testcase 382:
 INSERT INTO loc1 values(2, 'insert') RETURNING f2;
          f2         
 --------------------
  insert triggered !
 (1 row)
 
+--Testcase 383:
 SELECT * from loc1;
  f1 |         f2         
 ----+--------------------
@@ -5871,7 +6254,9 @@ SELECT * from loc1;
   2 | insert triggered !
 (2 rows)
 
+--Testcase 384:
 UPDATE loc1 set f2 = '';
+--Testcase 385:
 SELECT * from loc1;
  f1 |      f2      
 ----+--------------
@@ -5879,6 +6264,7 @@ SELECT * from loc1;
   2 |  triggered !
 (2 rows)
 
+--Testcase 386:
 UPDATE loc1 set f2 = 'skidoo' RETURNING f2;
          f2         
 --------------------
@@ -5886,6 +6272,7 @@ UPDATE loc1 set f2 = 'skidoo' RETURNING f2;
  skidoo triggered !
 (2 rows)
 
+--Testcase 387:
 SELECT * from loc1;
  f1 |         f2         
 ----+--------------------
@@ -5893,6 +6280,7 @@ SELECT * from loc1;
   2 | skidoo triggered !
 (2 rows)
 
+--Testcase 388:
 EXPLAIN (verbose, costs off)
 UPDATE loc1 set f1 = 10;          -- all columns should be transmitted
           QUERY PLAN           
@@ -5902,7 +6290,9 @@ UPDATE loc1 set f1 = 10;          -- all columns should be transmitted
          Output: 10, f2, ctid
 (3 rows)
 
+--Testcase 389:
 UPDATE loc1 set f1 = 10;
+--Testcase 390:
 SELECT * from loc1;
  f1 |               f2               
 ----+--------------------------------
@@ -5910,25 +6300,30 @@ SELECT * from loc1;
  10 | skidoo triggered ! triggered !
 (2 rows)
 
+--Testcase 391:
 DELETE FROM loc1;
 -- Add a second trigger, to check that the changes are propagated correctly
 -- from trigger to trigger
 CREATE TRIGGER trig_row_before_insupd2
 BEFORE INSERT OR UPDATE ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trig_row_before_insupdate();
+--Testcase 392:
 INSERT INTO loc1 values(1, 'insert');
+--Testcase 393:
 SELECT * from loc1;
  f1 |               f2               
 ----+--------------------------------
   1 | insert triggered ! triggered !
 (1 row)
 
+--Testcase 394:
 INSERT INTO loc1 values(2, 'insert') RETURNING f2;
                f2               
 --------------------------------
  insert triggered ! triggered !
 (1 row)
 
+--Testcase 395:
 SELECT * from loc1;
  f1 |               f2               
 ----+--------------------------------
@@ -5936,7 +6331,9 @@ SELECT * from loc1;
   2 | insert triggered ! triggered !
 (2 rows)
 
+--Testcase 396:
 UPDATE loc1 set f2 = '';
+--Testcase 397:
 SELECT * from loc1;
  f1 |            f2            
 ----+--------------------------
@@ -5944,6 +6341,7 @@ SELECT * from loc1;
   2 |  triggered ! triggered !
 (2 rows)
 
+--Testcase 398:
 UPDATE loc1 set f2 = 'skidoo' RETURNING f2;
                f2               
 --------------------------------
@@ -5951,6 +6349,7 @@ UPDATE loc1 set f2 = 'skidoo' RETURNING f2;
  skidoo triggered ! triggered !
 (2 rows)
 
+--Testcase 399:
 SELECT * from loc1;
  f1 |               f2               
 ----+--------------------------------
@@ -5960,7 +6359,9 @@ SELECT * from loc1;
 
 DROP TRIGGER trig_row_before_insupd ON loc1;
 DROP TRIGGER trig_row_before_insupd2 ON loc1;
+--Testcase 400:
 DELETE from loc1;
+--Testcase 401:
 INSERT INTO loc1 VALUES (1, 'test');
 -- Test with a trigger returning NULL
 CREATE FUNCTION trig_null() RETURNS TRIGGER AS $$
@@ -5972,21 +6373,27 @@ CREATE TRIGGER trig_null
 BEFORE INSERT OR UPDATE OR DELETE ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trig_null();
 -- Nothing should have changed.
+--Testcase 402:
 INSERT INTO loc1 VALUES (2, 'test2');
+--Testcase 403:
 SELECT * from loc1;
  f1 |  f2  
 ----+------
   1 | test
 (1 row)
 
+--Testcase 404:
 UPDATE loc1 SET f2 = 'test2';
+--Testcase 405:
 SELECT * from loc1;
  f1 |  f2  
 ----+------
   1 | test
 (1 row)
 
+--Testcase 406:
 DELETE from loc1;
+--Testcase 407:
 SELECT * from loc1;
  f1 |  f2  
 ----+------
@@ -5994,6 +6401,7 @@ SELECT * from loc1;
 (1 row)
 
 DROP TRIGGER trig_null ON loc1;
+--Testcase 408:
 DELETE from loc1;
 -- Test a combination of local and remote triggers
 CREATE TRIGGER trig_row_before
@@ -6004,17 +6412,20 @@ AFTER INSERT OR UPDATE OR DELETE ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
 CREATE TRIGGER trig_local_before BEFORE INSERT OR UPDATE ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trig_row_before_insupdate();
+--Testcase 409:
 INSERT INTO loc1(f2) VALUES ('test');
 NOTICE:  trig_row_before(23, skidoo) BEFORE ROW INSERT ON loc1
 NOTICE:  NEW: (5,"test triggered !")
 NOTICE:  trig_row_after(23, skidoo) AFTER ROW INSERT ON loc1
 NOTICE:  NEW: (5,"test triggered !")
+--Testcase 410:
 UPDATE loc1 SET f2 = 'testo';
 NOTICE:  trig_row_before(23, skidoo) BEFORE ROW UPDATE ON loc1
 NOTICE:  OLD: (5,"test triggered !"),NEW: (5,"testo triggered !")
 NOTICE:  trig_row_after(23, skidoo) AFTER ROW UPDATE ON loc1
 NOTICE:  OLD: (5,"test triggered !"),NEW: (5,"testo triggered !")
 -- Test returning a system attribute
+--Testcase 411:
 INSERT INTO loc1(f2) VALUES ('test') RETURNING ctid;
 NOTICE:  trig_row_before(23, skidoo) BEFORE ROW INSERT ON loc1
 NOTICE:  NEW: (6,"test triggered !")
@@ -6034,6 +6445,7 @@ DROP TRIGGER trig_local_before ON loc1;
 CREATE TRIGGER trig_stmt_before
 	BEFORE DELETE OR INSERT OR UPDATE ON loc1
 	FOR EACH STATEMENT EXECUTE PROCEDURE trigger_func();
+--Testcase 412:
 EXPLAIN (verbose, costs off)
 UPDATE loc1 set f2 = '';          -- can be pushed down
              QUERY PLAN             
@@ -6043,6 +6455,7 @@ UPDATE loc1 set f2 = '';          -- can be pushed down
          Output: f1, ''::text, ctid
 (3 rows)
 
+--Testcase 413:
 EXPLAIN (verbose, costs off)
 DELETE FROM loc1;                 -- can be pushed down
           QUERY PLAN           
@@ -6056,6 +6469,7 @@ DROP TRIGGER trig_stmt_before ON loc1;
 CREATE TRIGGER trig_stmt_after
 	AFTER DELETE OR INSERT OR UPDATE ON loc1
 	FOR EACH STATEMENT EXECUTE PROCEDURE trigger_func();
+--Testcase 414:
 EXPLAIN (verbose, costs off)
 UPDATE loc1 set f2 = '';          -- can be pushed down
              QUERY PLAN             
@@ -6065,6 +6479,7 @@ UPDATE loc1 set f2 = '';          -- can be pushed down
          Output: f1, ''::text, ctid
 (3 rows)
 
+--Testcase 415:
 EXPLAIN (verbose, costs off)
 DELETE FROM loc1;                 -- can be pushed down
           QUERY PLAN           
@@ -6079,6 +6494,7 @@ DROP TRIGGER trig_stmt_after ON loc1;
 CREATE TRIGGER trig_row_before_insert
 BEFORE INSERT ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
+--Testcase 416:
 EXPLAIN (verbose, costs off)
 UPDATE loc1 set f2 = '';          -- can be pushed down
              QUERY PLAN             
@@ -6088,6 +6504,7 @@ UPDATE loc1 set f2 = '';          -- can be pushed down
          Output: f1, ''::text, ctid
 (3 rows)
 
+--Testcase 417:
 EXPLAIN (verbose, costs off)
 DELETE FROM loc1;                 -- can be pushed down
           QUERY PLAN           
@@ -6101,6 +6518,7 @@ DROP TRIGGER trig_row_before_insert ON loc1;
 CREATE TRIGGER trig_row_after_insert
 AFTER INSERT ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
+--Testcase 418:
 EXPLAIN (verbose, costs off)
 UPDATE loc1 set f2 = '';          -- can be pushed down
              QUERY PLAN             
@@ -6110,6 +6528,7 @@ UPDATE loc1 set f2 = '';          -- can be pushed down
          Output: f1, ''::text, ctid
 (3 rows)
 
+--Testcase 419:
 EXPLAIN (verbose, costs off)
 DELETE FROM loc1;                 -- can be pushed down
           QUERY PLAN           
@@ -6124,6 +6543,7 @@ DROP TRIGGER trig_row_after_insert ON loc1;
 CREATE TRIGGER trig_row_before_update
 BEFORE UPDATE ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
+--Testcase 420:
 EXPLAIN (verbose, costs off)
 UPDATE loc1 set f2 = '';          -- can't be pushed down
              QUERY PLAN             
@@ -6133,6 +6553,7 @@ UPDATE loc1 set f2 = '';          -- can't be pushed down
          Output: f1, ''::text, ctid
 (3 rows)
 
+--Testcase 421:
 EXPLAIN (verbose, costs off)
 DELETE FROM loc1;                 -- can be pushed down
           QUERY PLAN           
@@ -6146,6 +6567,7 @@ DROP TRIGGER trig_row_before_update ON loc1;
 CREATE TRIGGER trig_row_after_update
 AFTER UPDATE ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
+--Testcase 422:
 EXPLAIN (verbose, costs off)
 UPDATE loc1 set f2 = '';          -- can't be pushed down
              QUERY PLAN             
@@ -6155,6 +6577,7 @@ UPDATE loc1 set f2 = '';          -- can't be pushed down
          Output: f1, ''::text, ctid
 (3 rows)
 
+--Testcase 423:
 EXPLAIN (verbose, costs off)
 DELETE FROM loc1;                 -- can be pushed down
           QUERY PLAN           
@@ -6169,6 +6592,7 @@ DROP TRIGGER trig_row_after_update ON loc1;
 CREATE TRIGGER trig_row_before_delete
 BEFORE DELETE ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
+--Testcase 424:
 EXPLAIN (verbose, costs off)
 UPDATE loc1 set f2 = '';          -- can be pushed down
              QUERY PLAN             
@@ -6178,6 +6602,7 @@ UPDATE loc1 set f2 = '';          -- can be pushed down
          Output: f1, ''::text, ctid
 (3 rows)
 
+--Testcase 425:
 EXPLAIN (verbose, costs off)
 DELETE FROM loc1;                 -- can't be pushed down
           QUERY PLAN           
@@ -6191,6 +6616,7 @@ DROP TRIGGER trig_row_before_delete ON loc1;
 CREATE TRIGGER trig_row_after_delete
 AFTER DELETE ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
+--Testcase 426:
 EXPLAIN (verbose, costs off)
 UPDATE loc1 set f2 = '';          -- can be pushed down
              QUERY PLAN             
@@ -6200,6 +6626,7 @@ UPDATE loc1 set f2 = '';          -- can be pushed down
          Output: f1, ''::text, ctid
 (3 rows)
 
+--Testcase 427:
 EXPLAIN (verbose, costs off)
 DELETE FROM loc1;                 -- can't be pushed down
           QUERY PLAN           
@@ -6220,12 +6647,19 @@ ALTER TABLE a SET (autovacuum_enabled = 'false');
 -- Because Influxdb does not support UPDATE, to test locally 
 -- we create local table.
 CREATE TABLE b (bb TEXT) INHERITS (a);
+--Testcase 428:
 INSERT INTO a(aa) VALUES('aaa');
+--Testcase 429:
 INSERT INTO a(aa) VALUES('aaaa');
+--Testcase 430:
 INSERT INTO a(aa) VALUES('aaaaa');
+--Testcase 431:
 INSERT INTO b(aa) VALUES('bbb');
+--Testcase 432:
 INSERT INTO b(aa) VALUES('bbbb');
+--Testcase 433:
 INSERT INTO b(aa) VALUES('bbbbb');
+--Testcase 434:
 SELECT tableoid::regclass, * FROM a;
  tableoid |  aa   
 ----------+-------
@@ -6237,6 +6671,7 @@ SELECT tableoid::regclass, * FROM a;
  b        | bbbbb
 (6 rows)
 
+--Testcase 435:
 SELECT tableoid::regclass, * FROM b;
  tableoid |  aa   | bb 
 ----------+-------+----
@@ -6245,6 +6680,7 @@ SELECT tableoid::regclass, * FROM b;
  b        | bbbbb | 
 (3 rows)
 
+--Testcase 436:
 SELECT tableoid::regclass, * FROM ONLY a;
  tableoid |  aa   
 ----------+-------
@@ -6253,7 +6689,9 @@ SELECT tableoid::regclass, * FROM ONLY a;
  a        | aaaaa
 (3 rows)
 
+--Testcase 437:
 UPDATE a SET aa = 'zzzzzz' WHERE aa LIKE 'aaaa%';
+--Testcase 438:
 SELECT tableoid::regclass, * FROM a;
  tableoid |   aa   
 ----------+--------
@@ -6265,6 +6703,7 @@ SELECT tableoid::regclass, * FROM a;
  b        | bbbbb
 (6 rows)
 
+--Testcase 439:
 SELECT tableoid::regclass, * FROM b;
  tableoid |  aa   | bb 
 ----------+-------+----
@@ -6273,6 +6712,7 @@ SELECT tableoid::regclass, * FROM b;
  b        | bbbbb | 
 (3 rows)
 
+--Testcase 440:
 SELECT tableoid::regclass, * FROM ONLY a;
  tableoid |   aa   
 ----------+--------
@@ -6281,7 +6721,9 @@ SELECT tableoid::regclass, * FROM ONLY a;
  a        | zzzzzz
 (3 rows)
 
+--Testcase 441:
 UPDATE b SET aa = 'new';
+--Testcase 442:
 SELECT tableoid::regclass, * FROM a;
  tableoid |   aa   
 ----------+--------
@@ -6293,6 +6735,7 @@ SELECT tableoid::regclass, * FROM a;
  b        | new
 (6 rows)
 
+--Testcase 443:
 SELECT tableoid::regclass, * FROM b;
  tableoid | aa  | bb 
 ----------+-----+----
@@ -6301,6 +6744,7 @@ SELECT tableoid::regclass, * FROM b;
  b        | new | 
 (3 rows)
 
+--Testcase 444:
 SELECT tableoid::regclass, * FROM ONLY a;
  tableoid |   aa   
 ----------+--------
@@ -6309,7 +6753,9 @@ SELECT tableoid::regclass, * FROM ONLY a;
  a        | zzzzzz
 (3 rows)
 
+--Testcase 445:
 UPDATE a SET aa = 'newtoo';
+--Testcase 446:
 SELECT tableoid::regclass, * FROM a;
  tableoid |   aa   
 ----------+--------
@@ -6321,6 +6767,7 @@ SELECT tableoid::regclass, * FROM a;
  b        | newtoo
 (6 rows)
 
+--Testcase 447:
 SELECT tableoid::regclass, * FROM b;
  tableoid |   aa   | bb 
 ----------+--------+----
@@ -6329,6 +6776,7 @@ SELECT tableoid::regclass, * FROM b;
  b        | newtoo | 
 (3 rows)
 
+--Testcase 448:
 SELECT tableoid::regclass, * FROM ONLY a;
  tableoid |   aa   
 ----------+--------
@@ -6337,17 +6785,21 @@ SELECT tableoid::regclass, * FROM ONLY a;
  a        | newtoo
 (3 rows)
 
+--Testcase 449:
 DELETE FROM a;
+--Testcase 450:
 SELECT tableoid::regclass, * FROM a;
  tableoid | aa 
 ----------+----
 (0 rows)
 
+--Testcase 451:
 SELECT tableoid::regclass, * FROM b;
  tableoid | aa | bb 
 ----------+----+----
 (0 rows)
 
+--Testcase 452:
 SELECT tableoid::regclass, * FROM ONLY a;
  tableoid | aa 
 ----------+----
@@ -6369,12 +6821,17 @@ create foreign table bar2 (f3 int) inherits (bar)
   server influxdb_svr options (table 'loct2_1');
 alter table foo set (autovacuum_enabled = 'false');
 alter table bar set (autovacuum_enabled = 'false');
+--Testcase 453:
 insert into foo values(1,1);
+--Testcase 454:
 insert into foo values(3,3);
 -- insert into foo2 values(2,2,2);
 -- insert into foo2 values(4,4,4);
+--Testcase 455:
 insert into bar values(1,11);
+--Testcase 456:
 insert into bar values(2,22);
+--Testcase 457:
 insert into bar values(6,66);
 -- insert into bar2 values(3,33,33);
 -- insert into bar2 values(4,44,44);
@@ -6382,6 +6839,7 @@ insert into bar values(6,66);
 --explain (verbose, costs off)
 --select * from ftbar where f1 in (select f1 from ftfoo) for update;
 --select * from ftbar where f1 in (select f1 from ftfoo) for update;
+--Testcase 458:
 explain (verbose, costs off)
 select * from bar2 where f1 in (select f1 from foo2) for update;
                                     QUERY PLAN                                    
@@ -6405,12 +6863,14 @@ select * from bar2 where f1 in (select f1 from foo2) for update;
                            InfluxDB query: SELECT "f1", "f2", "f3" FROM "loct1_1"
 (17 rows)
 
+--Testcase 459:
 select * from bar2 where f1 in (select f1 from foo2) for update;
  f1 | f2 | f3 
 ----+----+----
   4 | 44 | 44
 (1 row)
 
+--Testcase 460:
 explain (verbose, costs off)
 select * from bar where f1 in (select f1 from foo) for share;
                                           QUERY PLAN                                          
@@ -6440,6 +6900,7 @@ select * from bar where f1 in (select f1 from foo) for share;
                                  InfluxDB query: SELECT "f1", "f2", "f3" FROM "loct1_1"
 (23 rows)
 
+--Testcase 461:
 select * from bar where f1 in (select f1 from foo) for share;
  f1 | f2 
 ----+----
@@ -6453,23 +6914,29 @@ select * from bar where f1 in (select f1 from foo) for share;
 -- skip, if we update to bar, bar2 also is updated because it inherits bar
 -- and Influxdb fdw does not support update on bar2.
 /*
+--Testcase 462:
 explain (verbose, costs off)
 update bar set f2 = f2 + 100 where f1 in (select f1 from foo);
+--Testcase 463:
 update bar set f2 = f2 + 100 where f1 in (select f1 from foo);
 
+--Testcase 464:
 select tableoid::regclass, * from bar order by 1,2;
 
 -- Check UPDATE with inherited target and an appendrel subquery
+--Testcase 465:
 explain (verbose, costs off)
 update bar set f2 = f2 + 100
 from
   ( select f1 from foo union all select f1+3 from foo ) ss
 where bar.f1 = ss.f1;
+--Testcase 466:
 update bar set f2 = f2 + 100
 from
   ( select f1 from foo union all select f1+3 from foo ) ss
 where bar.f1 = ss.f1;
 
+--Testcase 467:
 select tableoid::regclass, * from bar order by 1,2;
 
 -- Test forcing the remote server to produce sorted data for a merge join,
@@ -6477,7 +6944,9 @@ select tableoid::regclass, * from bar order by 1,2;
 truncate table loct1;
 truncate table only foo;
 \set num_rows_foo 2000
+--Testcase 468:
 insert into loct1 select generate_series(0, :num_rows_foo, 2), generate_series(0, :num_rows_foo, 2), generate_series(0, :num_rows_foo, 2);
+--Testcase 469:
 insert into foo select generate_series(1, :num_rows_foo, 2), generate_series(1, :num_rows_foo, 2);
 SET enable_hashjoin to false;
 SET enable_nestloop to false;
@@ -6487,13 +6956,17 @@ create index i_foo_f1 on foo(f1);
 analyze foo;
 analyze loct1;
 -- inner join; expressions in the clauses appear in the equivalence class list
+--Testcase 470:
 explain (verbose, costs off)
 	select foo.f1, loct1.f1 from foo join loct1 on (foo.f1 = loct1.f1) order by foo.f2 offset 10 limit 10;
+--Testcase 471:
 select foo.f1, loct1.f1 from foo join loct1 on (foo.f1 = loct1.f1) order by foo.f2 offset 10 limit 10;
 -- outer join; expressions in the clauses do not appear in equivalence class
 -- list but no output change as compared to the previous query
+--Testcase 472:
 explain (verbose, costs off)
 	select foo.f1, loct1.f1 from foo left join loct1 on (foo.f1 = loct1.f1) order by foo.f2 offset 10 limit 10;
+--Testcase 473:
 select foo.f1, loct1.f1 from foo left join loct1 on (foo.f1 = loct1.f1) order by foo.f2 offset 10 limit 10;
 RESET enable_hashjoin;
 RESET enable_nestloop;
@@ -6501,15 +6974,21 @@ RESET enable_nestloop;
 -- Test that WHERE CURRENT OF is not supported
 begin;
 declare c cursor for select * from bar where f1 = 7;
+--Testcase 474:
 fetch from c;
+--Testcase 475:
 update bar set f2 = null where current of c;
 rollback;
 
+--Testcase 476:
 explain (verbose, costs off)
 delete from foo where f1 < 5 returning *;
+--Testcase 477:
 delete from foo where f1 < 5 returning *;
+--Testcase 478:
 explain (verbose, costs off)
 update bar set f2 = f2 + 100 returning *;
+--Testcase 479:
 update bar set f2 = f2 + 100 returning *;
 
 -- Test that UPDATE/DELETE with inherited target works with row-level triggers
@@ -6521,12 +7000,16 @@ CREATE TRIGGER trig_row_after
 AFTER UPDATE OR DELETE ON bar2
 FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
 
+--Testcase 480:
 explain (verbose, costs off)
 update bar set f2 = f2 + 100;
+--Testcase 481:
 update bar set f2 = f2 + 100;
 
+--Testcase 482:
 explain (verbose, costs off)
 delete from bar where f2 < 400;
+--Testcase 483:
 delete from bar where f2 < 400;
 
 -- cleanup
@@ -6545,19 +7028,27 @@ create foreign table remt2 (a int, b text)
   server influxdb_svr options (table 'loct2');
 alter foreign table remt1 inherit parent;
 
+--Testcase 484:
 insert into remt1 values (1, 'foo');
+--Testcase 485:
 insert into remt1 values (2, 'bar');
+--Testcase 486:
 insert into remt2 values (1, 'foo');
+--Testcase 487:
 insert into remt2 values (2, 'bar');
 
 analyze remt1;
 analyze remt2;
 
+--Testcase 488:
 explain (verbose, costs off)
 update parent set b = parent.b || remt2.b from remt2 where parent.a = remt2.a returning *;
+--Testcase 489:
 update parent set b = parent.b || remt2.b from remt2 where parent.a = remt2.a returning *;
+--Testcase 490:
 explain (verbose, costs off)
 delete from parent using remt2 where parent.a = remt2.a returning parent;
+--Testcase 491:
 delete from parent using remt2 where parent.a = remt2.a returning parent;
 
 -- cleanup
@@ -6580,30 +7071,45 @@ create foreign table remp2 (b text, a int check (a in (2))) server loopback opti
 alter table itrtest attach partition remp1 for values in (1);
 alter table itrtest attach partition remp2 for values in (2);
 
+--Testcase 492:
 insert into itrtest values (1, 'foo');
+--Testcase 493:
 insert into itrtest values (1, 'bar') returning *;
+--Testcase 494:
 insert into itrtest values (2, 'baz');
+--Testcase 495:
 insert into itrtest values (2, 'qux') returning *;
+--Testcase 496:
 insert into itrtest values (1, 'test1'), (2, 'test2') returning *;
 
+--Testcase 497:
 select tableoid::regclass, * FROM itrtest;
+--Testcase 498:
 select tableoid::regclass, * FROM remp1;
+--Testcase 499:
 select tableoid::regclass, * FROM remp2;
 
+--Testcase 500:
 delete from itrtest;
 
 create unique index loct1_idx on loct1 (a);
 
 -- DO NOTHING without an inference specification is supported
+--Testcase 501:
 insert into itrtest values (1, 'foo') on conflict do nothing returning *;
+--Testcase 502:
 insert into itrtest values (1, 'foo') on conflict do nothing returning *;
 
 -- But other cases are not supported
+--Testcase 503:
 insert into itrtest values (1, 'bar') on conflict (a) do nothing;
+--Testcase 504:
 insert into itrtest values (1, 'bar') on conflict (a) do update set b = excluded.b;
 
+--Testcase 505:
 select tableoid::regclass, * FROM itrtest;
 
+--Testcase 506:
 delete from itrtest;
 
 drop index loct1_idx;
@@ -6621,8 +7127,11 @@ create trigger loct2_br_insert_trigger before insert on loct2
 	for each row execute procedure br_insert_trigfunc();
 
 -- The new values are concatenated with ' triggered !'
+--Testcase 507:
 insert into itrtest values (1, 'foo') returning *;
+--Testcase 508:
 insert into itrtest values (2, 'qux') returning *;
+--Testcase 509:
 insert into itrtest values (1, 'test1'), (2, 'test2') returning *;
 with result as (insert into itrtest values (1, 'test1'), (2, 'test2') returning *) select * from result;
 
@@ -6641,46 +7150,65 @@ create table locp (a int check (a in (2)), b text);
 alter table utrtest attach partition remp for values in (1);
 alter table utrtest attach partition locp for values in (2);
 
+--Testcase 510:
 insert into utrtest values (1, 'foo');
+--Testcase 511:
 insert into utrtest values (2, 'qux');
 
+--Testcase 512:
 select tableoid::regclass, * FROM utrtest;
+--Testcase 513:
 select tableoid::regclass, * FROM remp;
+--Testcase 514:
 select tableoid::regclass, * FROM locp;
 
 -- It's not allowed to move a row from a partition that is foreign to another
+--Testcase 515:
 update utrtest set a = 2 where b = 'foo' returning *;
 
 -- But the reverse is allowed
+--Testcase 516:
 update utrtest set a = 1 where b = 'qux' returning *;
 
+--Testcase 517:
 select tableoid::regclass, * FROM utrtest;
+--Testcase 518:
 select tableoid::regclass, * FROM remp;
+--Testcase 519:
 select tableoid::regclass, * FROM locp;
 
 -- The executor should not let unexercised FDWs shut down
+--Testcase 520:
 update utrtest set a = 1 where b = 'foo';
 
 -- Test that remote triggers work with update tuple routing
 create trigger loct_br_insert_trigger before insert on loct
 	for each row execute procedure br_insert_trigfunc();
 
+--Testcase 521:
 delete from utrtest;
+--Testcase 522:
 insert into utrtest values (2, 'qux');
 
 -- Check case where the foreign partition is a subplan target rel
+--Testcase 523:
 explain (verbose, costs off)
 update utrtest set a = 1 where a = 1 or a = 2 returning *;
 -- The new values are concatenated with ' triggered !'
+--Testcase 524:
 update utrtest set a = 1 where a = 1 or a = 2 returning *;
 
+--Testcase 525:
 delete from utrtest;
+--Testcase 526:
 insert into utrtest values (2, 'qux');
 
 -- Check case where the foreign partition isn't a subplan target rel
+--Testcase 527:
 explain (verbose, costs off)
 update utrtest set a = 1 where a = 2 returning *;
 -- The new values are concatenated with ' triggered !'
+--Testcase 528:
 update utrtest set a = 1 where a = 2 returning *;
 
 drop trigger loct_br_insert_trigger on loct;
@@ -6688,27 +7216,38 @@ drop trigger loct_br_insert_trigger on loct;
 -- We can move rows to a foreign partition that has been updated already,
 -- but can't move rows to a foreign partition that hasn't been updated yet
 
+--Testcase 529:
 delete from utrtest;
+--Testcase 530:
 insert into utrtest values (1, 'foo');
+--Testcase 531:
 insert into utrtest values (2, 'qux');
 
 -- Test the former case:
 -- with a direct modification plan
+--Testcase 532:
 explain (verbose, costs off)
 update utrtest set a = 1 returning *;
+--Testcase 533:
 update utrtest set a = 1 returning *;
 
+--Testcase 534:
 delete from utrtest;
+--Testcase 535:
 insert into utrtest values (1, 'foo');
+--Testcase 536:
 insert into utrtest values (2, 'qux');
 
 -- with a non-direct modification plan
+--Testcase 537:
 explain (verbose, costs off)
 update utrtest set a = 1 from (values (1), (2)) s(x) where a = s.x returning *;
+--Testcase 538:
 update utrtest set a = 1 from (values (1), (2)) s(x) where a = s.x returning *;
 
 -- Change the definition of utrtest so that the foreign partition get updated
 -- after the local partition
+--Testcase 539:
 delete from utrtest;
 alter table utrtest detach partition remp;
 drop foreign table remp;
@@ -6716,18 +7255,24 @@ alter table loct drop constraint loct_a_check;
 alter table loct add check (a in (3));
 create foreign table remp (a int check (a in (3)), b text) server loopback options (table_name 'loct');
 alter table utrtest attach partition remp for values in (3);
+--Testcase 540:
 insert into utrtest values (2, 'qux');
+--Testcase 541:
 insert into utrtest values (3, 'xyzzy');
 
 -- Test the latter case:
 -- with a direct modification plan
+--Testcase 542:
 explain (verbose, costs off)
 update utrtest set a = 3 returning *;
+--Testcase 543:
 update utrtest set a = 3 returning *; -- ERROR
 
 -- with a non-direct modification plan
+--Testcase 544:
 explain (verbose, costs off)
 update utrtest set a = 3 from (values (2), (3)) s(x) where a = s.x returning *;
+--Testcase 545:
 update utrtest set a = 3 from (values (2), (3)) s(x) where a = s.x returning *; -- ERROR
 
 drop table utrtest;
@@ -6747,8 +7292,11 @@ copy ctrtest from stdin;
 2	qux
 \.
 
+--Testcase 546:
 select tableoid::regclass, * FROM ctrtest;
+--Testcase 547:
 select tableoid::regclass, * FROM remp1;
+--Testcase 548:
 select tableoid::regclass, * FROM remp2;
 
 -- Copying into foreign partitions directly should work as well
@@ -6756,6 +7304,7 @@ copy remp1 from stdin;
 1	bar
 \.
 
+--Testcase 549:
 select tableoid::regclass, * FROM remp1;
 
 drop table ctrtest;
@@ -6775,8 +7324,10 @@ copy rem2 from stdin;
 1	foo
 2	bar
 \.
+--Testcase 550:
 select * from rem2;
 
+--Testcase 551:
 delete from rem2;
 
 -- Test check constraints
@@ -6791,11 +7342,13 @@ copy rem2 from stdin;
 copy rem2 from stdin; -- ERROR
 -1	xyzzy
 \.
+--Testcase 552:
 select * from rem2;
 
 alter foreign table rem2 drop constraint rem2_f1positive;
 alter table loc2 drop constraint loc2_f1positive;
 
+--Testcase 553:
 delete from rem2;
 
 -- Test local triggers
@@ -6812,6 +7365,7 @@ copy rem2 from stdin;
 1	foo
 2	bar
 \.
+--Testcase 554:
 select * from rem2;
 
 drop trigger trig_row_before on rem2;
@@ -6819,6 +7373,7 @@ drop trigger trig_row_after on rem2;
 drop trigger trig_stmt_before on rem2;
 drop trigger trig_stmt_after on rem2;
 
+--Testcase 555:
 delete from rem2;
 
 create trigger trig_row_before_insert before insert on rem2
@@ -6829,10 +7384,12 @@ copy rem2 from stdin;
 1	foo
 2	bar
 \.
+--Testcase 556:
 select * from rem2;
 
 drop trigger trig_row_before_insert on rem2;
 
+--Testcase 557:
 delete from rem2;
 
 create trigger trig_null before insert on rem2
@@ -6843,10 +7400,12 @@ copy rem2 from stdin;
 1	foo
 2	bar
 \.
+--Testcase 558:
 select * from rem2;
 
 drop trigger trig_null on rem2;
 
+--Testcase 559:
 delete from rem2;
 
 -- Test remote triggers
@@ -6858,10 +7417,12 @@ copy rem2 from stdin;
 1	foo
 2	bar
 \.
+--Testcase 560:
 select * from rem2;
 
 drop trigger trig_row_before_insert on loc2;
 
+--Testcase 561:
 delete from rem2;
 
 create trigger trig_null before insert on loc2
@@ -6872,10 +7433,12 @@ copy rem2 from stdin;
 1	foo
 2	bar
 \.
+--Testcase 562:
 select * from rem2;
 
 drop trigger trig_null on loc2;
 
+--Testcase 563:
 delete from rem2;
 
 -- Test a combination of local and remote triggers
@@ -6890,12 +7453,14 @@ copy rem2 from stdin;
 1	foo
 2	bar
 \.
+--Testcase 564:
 select * from rem2;
 
 drop trigger rem2_trig_row_before on rem2;
 drop trigger rem2_trig_row_after on rem2;
 drop trigger loc2_trig_row_before_insert on loc2;
 
+--Testcase 565:
 delete from rem2;
 
 -- test COPY FROM with foreign table created in the same transaction
@@ -6908,6 +7473,7 @@ copy rem3 from stdin;
 2	bar
 \.
 commit;
+--Testcase 566:
 select * from rem3;
 drop foreign table rem3;
 drop table loc3;
@@ -6917,6 +7483,7 @@ drop table loc3;
 -- ===================================================================
 CREATE SCHEMA import_influx1;
 IMPORT FOREIGN SCHEMA public FROM SERVER influxdb_svr INTO import_influx1;
+--Testcase 567:
 \det+ import_influx1.*
                                List of foreign tables
      Schema     |    Table    |    Server    |       FDW options       | Description 
@@ -6939,6 +7506,7 @@ IMPORT FOREIGN SCHEMA public FROM SERVER influxdb_svr INTO import_influx1;
  import_influx1 | pagg_tab_p3 | influxdb_svr | ("table" 'pagg_tab_p3') | 
 (16 rows)
 
+--Testcase 568:
 \d import_influx1.*
                         Foreign table "import_influx1.T1"
  Column |           Type           | Collation | Nullable | Default | FDW options 
@@ -7104,6 +7672,7 @@ FDW options: ("table" 'pagg_tab_p3')
 CREATE SCHEMA import_influx2;
 IMPORT FOREIGN SCHEMA public LIMIT TO ("T1", loct, nonesuch)
   FROM SERVER influxdb_svr INTO import_influx2;
+--Testcase 569:
 \det+ import_influx2.*
                         List of foreign tables
      Schema     | Table |    Server    |  FDW options   | Description 
@@ -7113,6 +7682,7 @@ IMPORT FOREIGN SCHEMA public LIMIT TO ("T1", loct, nonesuch)
 
 IMPORT FOREIGN SCHEMA public EXCEPT ("T1", loct, nonesuch)
   FROM SERVER influxdb_svr INTO import_influx2;
+--Testcase 570:
 \det+ import_influx2.*
                                List of foreign tables
      Schema     |    Table    |    Server    |       FDW options       | Description 
@@ -7207,6 +7777,7 @@ CREATE FOREIGN TABLE ftprt2_p2 PARTITION OF fprt2 FOR VALUES FROM (250) TO (500)
 -- ANALYZE fprt2_p1;
 -- ANALYZE fprt2_p2;
 -- inner join three tables
+--Testcase 571:
 EXPLAIN (COSTS OFF)
 SELECT t1.a,t2.b,t3.c FROM fprt1 t1 INNER JOIN fprt2 t2 ON (t1.a = t2.b) INNER JOIN fprt1 t3 ON (t2.b = t3.a) WHERE t1.a % 25 =0 ORDER BY 1,2,3;
                              QUERY PLAN                             
@@ -7234,6 +7805,7 @@ SELECT t1.a,t2.b,t3.c FROM fprt1 t1 INNER JOIN fprt2 t2 ON (t1.a = t2.b) INNER J
                                  ->  Foreign Scan on ftprt1_p2 t1_1
 (21 rows)
 
+--Testcase 572:
 SELECT t1.a,t2.b,t3.c FROM fprt1 t1 INNER JOIN fprt2 t2 ON (t1.a = t2.b) INNER JOIN fprt1 t3 ON (t2.b = t3.a) WHERE t1.a % 25 =0 ORDER BY 1,2,3;
   a  |  b  |  c   
 -----+-----+------
@@ -7244,6 +7816,7 @@ SELECT t1.a,t2.b,t3.c FROM fprt1 t1 INNER JOIN fprt2 t2 ON (t1.a = t2.b) INNER J
 (4 rows)
 
 -- left outer join + nullable clause
+--Testcase 573:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.a,t2.b,t2.c FROM fprt1 t1 LEFT JOIN (SELECT * FROM fprt2 WHERE a < 10) t2 ON (t1.a = t2.b and t1.b = t2.a) WHERE t1.a < 10 ORDER BY 1,2,3;
                                          QUERY PLAN                                          
@@ -7268,6 +7841,7 @@ SELECT t1.a,t2.b,t2.c FROM fprt1 t1 LEFT JOIN (SELECT * FROM fprt2 WHERE a < 10)
                      InfluxDB query: SELECT "a", "b", "c" FROM "fprt2_p1" WHERE (("a" < 10))
 (18 rows)
 
+--Testcase 574:
 SELECT t1.a,t2.b,t2.c FROM fprt1 t1 LEFT JOIN (SELECT * FROM fprt2 WHERE a < 10) t2 ON (t1.a = t2.b and t1.b = t2.a) WHERE t1.a < 10 ORDER BY 1,2,3;
  a | b |  c   
 ---+---+------
@@ -7279,6 +7853,7 @@ SELECT t1.a,t2.b,t2.c FROM fprt1 t1 LEFT JOIN (SELECT * FROM fprt2 WHERE a < 10)
 (5 rows)
 
 -- with whole-row reference; partitionwise join does not apply
+--Testcase 575:
 EXPLAIN (COSTS OFF)
 SELECT t1.wr, t2.wr FROM (SELECT t1 wr, a FROM fprt1 t1 WHERE t1.a % 25 = 0) t1 FULL JOIN (SELECT t2 wr, b FROM fprt2 t2 WHERE t2.b % 25 = 0) t2 ON (t1.a = t2.b) ORDER BY 1,2;
                        QUERY PLAN                       
@@ -7296,6 +7871,7 @@ SELECT t1.wr, t2.wr FROM (SELECT t1 wr, a FROM fprt1 t1 WHERE t1.a % 25 = 0) t1 
                      ->  Foreign Scan on ftprt2_p2 t2_1
 (11 rows)
 
+--Testcase 576:
 SELECT t1.wr, t2.wr FROM (SELECT t1 wr, a FROM fprt1 t1 WHERE t1.a % 25 = 0) t1 FULL JOIN (SELECT t2 wr, b FROM fprt2 t2 WHERE t2.b % 25 = 0) t2 ON (t1.a = t2.b) ORDER BY 1,2;
        wr       |       wr       
 ----------------+----------------
@@ -7316,6 +7892,7 @@ SELECT t1.wr, t2.wr FROM (SELECT t1 wr, a FROM fprt1 t1 WHERE t1.a % 25 = 0) t1 
 (14 rows)
 
 -- join with lateral reference
+--Testcase 577:
 EXPLAIN (COSTS OFF)
 SELECT t1.a,t1.b FROM fprt1 t1, LATERAL (SELECT t2.a, t2.b FROM fprt2 t2 WHERE t1.a = t2.b AND t1.b = t2.a) q WHERE t1.a%25 = 0 ORDER BY 1,2;
                              QUERY PLAN                             
@@ -7335,6 +7912,7 @@ SELECT t1.a,t1.b FROM fprt1 t1, LATERAL (SELECT t2.a, t2.b FROM fprt2 t2 WHERE t
                      ->  Foreign Scan on ftprt1_p2 t1_1
 (13 rows)
 
+--Testcase 578:
 SELECT t1.a,t1.b FROM fprt1 t1, LATERAL (SELECT t2.a, t2.b FROM fprt2 t2 WHERE t1.a = t2.b AND t1.b = t2.a) q WHERE t1.a%25 = 0 ORDER BY 1,2;
   a  |  b  
 -----+-----
@@ -7345,6 +7923,7 @@ SELECT t1.a,t1.b FROM fprt1 t1, LATERAL (SELECT t2.a, t2.b FROM fprt2 t2 WHERE t
 (4 rows)
 
 -- with PHVs, partitionwise join selected but no join pushdown
+--Testcase 579:
 EXPLAIN (COSTS OFF)
 SELECT t1.a, t1.phv, t2.b, t2.phv FROM (SELECT 't1_phv' phv, * FROM fprt1 WHERE a % 25 = 0) t1 FULL JOIN (SELECT 't2_phv' phv, * FROM fprt2 WHERE b % 25 = 0) t2 ON (t1.a = t2.b) ORDER BY t1.a, t2.b;
                       QUERY PLAN                      
@@ -7364,6 +7943,7 @@ SELECT t1.a, t1.phv, t2.b, t2.phv FROM (SELECT 't1_phv' phv, * FROM fprt1 WHERE 
                      ->  Foreign Scan on ftprt2_p2
 (13 rows)
 
+--Testcase 580:
 SELECT t1.a, t1.phv, t2.b, t2.phv FROM (SELECT 't1_phv' phv, * FROM fprt1 WHERE a % 25 = 0) t1 FULL JOIN (SELECT 't2_phv' phv, * FROM fprt2 WHERE b % 25 = 0) t2 ON (t1.a = t2.b) ORDER BY t1.a, t2.b;
   a  |  phv   |  b  |  phv   
 -----+--------+-----+--------
@@ -7384,6 +7964,7 @@ SELECT t1.a, t1.phv, t2.b, t2.phv FROM (SELECT 't1_phv' phv, * FROM fprt1 WHERE 
 (14 rows)
 
 -- test FOR UPDATE; partitionwise join does not apply
+--Testcase 581:
 EXPLAIN (COSTS OFF)
 SELECT t1.a, t2.b FROM fprt1 t1 INNER JOIN fprt2 t2 ON (t1.a = t2.b) WHERE t1.a % 25 = 0 ORDER BY 1,2 FOR UPDATE OF t1;
                           QUERY PLAN                          
@@ -7402,6 +7983,7 @@ SELECT t1.a, t2.b FROM fprt1 t1 INNER JOIN fprt2 t2 ON (t1.a = t2.b) WHERE t1.a 
                            ->  Foreign Scan on ftprt1_p2 t1_1
 (12 rows)
 
+--Testcase 582:
 SELECT t1.a, t2.b FROM fprt1 t1 INNER JOIN fprt2 t2 ON (t1.a = t2.b) WHERE t1.a % 25 = 0 ORDER BY 1,2 FOR UPDATE OF t1;
   a  |  b  
 -----+-----
@@ -7427,6 +8009,7 @@ CREATE FOREIGN TABLE fpagg_tab_p3 PARTITION OF pagg_tab FOR VALUES FROM (20) TO 
 -- When GROUP BY clause matches with PARTITION KEY.
 -- Plan with partitionwise aggregates is disabled
 SET enable_partitionwise_aggregate TO false;
+--Testcase 583:
 EXPLAIN (COSTS OFF)
 SELECT a, sum(b), min(b), count(*) FROM pagg_tab GROUP BY a HAVING avg(b) < 22 ORDER BY 1;
                       QUERY PLAN                       
@@ -7444,6 +8027,7 @@ SELECT a, sum(b), min(b), count(*) FROM pagg_tab GROUP BY a HAVING avg(b) < 22 O
 
 -- Plan with partitionwise aggregates is enabled
 SET enable_partitionwise_aggregate TO true;
+--Testcase 584:
 EXPLAIN (COSTS OFF)
 SELECT a, sum(b), min(b), count(*) FROM pagg_tab GROUP BY a HAVING avg(b) < 22 ORDER BY 1;
                          QUERY PLAN                          
@@ -7465,6 +8049,7 @@ SELECT a, sum(b), min(b), count(*) FROM pagg_tab GROUP BY a HAVING avg(b) < 22 O
                ->  Foreign Scan on fpagg_tab_p3
 (15 rows)
 
+--Testcase 585:
 SELECT a, sum(b), min(b), count(*) FROM pagg_tab GROUP BY a HAVING avg(b) < 22 ORDER BY 1;
  a  | sum  | min | count 
 ----+------+-----+-------
@@ -7478,6 +8063,7 @@ SELECT a, sum(b), min(b), count(*) FROM pagg_tab GROUP BY a HAVING avg(b) < 22 O
 
 -- Check with whole-row reference
 -- Should have all the columns in the target list for the given relation
+--Testcase 586:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT a, count(t1) FROM pagg_tab t1 GROUP BY a HAVING avg(b) < 22 ORDER BY 1;
                                     QUERY PLAN                                    
@@ -7509,6 +8095,7 @@ SELECT a, count(t1) FROM pagg_tab t1 GROUP BY a HAVING avg(b) < 22 ORDER BY 1;
                      InfluxDB query: SELECT "t", "a", "b", "c" FROM "pagg_tab_p3"
 (25 rows)
 
+--Testcase 587:
 SELECT a, count(t1) FROM pagg_tab t1 GROUP BY a HAVING avg(b) < 22 ORDER BY 1;
  a  | count 
 ----+-------
@@ -7521,6 +8108,7 @@ SELECT a, count(t1) FROM pagg_tab t1 GROUP BY a HAVING avg(b) < 22 ORDER BY 1;
 (6 rows)
 
 -- When GROUP BY clause does not match with PARTITION KEY.
+--Testcase 588:
 EXPLAIN (COSTS OFF)
 SELECT b, avg(a), max(a), count(*) FROM pagg_tab GROUP BY b HAVING sum(a) < 700 ORDER BY 1;
                       QUERY PLAN                      
