@@ -85,6 +85,8 @@ SELECT * FROM cpu WHERE time != '2015-08-18 09:48:08+09';
 --Testcase 25:
 SELECT * FROM cpu WHERE time <> '2015-08-18 09:48:08+09';
 
+SELECT * FROM cpu WHERE time = '2015-08-18 09:48:08+09' OR value2 = 0.5;
+
 -- There is inconsitency for search of missing values between tag and field
 EXPLAIN (verbose,costs off)
 --Testcase 26:
@@ -125,6 +127,13 @@ SELECT * FROM cpu WHERE value2 NOT IN (2, 9.7);
 --Testcase 40:
 SELECT * FROM cpu WHERE value4 NOT IN ('true', 'true');
 --Testcase 41:
+SELECT * FROM cpu WHERE time IN ('2015-08-18 09:48:08+09','2016-08-28 07:44:00+07');
+SELECT * FROM cpu WHERE time NOT IN ('2015-08-18 09:48:08+09','2016-08-28 07:44:00+07');
+SELECT * FROM cpu WHERE value1 NOT IN (100, 97);
+SELECT * FROM cpu WHERE value1 IN (100, 97);
+SELECT * FROM cpu WHERE value2 IN (0.5, 10.9);
+SELECT * FROM cpu WHERE value2 NOT IN (2, 9.7);
+SELECT * FROM cpu WHERE value4 NOT IN ('true', 'true');
 SELECT * FROM cpu WHERE value4 IN ('f', 't');
 
 DROP FOREIGN TABLE cpu;

@@ -1281,6 +1281,13 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel)
 	if (query->groupingSets)
 		return false;
 
+	/*
+	 * Does not pushdown HAVING clause if there is any
+	 * qualifications applied to groups.
+	 */
+	if (root->hasHavingQual && query->havingQual)
+		return false;
+
 	/* Get the fpinfo of the underlying scan relation. */
 	ofpinfo = (InfluxDBFdwRelationInfo *) fpinfo->outerrel->fdw_private;
 
@@ -1395,48 +1402,6 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel)
 		}
 
 		i++;
-	}
-
-	/*
-	 * Classify the pushable and non-pushable having clauses and save them in
-	 * remote_conds and local_conds of the grouped rel's fpinfo.
-	 */
-	if (root->hasHavingQual && query->havingQual)
-	{
-		ListCell   *lc;
-
-		foreach(lc, (List *) query->havingQual)
-		{
-			Expr	   *expr = (Expr *) lfirst(lc);
-
-#if (PG_VERSION_NUM >= 100000)
-			RestrictInfo *rinfo;
-
-			/*
-			 * Currently, the core code doesn't wrap havingQuals in
-			 * RestrictInfos, so we must make our own.
-			 */
-			Assert(!IsA(expr, RestrictInfo));
-			rinfo = make_restrictinfo(expr,
-									  true,
-									  false,
-									  false,
-									  root->qual_security_level,
-									  grouped_rel->relids,
-									  NULL,
-									  NULL);
-
-			if (influxdb_is_foreign_expr(root, grouped_rel, expr))
-				fpinfo->remote_conds = lappend(fpinfo->remote_conds, rinfo);
-			else
-				fpinfo->local_conds = lappend(fpinfo->local_conds, rinfo);
-#else
-			if (!influxdb_is_foreign_expr(root, grouped_rel, expr))
-				fpinfo->local_conds = lappend(fpinfo->local_conds, expr);
-			else
-				fpinfo->remote_conds = lappend(fpinfo->remote_conds, expr);
-#endif
-		}
 	}
 
 	/*
