@@ -2064,13 +2064,13 @@ select a.f1, b.f1, t.thousand, t.tenthous from
   (select sum(f1)+1 as f1 from int4_tbl i4a) a,
   (select sum(f1) as f1 from int4_tbl i4b) b
 where b.f1 = t.thousand and a.f1 = b.f1 and (a.f1+b.f1+999) = t.tenthous;
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
  Hash Join
    Hash Cond: (t.thousand = (sum(i4b.f1)))
-   Join Filter: (((((sum(i4a.f1) + 1)) + (sum(i4b.f1))) + 999) = t.tenthous)
+   Join Filter: ((((((sum(i4a.f1)) + 1)) + (sum(i4b.f1))) + 999) = t.tenthous)
    ->  Hash Join
-         Hash Cond: (t.thousand = ((sum(i4a.f1) + 1)))
+         Hash Cond: (t.thousand = (((sum(i4a.f1)) + 1)))
          ->  Foreign Scan on tenk1 t
          ->  Hash
                ->  Foreign Scan
@@ -2084,7 +2084,10 @@ select a.f1, b.f1, t.thousand, t.tenthous from
   (select sum(f1)+1 as f1 from int4_tbl i4a) a,
   (select sum(f1) as f1 from int4_tbl i4b) b
 where b.f1 = t.thousand and a.f1 = b.f1 and (a.f1+b.f1+999) = t.tenthous;
-ERROR:  influxdb_fdw : error parsing query: found FROM, expected identifier, string, number, bool at line 1, char 9
+ f1 | f1 | thousand | tenthous 
+----+----+----------+----------
+(0 rows)
+
 --
 -- check a case where we formerly got confused by conflicting sort orders
 -- in redundant merge join path keys
@@ -4190,15 +4193,17 @@ select d3.* from d3 left join (select distinct * from b3) s
 explain (costs off)
 select d3.* from d3 left join (select * from b3 group by b3.id, b3.c_id) s
   on d3.a = s.id;
-           QUERY PLAN           
---------------------------------
+                  QUERY PLAN                   
+-----------------------------------------------
  Hash Left Join
    Hash Cond: (d3.a = s.id)
    ->  Foreign Scan on d3
    ->  Hash
          ->  Subquery Scan on s
-               ->  Foreign Scan
-(6 rows)
+               ->  HashAggregate
+                     Group Key: b3.id, b3.c_id
+                     ->  Foreign Scan on b3
+(8 rows)
 
 -- similarly, but keying off a DISTINCT clause
 --Testcase 162:
@@ -6053,8 +6058,8 @@ inner join (select distinct id from j31) j31 on j11.id = j31.id;
 explain (verbose, costs off)
 select * from j11
 inner join (select id from j31 group by id) j31 on j11.id = j31.id;
-                           QUERY PLAN                           
-----------------------------------------------------------------
+                         QUERY PLAN                         
+------------------------------------------------------------
  Hash Join
    Output: j11.id, j31.id
    Inner Unique: true
@@ -6064,10 +6069,13 @@ inner join (select id from j31 group by id) j31 on j11.id = j31.id;
          InfluxDB query: SELECT "id" FROM "j11"
    ->  Hash
          Output: j31.id
-         ->  Foreign Scan
+         ->  HashAggregate
                Output: j31.id
-               InfluxDB query: SELECT  FROM "j31" GROUP BY "id"
-(12 rows)
+               Group Key: j31.id
+               ->  Foreign Scan on public.j31
+                     Output: j31.id
+                     InfluxDB query: SELECT "id" FROM "j31"
+(15 rows)
 
 -- test more complex permutations of unique joins
 create foreign table j12 (id1 int, id2 int) server influxdb_svr;

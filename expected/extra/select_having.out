@@ -9,12 +9,22 @@ CREATE FOREIGN TABLE test_having(a int, b int, c char(8), d char) SERVER influxd
 --Testcase 1:
 SELECT b, c FROM test_having
 	GROUP BY b, c HAVING count(*) = 1 ORDER BY b, c;
-ERROR:  influxdb_fdw : error parsing query: found FROM, expected identifier, string, number, bool at line 1, char 9
+ b |  c   
+---+------
+ 1 | XXXX
+ 3 | bbbb
+(2 rows)
+
 -- HAVING is effectively equivalent to WHERE in this case
 --Testcase 2:
 SELECT b, c FROM test_having
 	GROUP BY b, c HAVING b = 3 ORDER BY b, c;
-ERROR:  influxdb_fdw : error parsing query: found FROM, expected identifier, string, number, bool at line 1, char 9
+ b |  c   
+---+------
+ 3 | bbbb
+ 3 | BBBB
+(2 rows)
+
 --Testcase 3:
 SELECT lower(c), count(c) FROM test_having
 	GROUP BY lower(c) HAVING count(*) > 2 OR min(a) = max(a)
@@ -30,15 +40,27 @@ SELECT lower(c), count(c) FROM test_having
 SELECT c, max(a) FROM test_having
 	GROUP BY c HAVING count(*) > 2 OR min(a) = max(a)
 	ORDER BY c;
-ERROR:  influxdb_fdw : error parsing query: found HAVING, expected ; at line 1, char 49
+  c   | max 
+------+-----
+ bbbb |   5
+ XXXX |   0
+(2 rows)
+
 -- test degenerate cases involving HAVING without GROUP BY
 -- Per SQL spec, these should generate 0 or 1 row, even without aggregates
 --Testcase 5:
 SELECT min(a), max(a) FROM test_having HAVING min(a) = max(a);
-ERROR:  influxdb_fdw : error parsing query: found HAVING, expected ; at line 1, char 46
+ min | max 
+-----+-----
+(0 rows)
+
 --Testcase 6:
 SELECT min(a), max(a) FROM test_having HAVING min(a) < max(a);
-ERROR:  influxdb_fdw : error parsing query: found HAVING, expected ; at line 1, char 46
+ min | max 
+-----+-----
+   0 |   9
+(1 row)
+
 -- errors: ungrouped column references
 --Testcase 7:
 SELECT a FROM test_having HAVING min(a) < max(a);
