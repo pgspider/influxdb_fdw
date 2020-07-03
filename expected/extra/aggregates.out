@@ -1234,18 +1234,22 @@ create foreign table agg_t2 (x int, y int, z int) server influxdb_svr;
 -- Non-primary-key columns can be removed from GROUP BY
 --Testcase 121:
 explain (costs off) select * from agg_t1 group by a,b,c,d;
-  QUERY PLAN  
---------------
- Foreign Scan
-(1 row)
+          QUERY PLAN          
+------------------------------
+ HashAggregate
+   Group Key: a, b, c, d
+   ->  Foreign Scan on agg_t1
+(3 rows)
 
 -- No removal can happen if the complete PK is not present in GROUP BY
 --Testcase 122:
 explain (costs off) select a,c from agg_t1 group by a,c,d;
-  QUERY PLAN  
---------------
- Foreign Scan
-(1 row)
+          QUERY PLAN          
+------------------------------
+ HashAggregate
+   Group Key: a, c, d
+   ->  Foreign Scan on agg_t1
+(3 rows)
 
 -- Test removal across multiple relations
 --Testcase 123:

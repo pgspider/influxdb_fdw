@@ -728,10 +728,11 @@ foreign_expr_walker(Node *node,
 			break;
 		case T_Aggref:
 			{
-				Aggref	   *agg = (Aggref *) node;
-				ListCell   *lc;
-				FuncExpr   *func = (FuncExpr *) node;
-				char	   *opername = NULL;
+				Aggref		*agg = (Aggref *) node;
+				ListCell	*lc;
+				FuncExpr	*func = (FuncExpr *) node;
+				char		*opername = NULL;
+				bool		old_val;
 
 				/* get function name and schema */
 				tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(agg->aggfnoid));
@@ -772,6 +773,12 @@ foreign_expr_walker(Node *node,
 					return false;
 
 				/*
+				 * Save value of is_time_column before we check time argument aggregate.
+				 */
+				old_val = is_time_column;
+				is_time_column = false;
+
+				/*
 				 * Recurse to input args. aggdirectargs, aggorder and
 				 * aggdistinct are all present in args, so no need to check
 				 * their shippability explicitly.
@@ -795,7 +802,24 @@ foreign_expr_walker(Node *node,
 
 					if (!foreign_expr_walker(n, glob_cxt, &inner_cxt))
 						return false;
+
+					/*
+					 * Does not pushdown time column argument within aggregate function
+					 * except last() function, because this function is converted from
+					 * last(time, value) to last(value) when deparsing.
+					 */
+					if (is_time_column && (strcmp(opername, "last") != 0))
+					{
+						is_time_column = false;
+						return false;
+					}
 				}
+
+				/*
+				 * If there is no time column argument within aggregate function,
+				 * restore value of is_time_column.
+				 */
+				is_time_column = old_val;
 
 				if (agg->aggorder || agg->aggfilter)
 				{
