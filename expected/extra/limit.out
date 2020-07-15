@@ -587,8 +587,8 @@ order by s2 desc;
 explain (verbose, costs off)
 select sum(tenthous) as s1, sum(tenthous) + random()*0 as s2
   from tenk1 group by thousand order by thousand limit 3;
-                                                      QUERY PLAN                                                       
------------------------------------------------------------------------------------------------------------------------
+                                                                               QUERY PLAN                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: (sum(tenthous)), ((((sum(tenthous)))::double precision + (random() * '0'::double precision))), thousand
    ->  Result
@@ -600,7 +600,7 @@ select sum(tenthous) as s1, sum(tenthous) + random()*0 as s2
                      Output: sum(tenthous), thousand
                      Group Key: tenk1.thousand
                      ->  Foreign Scan on public.tenk1
-                           Output: thousand, tenthous
+                           Output: unique1, unique2, two, four, ten, twenty, hundred, thousand, twothousand, fivethous, tenthous, odd, even, stringu1, stringu2, string4
                            InfluxDB query: SELECT "thousand", "tenthous" FROM "tenk"
 (13 rows)
 

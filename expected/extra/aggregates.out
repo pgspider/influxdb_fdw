@@ -2444,12 +2444,12 @@ SET enable_indexonlyscan = off;
 --Testcase 229:
 EXPLAIN (COSTS OFF, VERBOSE)
   SELECT variance(unique1::int4), sum(unique1::int8), regr_count(unique1::float8, unique1::float8) FROM tenk1;
-                                                        QUERY PLAN                                                         
----------------------------------------------------------------------------------------------------------------------------
+                                                                      QUERY PLAN                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------
  Aggregate
    Output: variance(unique1), sum((unique1)::bigint), regr_count((unique1)::double precision, (unique1)::double precision)
    ->  Foreign Scan on public.tenk1
-         Output: unique1
+         Output: unique1, unique2, two, four, ten, twenty, hundred, thousand, twothousand, fivethous, tenthous, odd, even, stringu1, stringu2, string4
          InfluxDB query: SELECT "unique1" FROM "tenk"
 (5 rows)
 
