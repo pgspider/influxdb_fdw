@@ -48,6 +48,7 @@ typedef struct foreign_glob_cxt
 	RelOptInfo *foreignrel;		/* the foreign relation we are planning for */
 	Relids		relids;			/* relids of base relations in the underlying
 								 * scan */
+	Oid			relid;			/* relation oid */
 	unsigned int mixing_aggref_status; /* mixing_aggref_status contains information about whether expression
 										* includes both of aggregate and non-aggregate.
 										*/
@@ -138,6 +139,7 @@ static Expr *find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel);
 static bool is_builtin(Oid objectId);
 static bool is_contain_time_column(List *tlist);
 static bool is_grouping_target(TargetEntry *tle, deparse_expr_cxt *context);
+static void influxdb_append_field_key(TupleDesc tupdesc, StringInfo buf, Index rtindex, PlannerInfo *root, bool first);
 
 /*
  * Local variables.
@@ -213,6 +215,7 @@ influxdb_is_foreign_expr(PlannerInfo *root,
 	 */
 	glob_cxt.root = root;
 	glob_cxt.foreignrel = baserel;
+	glob_cxt.relid = fpinfo->table->relid;
 	glob_cxt.mixing_aggref_status = INFLUXDB_TARGETS_MIXING_AGGREF_SAFE;
 
 	/*
@@ -800,6 +803,22 @@ foreign_expr_walker(Node *node,
 						}
 					}
 
+					/* Check if arg is Var */
+					if (IsA(n, Var))
+					{
+						Var		*var = (Var *) n;
+						char	*colname = influxdb_get_column_name(glob_cxt->relid, var->varattno);
+
+						/* Not push down if arg is tag key */
+						if (influxdb_is_tag_key(colname, glob_cxt->relid))
+							return false;
+
+						/* Not push down max(), min() if arg type is text column */
+						if ((strcmp(opername, "max") == 0 || strcmp(opername, "min") == 0)
+							 && var->vartype == TEXTOID)
+							return false;
+					}
+
 					if (!foreign_expr_walker(n, glob_cxt, &inner_cxt))
 						return false;
 
@@ -1187,29 +1206,17 @@ deparseExplicitTargetList(List *tlist, List **retrieved_attrs,
 	int			i = 0;
 	bool		first = true;
 	bool		is_col_grouping_target;
-	bool		is_all_target_column;
+	bool		need_field_key;
 
 	*retrieved_attrs = NIL;
-
 	/*
 	 * We do not construct grouping target column in SELECT influxdb SQL.
-	 * We only contruct grouping target columns if all targets in tlist are grouping
-	 * target columns and tlist does not contain other types of target (e.g. aggregate, operation),
-	 * we do this to avoid missing targets in remote SELECT statement,
-	 * e.g. SELECT col1, col2 FROM table GROUP BY col1, col2; (col1 and col2 are tag keys)
+	 * We just check for need to add field key more
+	 * e.g. SELECT col1, col2, col3 FROM table GROUP BY col1, col2; (col1 and col2 are tag keys)
+	 * --> SELECT col3 FROM table GROUP BY col1, col2;
 	 * So, firstly we need to check whether all target are columns or not.
 	 */
-	is_all_target_column = true;
-	foreach(lc, tlist)
-	{
-		TargetEntry *tle = lfirst_node(TargetEntry, lc);
-
-		if (!IsA((Expr *) tle->expr, Var))
-		{
-			is_all_target_column = false;
-			break;
-		}
-	}
+	need_field_key = true;
 
 	/* Contruct targets for remote SELECT statement */
 	foreach(lc, tlist)
@@ -1224,21 +1231,58 @@ deparseExplicitTargetList(List *tlist, List **retrieved_attrs,
 
 		if (IsA((Expr *) tle->expr, Aggref)
 			|| IsA((Expr *) tle->expr, OpExpr)
-			|| (IsA((Expr *) tle->expr, Var)
-				&& (!is_col_grouping_target || (is_col_grouping_target && is_all_target_column)))
-			)
+			|| (IsA((Expr *) tle->expr, Var) && !is_col_grouping_target))
 		{
 			if (!first)
 				appendStringInfoString(buf, ", ");
 			first = false;
+			need_field_key = false;
 			deparseExpr((Expr *) tle->expr, context);
 		}
+
+		/*
+		 * Check all target columns are tag keys or not.
+		 * If all target columns are tag keys, need to append a field key more.
+		 */
+		if (IsA((Expr *) tle->expr, Var) && need_field_key)
+		{
+			RangeTblEntry	*rte = planner_rt_fetch(context->scanrel->relid, context->root);
+			char			*colname = influxdb_get_column_name(rte->relid, ((Var *) tle->expr)->varattno);
+
+			if (!influxdb_is_tag_key(colname, rte->relid))
+				need_field_key = false;
+		}
+
 		*retrieved_attrs = lappend_int(*retrieved_attrs, i + 1);
 		i++;
 	}
 
 	if (i == 0)
+	{
 		appendStringInfoString(buf, "*");
+		return;
+	}
+
+	if (need_field_key)
+	{
+		/*
+		 * For a base relation fpinfo->attrs_used gives the list of columns
+		 * required to be fetched from the foreign server.
+		 */
+		RangeTblEntry *rte = planner_rt_fetch(context->scanrel->relid, context->root);
+
+		/*
+		 * Core code already has some lock on each rel being planned, so we
+		 * can use NoLock here.
+		 */
+		Relation	rel = heap_open(rte->relid, NoLock);
+		TupleDesc	tupdesc = RelationGetDescr(rel);
+
+		influxdb_append_field_key(tupdesc, context->buf, context->scanrel->relid, context->root, first);
+
+		heap_close(rel, NoLock);
+		return;
+	}
 }
 
 /*
@@ -1299,12 +1343,14 @@ influxdb_deparse_target_list(StringInfo buf,
 	bool		have_wholerow;
 	bool		first;
 	int			i;
+	bool		need_field_key;	/* Check for need to add field key more */
 
 	/* If there's a whole-row reference, we'll need all the columns. */
 	have_wholerow = bms_is_member(0 - FirstLowInvalidHeapAttributeNumber,
 								  attrs_used);
 
 	first = true;
+	need_field_key = true;
 
 	*retrieved_attrs = NIL;
 	for (i = 1; i <= tupdesc->natts; i++)
@@ -1319,11 +1365,15 @@ influxdb_deparse_target_list(StringInfo buf,
 			bms_is_member(i - FirstLowInvalidHeapAttributeNumber,
 						  attrs_used))
 		{
-			char	   *name = influxdb_get_column_ref(buf, rtindex, i, -1, root);
+			char			*name = influxdb_get_column_ref(buf, rtindex, i, -1, root);
+			RangeTblEntry	*rte = planner_rt_fetch(rtindex, root);
 
 			/* Skip if column is time */
 			if (!INFLUXDB_IS_TIME_COLUMN(name))
 			{
+				if (!influxdb_is_tag_key(name, rte->relid))
+					need_field_key = false;
+
 				if (!first)
 					appendStringInfoString(buf, ", ");
 				first = false;
@@ -1336,7 +1386,16 @@ influxdb_deparse_target_list(StringInfo buf,
 
 	/* Use '*' instead of NULL because InfluxDB does not support NULL */
 	if (first)
+	{
 		appendStringInfoString(buf, "*");
+		return;
+	}
+
+	/* If all of target list are tag keys, need to append a field key more */
+	if (need_field_key)
+	{
+		influxdb_append_field_key(tupdesc, buf, rtindex, root, first);
+	}
 }
 
 /*
@@ -2638,6 +2697,95 @@ bool is_grouping_target(TargetEntry *tle, deparse_expr_cxt *context)
 		{
 			return true;
 		}
+	}
+
+	return false;
+}
+
+/*
+ * influxdb_append_field_key
+ * This function finds field key and the first found field key will be added into buf.
+ */
+void influxdb_append_field_key(TupleDesc tupdesc, StringInfo buf, Index rtindex, PlannerInfo *root, bool first)
+{
+	int		i;
+
+	for (i = 1; i <= tupdesc->natts; i++)
+	{
+		Form_pg_attribute	attr = TupleDescAttr(tupdesc, i - 1);
+		char				*name = influxdb_get_column_ref(buf, rtindex, i, -1, root);
+		RangeTblEntry		*rte = planner_rt_fetch(rtindex, root);
+
+		/* Ignore dropped attributes. */
+		if (attr->attisdropped)
+			continue;
+
+		/* Skip if column is time and tag key */
+		if (!INFLUXDB_IS_TIME_COLUMN(name) && !influxdb_is_tag_key(name, rte->relid))
+		{
+			if (!first)
+				appendStringInfoString(buf, ", ");
+			influxdb_deparse_column_ref(buf, rtindex, i, -1, root, false);
+			return;
+		}
+	}
+}
+
+
+char *
+influxdb_get_column_name(Oid relid, int attnum)
+{
+	List	   *options = NULL;
+	ListCell   *lc_opt;
+	char	   *colname = NULL;
+
+	options = GetForeignColumnOptions(relid, attnum);
+
+	foreach(lc_opt, options)
+	{
+		DefElem    *def = (DefElem *) lfirst(lc_opt);
+
+		if (strcmp(def->defname, "column_name") == 0)
+		{
+			colname = defGetString(def);
+			break;
+		}
+	}
+
+	if (colname == NULL)
+		colname = get_attname(relid, attnum
+#if (PG_VERSION_NUM >= 110000)
+							  ,
+							  false
+#endif
+			);
+	return colname;
+}
+
+/*
+ * influxdb_is_tag_key
+ * This function check whether column is tag key or not.
+ * Return true if it is tag, otherwise return false.
+ */
+bool influxdb_is_tag_key(const char *colname, Oid reloid)
+{
+	influxdb_opt	*options;
+	ListCell		*lc;
+
+	/* Get FDW options */
+	options = influxdb_get_options(reloid);
+
+	/* If there is no tag in "tags" option, it means column is field */
+	if (!options->tags_list)
+		return false;
+
+	/* Check whether column is tag or not */
+	foreach(lc, options->tags_list)
+	{
+		char *name = (char*)lfirst(lc);
+
+		if (strcmp(colname, name) == 0)
+			return true;
 	}
 
 	return false;

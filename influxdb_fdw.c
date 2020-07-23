@@ -159,7 +159,6 @@ static bool foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel);
 static void add_foreign_grouping_paths(PlannerInfo *root,
 									   RelOptInfo *input_rel,
 									   RelOptInfo *grouped_rel);
-static bool influxdb_is_tag_key(const char *colname, Oid reloid);
 
 /*
  * Library load-time initialization, sets on_proc_exit() callback for
@@ -765,36 +764,6 @@ influxdbBeginForeignScan(ForeignScanState *node, int eflags)
 							 &festate->param_influxdb_values);
 }
 
-static char *
-get_column_name(Oid relid, int attnum)
-{
-	List	   *options = NULL;
-	ListCell   *lc_opt;
-	char	   *colname = NULL;
-
-	options = GetForeignColumnOptions(relid, attnum);
-
-	foreach(lc_opt, options)
-	{
-		DefElem    *def = (DefElem *) lfirst(lc_opt);
-
-		if (strcmp(def->defname, "column_name") == 0)
-		{
-			colname = defGetString(def);
-			break;
-		}
-	}
-
-	if (colname == NULL)
-		colname = get_attname(relid, attnum
-#if (PG_VERSION_NUM >= 110000)
-							  ,
-							  false
-#endif
-			);
-	return colname;
-}
-
 static void
 make_tuple_from_result_row(InfluxDBRow * result_row,
 						   InfluxDBResult * result,
@@ -837,7 +806,7 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 			{
 				/* GROUP BY target variable */
 				int			i;
-				char	   *name = get_column_name(relid, ((Var *) target)->varattno);
+				char	   *name = influxdb_get_column_name(relid, ((Var *) target)->varattno);
 				int			nfield = result->ncol - result->ntag;
 
 				/*
@@ -896,7 +865,7 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 		}
 		else
 		{
-			colname = get_column_name(relid, attnum + 1);
+			colname = influxdb_get_column_name(relid, attnum + 1);
 			if (INFLUXDB_IS_TIME_COLUMN(colname))
 			{
 				result_idx = 0;
@@ -1339,7 +1308,7 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel)
 			 */
 			if (IsA(expr, Var))
 			{
-				char *colname = get_column_name(ofpinfo->table->relid, ((Var *) expr)->varattno);
+				char *colname = influxdb_get_column_name(ofpinfo->table->relid, ((Var *) expr)->varattno);
 
 				if (!influxdb_is_tag_key(colname, ofpinfo->table->relid))
 					return false;
@@ -1807,33 +1776,4 @@ create_cursor(ForeignScanState *node)
 
 	/* Mark the cursor as created, and show no tuples have been retrieved */
 	festate->cursor_exists = true;
-}
-
-/*
- * influxdb_is_tag_key
- * This function check whether column is tag key or not.
- * Return true if it is tag, otherwise return false.
- */
-static bool influxdb_is_tag_key(const char *colname, Oid reloid)
-{
-	influxdb_opt	*options;
-	ListCell		*lc;
-
-	/* Get FDW options */
-	options = influxdb_get_options(reloid);
-
-	/* If there is no tag in "tags" option, it means column is field */
-	if (!options->tags_list)
-		return false;
-
-	/* Check whether column is tag or not */
-	foreach(lc, options->tags_list)
-	{
-		char *name = (char*)lfirst(lc);
-
-		if (strcmp(colname, name) == 0)
-			return true;
-	}
-
-	return false;
 }

@@ -92,12 +92,13 @@ SELECT value1,time,value2 FROM cpu;
         | 2015-08-18 09:48:08+09 |      2
 (3 rows)
 
--- Get only tags returns no row. This behavior is based on InfluxDB 
 --Testcase 10:
 SELECT tag1 FROM cpu;
- tag1 
-------
-(0 rows)
+  tag1  
+--------
+ tag1_A
+ tag1_B
+(2 rows)
 
 --Testcase 11:
 \d cpu;
