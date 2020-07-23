@@ -199,4 +199,6 @@ extern void influxdb_bind_sql_var(Oid type, int attnum, Datum value, bool *isnul
 								  InfluxDBType * param_influxdb_types, InfluxDBValue * param_influxdb_values);
 extern char *influxdb_get_function_name(Oid funcid);
 extern bool influxdb_is_mixing_aggref(List *tlist);
+extern bool influxdb_is_tag_key(const char *colname, Oid reloid);
+extern char *influxdb_get_column_name(Oid relid, int attnum);
 #endif							/* InfluxDB_FDW_H */

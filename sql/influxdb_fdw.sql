@@ -43,7 +43,6 @@ SELECT * FROM cpu;
 SELECT tag1,value1 FROM cpu;
 --Testcase 9:
 SELECT value1,time,value2 FROM cpu;
--- Get only tags returns no row. This behavior is based on InfluxDB 
 --Testcase 10:
 SELECT tag1 FROM cpu;
 
