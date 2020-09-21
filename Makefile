@@ -21,6 +21,7 @@ UNAME = uname
 OS := $(shell $(UNAME))
 ifeq ($(OS), Darwin)
 DLSUFFIX = .dylib
+PG_LDFLAGS = -framework CoreFoundation -framework Security
 else
 DLSUFFIX = .so
 endif
