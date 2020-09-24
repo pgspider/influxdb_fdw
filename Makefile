@@ -21,6 +21,7 @@ UNAME = uname
 OS := $(shell $(UNAME))
 ifeq ($(OS), Darwin)
 DLSUFFIX = .dylib
+PG_LDFLAGS = -framework CoreFoundation -framework Security
 else
 DLSUFFIX = .so
 endif
@@ -32,8 +33,8 @@ include $(PGXS)
 ifndef MAJORVERSION
 MAJORVERSION := $(basename $(VERSION))
 endif
-ifeq (,$(findstring $(MAJORVERSION), 9.6 10 11))
-$(error PostgreSQL 9.6, 10 or 11 is required to compile this extension)
+ifeq (,$(findstring $(MAJORVERSION), 9.6 10 11 12))
+$(error PostgreSQL 9.6, 10, 11 or 12 is required to compile this extension)
 endif
 
 else
