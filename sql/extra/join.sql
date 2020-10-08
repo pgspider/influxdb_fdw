@@ -1,7 +1,10 @@
+--Testcase 281:
 CREATE EXTENSION influxdb_fdw;
 
+--Testcase 282:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw
   OPTIONS (dbname 'coredb', host 'http://localhost', port '8086');
+--Testcase 283:
 CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user 'user', password 'pass');
 
 -- import time column as timestamp and text type
@@ -12,17 +15,20 @@ CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user 'user', p
 -- Test JOIN clauses
 --
 
+--Testcase 284:
 CREATE FOREIGN TABLE J1_TBL (
   i integer,
   j integer,
   t text
 ) SERVER influxdb_svr;
 
+--Testcase 285:
 CREATE FOREIGN TABLE J2_TBL (
   i integer,
   k integer
 ) SERVER influxdb_svr;
 
+--Testcase 286:
 CREATE FOREIGN TABLE tenk1 (
   unique1   int4,
   unique2   int4,
@@ -45,6 +51,7 @@ CREATE FOREIGN TABLE tenk1 (
 --Does not support on Postgres 12
 --ALTER TABLE tenk1 SET WITH OIDS;
 
+--Testcase 287:
 CREATE FOREIGN TABLE tenk2 (
   unique1   int4,
   unique2   int4,
@@ -64,15 +71,20 @@ CREATE FOREIGN TABLE tenk2 (
   string4   name
 ) SERVER influxdb_svr OPTIONS (table 'tenk');
 
+--Testcase 288:
 CREATE FOREIGN TABLE INT4_TBL(f1 int4) SERVER influxdb_svr;
+--Testcase 289:
 CREATE FOREIGN TABLE FLOAT8_TBL(f1 float8) SERVER influxdb_svr;
+--Testcase 290:
 CREATE FOREIGN TABLE INT8_TBL(
   q1 int8,
   q2 int8
 ) SERVER influxdb_svr;
+--Testcase 291:
 CREATE FOREIGN TABLE INT2_TBL(f1 int2) SERVER influxdb_svr;
 
 -- useful in some tests below
+--Testcase 292:
 create temp table onerow();
 --Testcase 1:
 insert into onerow default values;
@@ -284,8 +296,11 @@ where exists(select * from tenk1 b
 -- Multiway full join
 --
 
+--Testcase 293:
 CREATE FOREIGN TABLE t11 (name TEXT, n INTEGER) SERVER influxdb_svr;
+--Testcase 294:
 CREATE FOREIGN TABLE t21 (name TEXT, n INTEGER) SERVER influxdb_svr;
+--Testcase 295:
 CREATE FOREIGN TABLE t31 (name TEXT, n INTEGER) SERVER influxdb_svr;
 
 --Testcase 34:
@@ -384,8 +399,10 @@ ON (s1_n = s2_n);
 
 -- Test for propagation of nullability constraints into sub-joins
 
+--Testcase 296:
 create foreign table x (x1 int, x2 int) server influxdb_svr;
 
+--Testcase 297:
 create foreign table y (y1 int, y2 int) server influxdb_svr;
 
 --Testcase 46:
@@ -551,18 +568,26 @@ select count(*) from
 -- Clean up
 --
 
+--Testcase 298:
 DROP FOREIGN TABLE t11;
+--Testcase 299:
 DROP FOREIGN TABLE t21;
+--Testcase 300:
 DROP FOREIGN TABLE t31;
 
+--Testcase 301:
 DROP FOREIGN TABLE J1_TBL;
+--Testcase 302:
 DROP FOREIGN TABLE J2_TBL;
 
 -- Both DELETE and UPDATE allow the specification of additional tables
 -- to "join" against to determine which rows should be modified.
 
+--Testcase 303:
 CREATE FOREIGN TABLE t12 (a int, b int) SERVER influxdb_svr;
+--Testcase 304:
 CREATE FOREIGN TABLE t22 (a int, b int) SERVER influxdb_svr;
+--Testcase 305:
 CREATE FOREIGN TABLE t32 (x int, y int) SERVER influxdb_svr;
 
 -- InfluxDB FDW does not support INSERT/DELETE/UPDATE
@@ -585,6 +610,7 @@ CREATE FOREIGN TABLE t32 (x int, y int) SERVER influxdb_svr;
 
 -- Test join against inheritance tree
 
+--Testcase 306:
 create temp table t2a () inherits (t22);
 
 --Testcase 69:
@@ -602,8 +628,10 @@ select t12.x from t12 join t32 on (t12.a = t32.x);
 -- regression test for 8.1 merge right join bug
 --
 
+--Testcase 307:
 CREATE FOREIGN TABLE tt1 ( tt1_id int4, joincol int4 ) SERVER influxdb_svr;
 
+--Testcase 308:
 CREATE FOREIGN TABLE tt2 ( tt2_id int4, joincol int4 ) SERVER influxdb_svr;
 
 set enable_hashjoin to off;
@@ -642,8 +670,10 @@ reset enable_mergejoin;
 -- regression test for 8.2 bug with improper re-ordering of left joins
 --
 
+--Testcase 309:
 create foreign table tt3(f1 int, f2 text) server influxdb_svr;
 
+--Testcase 310:
 create foreign table tt4(f1 int) server influxdb_svr;
 
 --Testcase 76:
@@ -660,6 +690,7 @@ WHERE d.f1 IS NULL;
 -- regression test for proper handling of outer joins within antijoins
 --
 
+--Testcase 311:
 create foreign table tt4x(c1 int, c2 int, c3 int) server influxdb_svr;
 
 --Testcase 77:
@@ -678,7 +709,9 @@ where not exists (
 -- regression test for problems of the sort depicted in bug #3494
 --
 
+--Testcase 312:
 create foreign table tt5(f1 int, f2 int) server influxdb_svr;
+--Testcase 313:
 create foreign table tt6(f1 int, f2 int) server influxdb_svr;
 
 --Testcase 78:
@@ -688,7 +721,9 @@ select * from tt5,tt6 where tt5.f1 = tt6.f1 and tt5.f1 = tt5.f2 - tt6.f2;
 -- regression test for problems of the sort depicted in bug #3588
 --
 
+--Testcase 314:
 create foreign table xx (pkxx int) server influxdb_svr;
+--Testcase 315:
 create foreign table yy (pkyy int, pkxx int) server influxdb_svr;
 
 --Testcase 79:
@@ -704,8 +739,11 @@ from yy
 -- (as seen in early 8.2.x releases)
 --
 
+--Testcase 316:
 create foreign table zt1 (f1 int) server influxdb_svr;
+--Testcase 317:
 create foreign table zt2 (f2 int) server influxdb_svr;
+--Testcase 318:
 create foreign table zt3 (f3 int) server influxdb_svr;
 
 --Testcase 80:
@@ -714,6 +752,7 @@ select * from
       left join zt1 on (f3 = f1)
 where f2 = 53;
 
+--Testcase 319:
 create temp view zv1 as select *,'dummy'::text AS junk from zt1;
 
 --Testcase 81:
@@ -756,7 +795,9 @@ set enable_mergejoin = 1;
 set enable_hashjoin = 0;
 set enable_nestloop = 0;
 
+--Testcase 320:
 create foreign table a1 (i integer) server influxdb_svr;
+--Testcase 321:
 create foreign table b1 (x integer, y integer) server influxdb_svr;
 
 --Testcase 86:
@@ -769,9 +810,12 @@ rollback;
 --
 begin;
 
+--Testcase 322:
 create type mycomptype as (id int, v bigint);
 
+--Testcase 323:
 create temp table tidv (idv mycomptype);
+--Testcase 324:
 create index on tidv (idv);
 
 --Testcase 87:
@@ -816,13 +860,16 @@ group by t1.q2 order by 1;
 --
 begin;
 
+--Testcase 325:
 create foreign table a2 (
      code char
 ) server influxdb_svr;
+--Testcase 326:
 create foreign table b2 (
      a char,
      num integer
 ) server influxdb_svr;
+--Testcase 327:
 create foreign table c2 (
      name char,
      a char
@@ -907,17 +954,20 @@ SELECT qq, unique1
 -- nested nestloops can require nested PlaceHolderVars
 --
 
+--Testcase 328:
 create foreign table nt1 (
   id int,
   a1 boolean,
   a2 boolean
 ) server influxdb_svr;
+--Testcase 329:
 create foreign table nt2 (
   id int,
   nt1_id int,
   b1 boolean,
   b2 boolean
 ) server influxdb_svr;
+--Testcase 330:
 create foreign table nt3 (
   id int,
   nt2_id int,
@@ -986,20 +1036,23 @@ select * from int4_tbl a full join int4_tbl b on false;
 -- test for ability to use a cartesian join when necessary
 --
 
+--Testcase 331:
+create foreign table q1 (q1 int) server influxdb_svr;
+--Testcase 332:
+create foreign table q2 (q2 int) server influxdb_svr;
+
 --Testcase 104:
 explain (costs off)
 select * from
   tenk1 join int4_tbl on f1 = twothousand,
-  int4(sin(1)) q1,
-  int4(sin(0)) q2
+  q1, q2
 where q1 = thousand or q2 = thousand;
 
 --Testcase 105:
 explain (costs off)
 select * from
   tenk1 join int4_tbl on f1 = twothousand,
-  int4(sin(1)) q1,
-  int4(sin(0)) q2
+  q1, q2
 where thousand = (q1 + q2);
 
 --
@@ -1094,6 +1147,111 @@ select t1.unique2, t1.stringu1, t2.unique1, t2.stringu2 from
   left join tenk1 t2
   on (subq1.y1 = t2.unique1)
 where t1.unique2 < 42 and t1.stringu1 > t2.stringu2;
+
+-- Here's a variant that we can't fold too aggressively, though,
+-- or we end up with noplace to evaluate the lateral PHV
+--Testcase 333:
+explain (verbose, costs off)
+select * from
+  (select 1 as x) ss1 left join (select 2 as y) ss2 on (true),
+  lateral (select ss2.y as z limit 1) ss3;
+--Testcase 334:
+select * from
+  (select 1 as x) ss1 left join (select 2 as y) ss2 on (true),
+  lateral (select ss2.y as z limit 1) ss3;
+
+--
+-- test inlining of immutable functions
+--
+--Testcase 335:
+create function f_immutable_int4(i integer) returns integer as
+$$ begin return i; end; $$ language plpgsql immutable;
+
+-- check optimization of function scan with join
+--Testcase 336:
+explain (costs off)
+select unique1 from tenk1, (select * from f_immutable_int4(1) x) x
+where x = unique1;
+
+--Testcase 337:
+explain (verbose, costs off)
+select unique1, x.*
+from tenk1, (select *, random() from f_immutable_int4(1) x) x
+where x = unique1;
+
+--Testcase 338:
+explain (costs off)
+select unique1 from tenk1, f_immutable_int4(1) x where x = unique1;
+
+--Testcase 339:
+explain (costs off)
+select unique1 from tenk1, lateral f_immutable_int4(1) x where x = unique1;
+
+--Testcase 340:
+explain (costs off)
+select unique1, x from tenk1 join f_immutable_int4(1) x on unique1 = x;
+
+--Testcase 341:
+explain (costs off)
+select unique1, x from tenk1 left join f_immutable_int4(1) x on unique1 = x;
+
+--Testcase 342:
+explain (costs off)
+select unique1, x from tenk1 right join f_immutable_int4(1) x on unique1 = x;
+
+--Testcase 343:
+explain (costs off)
+select unique1, x from tenk1 full join f_immutable_int4(1) x on unique1 = x;
+
+-- check that pullup of a const function allows further const-folding
+--Testcase 344:
+explain (costs off)
+select unique1 from tenk1, f_immutable_int4(1) x where x = 42;
+
+-- test inlining of immutable functions with PlaceHolderVars
+--Testcase 345:
+explain (costs off)
+select nt3.id
+from nt3 as nt3
+  left join
+    (select nt2.*, (nt2.b1 or i4 = 42) AS b3
+     from nt2 as nt2
+       left join
+         f_immutable_int4(0) i4
+         on i4 = nt2.nt1_id
+    ) as ss2
+    on ss2.id = nt3.nt2_id
+where nt3.id = 1 and ss2.b3;
+
+--Testcase 346:
+drop function f_immutable_int4(int);
+
+-- test inlining when function returns composite
+
+--Testcase 347:
+create function mki8(bigint, bigint) returns int8_tbl as
+$$select row($1,$2)::int8_tbl$$ language sql;
+
+--Testcase 348:
+create function mki4(int) returns int4_tbl as
+$$select row($1)::int4_tbl$$ language sql;
+
+--Testcase 349:
+explain (verbose, costs off)
+select * from mki8(1,2);
+--Testcase 350:
+select * from mki8(1,2);
+
+--Testcase 351:
+explain (verbose, costs off)
+select * from mki4(42);
+--Testcase 352:
+select * from mki4(42);
+
+--Testcase 353:
+drop function mki8(bigint, bigint);
+--Testcase 354:
+drop function mki4(int);
 
 --
 -- test extraction of restriction OR clauses from join OR clause
@@ -1271,6 +1429,7 @@ using (join_key);
 --
 -- test successful handling of nested outer joins with degenerate join quals
 --
+--Testcase 355:
 create foreign table text_tbl(f1 text) server influxdb_svr;
 
 --Testcase 133:
@@ -1516,9 +1675,13 @@ reset enable_nestloop;
 
 begin;
 
+--Testcase 356:
 CREATE FOREIGN TABLE a3 (id int, b_id int) SERVER influxdb_svr;
+--Testcase 357:
 CREATE FOREIGN TABLE b3 (id int, c_id int) SERVER influxdb_svr;
+--Testcase 358:
 CREATE FOREIGN TABLE c3 (id int) SERVER influxdb_svr;
+--Testcase 359:
 CREATE FOREIGN TABLE d3 (a int, b int) SERVER influxdb_svr;
 
 -- all three cases should be optimizable into a3 simple seqscan
@@ -1587,7 +1750,9 @@ select 1 from (select a3.id FROM a3 left join b3 on a3.b_id = b3.id) q,
 
 rollback;
 
+--Testcase 360:
 create foreign table parent (k int, pd int) server influxdb_svr;
+--Testcase 361:
 create foreign table child (k int, cd int) server influxdb_svr;
 
 -- this case is optimizable
@@ -1632,7 +1797,9 @@ select p.* from
 -- bug 5255: this is not optimizable by join removal
 begin;
 
+--Testcase 362:
 CREATE FOREIGN TABLE a4 (id int) SERVER influxdb_svr;
+--Testcase 363:
 CREATE FOREIGN TABLE b4 (id int, a_id int) SERVER influxdb_svr;
 
 --Testcase 174:
@@ -1645,6 +1812,7 @@ rollback;
 -- another join removal bug: this is not optimizable, either
 begin;
 
+--Testcase 364:
 create foreign table innertab (id int8, dat1 int8) server influxdb_svr;
 
 --Testcase 176:
@@ -1660,6 +1828,7 @@ rollback;
 -- another join removal bug: we must clean up correctly when removing a PHV
 begin;
 
+--Testcase 365:
 create foreign table uniquetbl (f1 text) server influxdb_svr;
 
 --Testcase 177:
@@ -1875,6 +2044,7 @@ select v.* from
   (int8_tbl x left join (select q1,(select coalesce(q2,0)) q2 from int8_tbl) y on x.q2 = y.q1)
   left join int4_tbl z on z.f1 = x.q2,
   lateral (select x.q1,y.q1 union all select x.q2,y.q2) v(vx,vy);
+--Testcase 366:
 create temp table dual();
 --Testcase 219:
 insert into dual default values;
@@ -2065,6 +2235,7 @@ select 1 from tenk1 a, lateral (select max(a.unique1) from int4_tbl b) ss;
 
 -- check behavior of LATERAL in UPDATE/DELETE
 
+--Testcase 367:
 create temp table xx1 as select f1 as x1, -f1 as x2 from int4_tbl;
 
 -- error, can't do this:
@@ -2087,6 +2258,8 @@ delete from xx1 using (select * from int4_tbl where f1 = xx1.x1) ss;
 --Testcase 257:
 delete from xx1 using lateral (select * from int4_tbl where f1 = x1) ss;
 
+/*
+-- Influx does not support partition table
 --
 -- test LATERAL reference propagation down a multi-level inheritance hierarchy
 -- produced for a multi-level partitioned table hierarchy.
@@ -2095,18 +2268,14 @@ create table join_pt1 (a int, b int, c varchar) partition by range(a);
 create table join_pt1p1 partition of join_pt1 for values from (0) to (100) partition by range(b);
 create table join_pt1p2 partition of join_pt1 for values from (100) to (200);
 create table join_pt1p1p1 partition of join_pt1p1 for values from (0) to (100);
---Testcase 258:
 insert into join_pt1 values (1, 1, 'x'), (101, 101, 'y');
 create table join_ut1 (a int, b int, c varchar);
---Testcase 259:
 insert into join_ut1 values (101, 101, 'y'), (2, 2, 'z');
---Testcase 260:
 explain (verbose, costs off)
 select t1.b, ss.phv from join_ut1 t1 left join lateral
               (select t2.a as t2a, t3.a t3a, least(t1.a, t2.a, t3.a) phv
 					  from join_pt1 t2 join join_ut1 t3 on t2.a = t3.b) ss
               on t1.a = ss.t2a order by t1.a;
---Testcase 261:
 select t1.b, ss.phv from join_ut1 t1 left join lateral
               (select t2.a as t2a, t3.a t3a, least(t1.a, t2.a, t3.a) phv
 					  from join_pt1 t2 join join_ut1 t3 on t2.a = t3.b) ss
@@ -2114,13 +2283,16 @@ select t1.b, ss.phv from join_ut1 t1 left join lateral
 
 drop table join_pt1;
 drop table join_ut1;
+*/
 --
 -- test that foreign key join estimation performs sanely for outer joins
 --
 
 begin;
 
+--Testcase 368:
 create foreign table fkest (a int, b int, c int) server influxdb_svr;
+--Testcase 369:
 create foreign table fkest1 (a int, b int) server influxdb_svr;
 
 --Testcase 262:
@@ -2138,8 +2310,11 @@ rollback;
 -- test planner's ability to mark joins as unique
 --
 
+--Testcase 370:
 create foreign table j11 (id int) server influxdb_svr;
+--Testcase 371:
 create foreign table j21 (id int) server influxdb_svr;
+--Testcase 372:
 create foreign table j31 (id int) server influxdb_svr;
 
 -- ensure join is properly marked as unique
@@ -2196,8 +2371,11 @@ inner join (select id from j31 group by id) j31 on j11.id = j31.id;
 
 -- test more complex permutations of unique joins
 
+--Testcase 373:
 create foreign table j12 (id1 int, id2 int) server influxdb_svr;
+--Testcase 374:
 create foreign table j22 (id1 int, id2 int) server influxdb_svr;
+--Testcase 375:
 create foreign table j32 (id1 int, id2 int) server influxdb_svr;
 
 -- ensure there's no unique join when not all columns which are part of the
@@ -2233,24 +2411,63 @@ set enable_nestloop to 0;
 set enable_hashjoin to 0;
 set enable_sort to 0;
 
--- create an index that will be preferred over the PK to perform the join
--- create index j1_id1_idx on j12 (id1) where id1 % 1000 = 1;
+--Testcase 376:
+create foreign table j23 (id1 int, id2 int) server influxdb_svr;
+-- create indexes that will be preferred over the PKs to perform the join
+--create index j1_id1_idx on j1 (id1) where id1 % 1000 = 1;
+--create index j2_id1_idx on j2 (id1) where id1 % 1000 = 1;
+
+-- need an additional row in j2, if we want j2_id1_idx to be preferred
+--insert into j2 values(1,2);
+--analyze j2;
 
 --Testcase 277:
-explain (costs off) select * from j12 j12
-inner join j12 j22 on j12.id1 = j22.id1 and j12.id2 = j22.id2
-where j12.id1 % 1000 = 1 and j22.id1 % 1000 = 1;
+explain (costs off) select * from j12
+inner join j23 on j12.id1 = j23.id1 and j12.id2 = j23.id2
+where j12.id1 % 1000 = 1 and j23.id1 % 1000 = 1;
 
 --Testcase 278:
-select * from j12 j12
-inner join j12 j22 on j12.id1 = j22.id1 and j12.id2 = j22.id2
-where j12.id1 % 1000 = 1 and j22.id1 % 1000 = 1;
+select * from j12
+inner join j23 on j12.id1 = j23.id1 and j12.id2 = j23.id2
+where j12.id1 % 1000 = 1 and j23.id1 % 1000 = 1;
+
+-- Exercise array keys mark/restore B-Tree code
+--Testcase 377:
+explain (costs off) select * from j12
+inner join j23 on j12.id1 = j23.id1 and j12.id2 = j23.id2
+where j12.id1 % 1000 = 1 and j23.id1 % 1000 = 1 and j23.id1 = any (array[1]);
+
+--Testcase 378:
+select * from j12
+inner join j23 on j12.id1 = j23.id1 and j12.id2 = j23.id2
+where j12.id1 % 1000 = 1 and j23.id1 % 1000 = 1 and j23.id1 = any (array[1]);
+
+-- Exercise array keys "find extreme element" B-Tree code
+--Testcase 379:
+explain (costs off) select * from j12
+inner join j23 on j12.id1 = j23.id1 and j12.id2 = j23.id2
+where j12.id1 % 1000 = 1 and j23.id1 % 1000 = 1 and j23.id1 >= any (array[1,5]);
+
+--Testcase 380:
+select * from j12
+inner join j23 on j12.id1 = j23.id1 and j12.id2 = j23.id2
+where j12.id1 % 1000 = 1 and j23.id1 % 1000 = 1 and j23.id1 >= any (array[1,5]);
 
 reset enable_nestloop;
 reset enable_hashjoin;
 reset enable_sort;
 
+--Testcase 381:
+drop foreign table j12;
+--Testcase 382:
+drop foreign table j22;
+--Testcase 383:
+drop foreign table j23;
+--Testcase 384:
+drop foreign table j32;
+
 -- check that semijoin inner is not seen as unique for a portion of the outerrel
+--Testcase 385:
 CREATE FOREIGN TABLE onek (
   unique1   int4,
   unique2   int4,
@@ -2280,8 +2497,10 @@ where exists (select 1 from tenk1 t3
       and t1.unique1 < 1;
 
 -- ... unless it actually is unique
+--Testcase 386:
 create table j3 as select unique1, tenthous from onek;
 vacuum analyze j3;
+--Testcase 387:
 create unique index on j3(unique1, tenthous);
 
 --Testcase 280:
@@ -2292,542 +2511,8 @@ where exists (select 1 from j3
               where j3.unique1 = t1.unique1 and j3.tenthous = t2.hundred)
       and t1.unique1 < 1;
 
+--Testcase 388:
 drop table j3;
-
---
--- exercises for the hash join code
---
-
-begin;
-
-set local min_parallel_table_scan_size = 0;
-set local parallel_setup_cost = 0;
--- set enable_mergejoin = off;
-
--- Extract bucket and batch counts from an explain analyze plan.  In
--- general we can't make assertions about how many batches (or
--- buckets) will be required because it can vary, but we can in some
--- special cases and we can check for growth.
-create or replace function find_hash(node json)
-returns json language plpgsql
-as
-$$
-declare
-  x json;
-  child json;
-begin
-  if node->>'Node Type' = 'Hash' then
-    return node;
-  else
-    for child in select json_array_elements(node->'Plans')
-    loop
-      x := find_hash(child);
-      if x is not null then
-        return x;
-      end if;
-    end loop;
-    return null;
-  end if;
-end;
-$$;
-create or replace function hash_join_batches(query text)
-returns table (original int, final int) language plpgsql
-as
-$$
-declare
-  whole_plan json;
-  hash_node json;
-begin
-  for whole_plan in
-    execute 'explain (analyze, format ''json'') ' || query
-  loop
-    hash_node := find_hash(json_extract_path(whole_plan, '0', 'Plan'));
-    original := hash_node->>'Original Hash Batches';
-    final := hash_node->>'Hash Batches';
-    return next;
-  end loop;
-end;
-$$;
-
--- Make a simple relation with well distributed keys and correctly
--- estimated size.
-create table simple as
-  select generate_series(1, 20000) AS id, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-alter table simple set (parallel_workers = 2);
-analyze simple;
-
--- Make a relation whose size we will under-estimate.  We want stats
--- to say 1000 rows, but actually there are 20,000 rows.
-create table bigger_than_it_looks as
-  select generate_series(1, 20000) as id, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-alter table bigger_than_it_looks set (autovacuum_enabled = 'false');
-alter table bigger_than_it_looks set (parallel_workers = 2);
-analyze bigger_than_it_looks;
---Testcase 281:
-update pg_class set reltuples = 1000 where relname = 'bigger_than_it_looks';
-
--- Make a relation whose size we underestimate and that also has a
--- kind of skew that breaks our batching scheme.  We want stats to say
--- 2 rows, but actually there are 20,000 rows with the same key.
-create table extremely_skewed (id int, t text);
-alter table extremely_skewed set (autovacuum_enabled = 'false');
-alter table extremely_skewed set (parallel_workers = 2);
-analyze extremely_skewed;
---Testcase 282:
-insert into extremely_skewed
-  select 42 as id, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-  from generate_series(1, 20000);
---Testcase 283:
-update pg_class
-  set reltuples = 2, relpages = pg_relation_size('extremely_skewed') / 8192
-  where relname = 'extremely_skewed';
-
--- Make a relation with a couple of enormous tuples.
-create table wide as select generate_series(1, 2) as id, rpad('', 320000, 'x') as t;
-alter table wide set (parallel_workers = 2);
-
--- The "optimal" case: the hash table fits in memory; we plan for 1
--- batch, we stick to that number, and peak memory usage stays within
--- our work_mem budget
-
--- non-parallel
-savepoint settings;
-set local max_parallel_workers_per_gather = 0;
-set local work_mem = '4MB';
---Testcase 284:
-explain (costs off)
-  select count(*) from simple r join simple s using (id);
---Testcase 285:
-select count(*) from simple r join simple s using (id);
---Testcase 286:
-select original > 1 as initially_multibatch, final > original as increased_batches
-  from hash_join_batches(
-$$
-  select count(*) from simple r join simple s using (id);
-$$);
-rollback to settings;
-
--- parallel with parallel-oblivious hash join
-savepoint settings;
-set local max_parallel_workers_per_gather = 2;
-set local work_mem = '4MB';
-set local enable_parallel_hash = off;
---Testcase 287:
-explain (costs off)
-  select count(*) from simple r join simple s using (id);
---Testcase 288:
-select count(*) from simple r join simple s using (id);
---Testcase 289:
-select original > 1 as initially_multibatch, final > original as increased_batches
-  from hash_join_batches(
-$$
-  select count(*) from simple r join simple s using (id);
-$$);
-rollback to settings;
-
--- parallel with parallel-aware hash join
-savepoint settings;
-set local max_parallel_workers_per_gather = 2;
-set local work_mem = '4MB';
-set local enable_parallel_hash = on;
---Testcase 290:
-explain (costs off)
-  select count(*) from simple r join simple s using (id);
---Testcase 291:
-select count(*) from simple r join simple s using (id);
---Testcase 292:
-select original > 1 as initially_multibatch, final > original as increased_batches
-  from hash_join_batches(
-$$
-  select count(*) from simple r join simple s using (id);
-$$);
-rollback to settings;
-
--- The "good" case: batches required, but we plan the right number; we
--- plan for some number of batches, and we stick to that number, and
--- peak memory usage says within our work_mem budget
-
--- non-parallel
-savepoint settings;
-set local max_parallel_workers_per_gather = 0;
-set local work_mem = '128kB';
---Testcase 293:
-explain (costs off)
-  select count(*) from simple r join simple s using (id);
---Testcase 294:
-select count(*) from simple r join simple s using (id);
---Testcase 295:
-select original > 1 as initially_multibatch, final > original as increased_batches
-  from hash_join_batches(
-$$
-  select count(*) from simple r join simple s using (id);
-$$);
-rollback to settings;
-
--- parallel with parallel-oblivious hash join
-savepoint settings;
-set local max_parallel_workers_per_gather = 2;
-set local work_mem = '128kB';
-set local enable_parallel_hash = off;
---Testcase 296:
-explain (costs off)
-  select count(*) from simple r join simple s using (id);
---Testcase 297:
-select count(*) from simple r join simple s using (id);
---Testcase 298:
-select original > 1 as initially_multibatch, final > original as increased_batches
-  from hash_join_batches(
-$$
-  select count(*) from simple r join simple s using (id);
-$$);
-rollback to settings;
-
--- parallel with parallel-aware hash join
-savepoint settings;
-set local max_parallel_workers_per_gather = 2;
-set local work_mem = '192kB';
-set local enable_parallel_hash = on;
---Testcase 299:
-explain (costs off)
-  select count(*) from simple r join simple s using (id);
---Testcase 300:
-select count(*) from simple r join simple s using (id);
---Testcase 301:
-select original > 1 as initially_multibatch, final > original as increased_batches
-  from hash_join_batches(
-$$
-  select count(*) from simple r join simple s using (id);
-$$);
-rollback to settings;
-
--- The "bad" case: during execution we need to increase number of
--- batches; in this case we plan for 1 batch, and increase at least a
--- couple of times, and peak memory usage stays within our work_mem
--- budget
-
--- non-parallel
-savepoint settings;
-set local max_parallel_workers_per_gather = 0;
-set local work_mem = '128kB';
---Testcase 302:
-explain (costs off)
-  select count(*) FROM simple r JOIN bigger_than_it_looks s USING (id);
---Testcase 303:
-select count(*) FROM simple r JOIN bigger_than_it_looks s USING (id);
---Testcase 304:
-select original > 1 as initially_multibatch, final > original as increased_batches
-  from hash_join_batches(
-$$
-  select count(*) FROM simple r JOIN bigger_than_it_looks s USING (id);
-$$);
-rollback to settings;
-
--- parallel with parallel-oblivious hash join
-savepoint settings;
-set local max_parallel_workers_per_gather = 2;
-set local work_mem = '128kB';
-set local enable_parallel_hash = off;
---Testcase 305:
-explain (costs off)
-  select count(*) from simple r join bigger_than_it_looks s using (id);
---Testcase 306:
-select count(*) from simple r join bigger_than_it_looks s using (id);
---Testcase 307:
-select original > 1 as initially_multibatch, final > original as increased_batches
-  from hash_join_batches(
-$$
-  select count(*) from simple r join bigger_than_it_looks s using (id);
-$$);
-rollback to settings;
-
--- parallel with parallel-aware hash join
-savepoint settings;
-set local max_parallel_workers_per_gather = 1;
-set local work_mem = '192kB';
-set local enable_parallel_hash = on;
---Testcase 308:
-explain (costs off)
-  select count(*) from simple r join bigger_than_it_looks s using (id);
---Testcase 309:
-select count(*) from simple r join bigger_than_it_looks s using (id);
---Testcase 310:
-select original > 1 as initially_multibatch, final > original as increased_batches
-  from hash_join_batches(
-$$
-  select count(*) from simple r join bigger_than_it_looks s using (id);
-$$);
-rollback to settings;
-
--- The "ugly" case: increasing the number of batches during execution
--- doesn't help, so stop trying to fit in work_mem and hope for the
--- best; in this case we plan for 1 batch, increases just once and
--- then stop increasing because that didn't help at all, so we blow
--- right through the work_mem budget and hope for the best...
-
--- non-parallel
-savepoint settings;
-set local max_parallel_workers_per_gather = 0;
-set local work_mem = '128kB';
---Testcase 311:
-explain (costs off)
-  select count(*) from simple r join extremely_skewed s using (id);
---Testcase 312:
-select count(*) from simple r join extremely_skewed s using (id);
---Testcase 313:
-select * from hash_join_batches(
-$$
-  select count(*) from simple r join extremely_skewed s using (id);
-$$);
-rollback to settings;
-
--- parallel with parallel-oblivious hash join
-savepoint settings;
-set local max_parallel_workers_per_gather = 2;
-set local work_mem = '128kB';
-set local enable_parallel_hash = off;
---Testcase 314:
-explain (costs off)
-  select count(*) from simple r join extremely_skewed s using (id);
---Testcase 315:
-select count(*) from simple r join extremely_skewed s using (id);
---Testcase 316:
-select * from hash_join_batches(
-$$
-  select count(*) from simple r join extremely_skewed s using (id);
-$$);
-rollback to settings;
-
--- parallel with parallel-aware hash join
-savepoint settings;
-set local max_parallel_workers_per_gather = 1;
-set local work_mem = '128kB';
-set local enable_parallel_hash = on;
---Testcase 317:
-explain (costs off)
-  select count(*) from simple r join extremely_skewed s using (id);
---Testcase 318:
-select count(*) from simple r join extremely_skewed s using (id);
---Testcase 319:
-select * from hash_join_batches(
-$$
-  select count(*) from simple r join extremely_skewed s using (id);
-$$);
-rollback to settings;
-
--- A couple of other hash join tests unrelated to work_mem management.
-
--- Check that EXPLAIN ANALYZE has data even if the leader doesn't participate
-savepoint settings;
-set local max_parallel_workers_per_gather = 2;
-set local work_mem = '4MB';
-set local parallel_leader_participation = off;
---Testcase 320:
-select * from hash_join_batches(
-$$
-  select count(*) from simple r join simple s using (id);
-$$);
-rollback to settings;
-
--- Exercise rescans.  We'll turn off parallel_leader_participation so
--- that we can check that instrumentation comes back correctly.
-
-create table join_foo as select generate_series(1, 3) as id, 'xxxxx'::text as t;
-alter table join_foo set (parallel_workers = 0);
-create table join_bar as select generate_series(1, 10000) as id, 'xxxxx'::text as t;
-alter table join_bar set (parallel_workers = 2);
-
--- multi-batch with rescan, parallel-oblivious
-savepoint settings;
-set enable_parallel_hash = off;
-set parallel_leader_participation = off;
-set min_parallel_table_scan_size = 0;
-set parallel_setup_cost = 0;
-set parallel_tuple_cost = 0;
-set max_parallel_workers_per_gather = 2;
-set enable_material = off;
-set enable_mergejoin = off;
-set work_mem = '64kB';
---Testcase 321:
-explain (costs off)
-  select count(*) from join_foo
-    left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
-    on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
---Testcase 322:
-select count(*) from join_foo
-  left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
-  on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
---Testcase 323:
-select final > 1 as multibatch
-  from hash_join_batches(
-$$
-  select count(*) from join_foo
-    left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
-    on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
-$$);
-rollback to settings;
-
--- single-batch with rescan, parallel-oblivious
-savepoint settings;
-set enable_parallel_hash = off;
-set parallel_leader_participation = off;
-set min_parallel_table_scan_size = 0;
-set parallel_setup_cost = 0;
-set parallel_tuple_cost = 0;
-set max_parallel_workers_per_gather = 2;
-set enable_material = off;
-set enable_mergejoin = off;
-set work_mem = '4MB';
---Testcase 324:
-explain (costs off)
-  select count(*) from join_foo
-    left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
-    on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
---Testcase 325:
-select count(*) from join_foo
-  left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
-  on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
---Testcase 326:
-select final > 1 as multibatch
-  from hash_join_batches(
-$$
-  select count(*) from join_foo
-    left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
-    on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
-$$);
-rollback to settings;
-
--- multi-batch with rescan, parallel-aware
-savepoint settings;
-set enable_parallel_hash = on;
-set parallel_leader_participation = off;
-set min_parallel_table_scan_size = 0;
-set parallel_setup_cost = 0;
-set parallel_tuple_cost = 0;
-set max_parallel_workers_per_gather = 2;
-set enable_material = off;
-set enable_mergejoin = off;
-set work_mem = '64kB';
---Testcase 327:
-explain (costs off)
-  select count(*) from join_foo
-    left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
-    on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
---Testcase 328:
-select count(*) from join_foo
-  left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
-  on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
---Testcase 329:
-select final > 1 as multibatch
-  from hash_join_batches(
-$$
-  select count(*) from join_foo
-    left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
-    on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
-$$);
-rollback to settings;
-
--- single-batch with rescan, parallel-aware
-savepoint settings;
-set enable_parallel_hash = on;
-set parallel_leader_participation = off;
-set min_parallel_table_scan_size = 0;
-set parallel_setup_cost = 0;
-set parallel_tuple_cost = 0;
-set max_parallel_workers_per_gather = 2;
-set enable_material = off;
-set enable_mergejoin = off;
-set work_mem = '4MB';
---Testcase 330:
-explain (costs off)
-  select count(*) from join_foo
-    left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
-    on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
---Testcase 331:
-select count(*) from join_foo
-  left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
-  on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
---Testcase 332:
-select final > 1 as multibatch
-  from hash_join_batches(
-$$
-  select count(*) from join_foo
-    left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
-    on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
-$$);
-rollback to settings;
-
--- A full outer join where every record is matched.
-
--- non-parallel
-savepoint settings;
-set local max_parallel_workers_per_gather = 0;
---Testcase 333:
-explain (costs off)
-     select  count(*) from simple r full outer join simple s using (id);
---Testcase 334:
-select  count(*) from simple r full outer join simple s using (id);
-rollback to settings;
-
--- parallelism not possible with parallel-oblivious outer hash join
-savepoint settings;
-set local max_parallel_workers_per_gather = 2;
---Testcase 335:
-explain (costs off)
-     select  count(*) from simple r full outer join simple s using (id);
---Testcase 336:
-select  count(*) from simple r full outer join simple s using (id);
-rollback to settings;
-
--- An full outer join where every record is not matched.
-
--- non-parallel
-savepoint settings;
-set local max_parallel_workers_per_gather = 0;
---Testcase 337:
-explain (costs off)
-     select  count(*) from simple r full outer join simple s on (r.id = 0 - s.id);
---Testcase 338:
-select  count(*) from simple r full outer join simple s on (r.id = 0 - s.id);
-rollback to settings;
-
--- parallelism not possible with parallel-oblivious outer hash join
-savepoint settings;
-set local max_parallel_workers_per_gather = 2;
---Testcase 339:
-explain (costs off)
-     select  count(*) from simple r full outer join simple s on (r.id = 0 - s.id);
---Testcase 340:
-select  count(*) from simple r full outer join simple s on (r.id = 0 - s.id);
-rollback to settings;
-
--- exercise special code paths for huge tuples (note use of non-strict
--- expression and left join required to get the detoasted tuple into
--- the hash table)
-
--- parallel with parallel-aware hash join (hits ExecParallelHashLoadTuple and
--- sts_puttuple oversized tuple cases because it's multi-batch)
-savepoint settings;
-set max_parallel_workers_per_gather = 2;
-set enable_parallel_hash = on;
-set work_mem = '128kB';
---Testcase 341:
-explain (costs off)
-  select length(max(s.t))
-  from wide left join (select id, coalesce(t, '') || '' as t from wide) s using (id);
---Testcase 342:
-select length(max(s.t))
-from wide left join (select id, coalesce(t, '') || '' as t from wide) s using (id);
---Testcase 343:
-select final > 1 as multibatch
-  from hash_join_batches(
-$$
-  select length(max(s.t))
-  from wide left join (select id, coalesce(t, '') || '' as t from wide) s using (id);
-$$);
-rollback to settings;
-
-rollback;
-
 
 -- Clean up
 DO $d$
@@ -2841,6 +2526,9 @@ begin
 end;
 $d$;
 
+--Testcase 389:
 DROP USER MAPPING FOR CURRENT_USER SERVER influxdb_svr;
+--Testcase 390:
 DROP SERVER influxdb_svr CASCADE;
+--Testcase 391:
 DROP EXTENSION influxdb_fdw CASCADE;

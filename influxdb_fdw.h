@@ -2,7 +2,7 @@
  *
  * InfluxDB Foreign Data Wrapper for PostgreSQL
  *
- * Portions Copyright (c) 2018, TOSHIBA CORPORATION
+ * Portions Copyright (c) 2020, TOSHIBA CORPORATION
  *
  * IDENTIFICATION
  *        influxdb_fdw.h
@@ -22,6 +22,7 @@
 #include "nodes/pathnodes.h"
 #include "utils/float.h"
 #include "optimizer/optimizer.h"
+#include "fmgr.h"
 #else
 #include "nodes/relation.h"
 #include "optimizer/var.h"
@@ -46,6 +47,11 @@
 #endif
 #ifndef FLOAT8ARRAYOID
 	#define FLOAT8ARRAYOID 1022
+#endif
+
+#if (PG_VERSION_NUM < 120000)
+#define table_close(rel, lock)	heap_close(rel, lock)
+#define table_open(rel, lock)	heap_open(rel, lock)
 #endif
 
 /*

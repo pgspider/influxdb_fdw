@@ -1,7 +1,10 @@
+--Testcase 51:
 CREATE EXTENSION influxdb_fdw;
 
+--Testcase 52:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw
   OPTIONS (dbname 'coredb', host 'http://localhost', port '8086');
+--Testcase 53:
 CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user 'user', password 'pass');
 
 -- import time column as timestamp and text type
@@ -12,6 +15,7 @@ CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user 'user', p
 -- Check the LIMIT/OFFSET feature of SELECT
 --
 
+--Testcase 54:
 CREATE FOREIGN TABLE onek (
 	unique1	 	int4,
 	unique2	 	int4,
@@ -31,8 +35,10 @@ CREATE FOREIGN TABLE onek (
 	string4	 	name
 ) SERVER influxdb_svr;
 
+--Testcase 55:
 CREATE FOREIGN TABLE int8_tbl(q1 int8, q2 int8) SERVER influxdb_svr;
 
+--Testcase 56:
 CREATE FOREIGN TABLE tenk1 (
 	unique1	 	int4,
 	unique2	 	int4,
@@ -155,23 +161,43 @@ fetch backward 1 in c4;
 --Testcase 35:
 fetch all in c4;
 
+declare c5 scroll cursor for select * from int8_tbl order by q1 fetch first 2 rows with ties;
+--Testcase 57:
+fetch all in c5;
+--Testcase 58:
+fetch 1 in c5;
+--Testcase 59:
+fetch backward 1 in c5;
+--Testcase 60:
+fetch backward 1 in c5;
+--Testcase 61:
+fetch all in c5;
+--Testcase 62:
+fetch backward all in c5;
+--Testcase 63:
+fetch all in c5;
+--Testcase 64:
+fetch backward all in c5;
+
 rollback;
 
 -- Stress test for variable LIMIT in conjunction with bounded-heap sorting
-
+--Testcase 65:
+CREATE FOREIGN TABLE generate_series4(a int) SERVER influxdb_svr;
 --Testcase 36:
 SELECT
-  (SELECT n
+  (SELECT a
      FROM (VALUES (1)) AS x,
-          (SELECT n FROM generate_series(1,10) AS n
-             ORDER BY n LIMIT 1 OFFSET s-1) AS y) AS z
-  FROM generate_series(1,10) AS s;
+          (SELECT a FROM generate_series4 AS n
+             ORDER BY a LIMIT 1 OFFSET s.a-1) AS y) AS z
+  FROM generate_series4 AS s;
 
 --
 -- Test behavior of volatile and set-returning functions in conjunction
 -- with ORDER BY and LIMIT.
 --
 
+--Testcase 66:
 create temp sequence testseq;
 
 --Testcase 37:
@@ -233,12 +259,81 @@ order by s2 desc;
 select generate_series(0,2) as s1, generate_series((random()*.1)::int,2) as s2
 order by s2 desc;
 
+-- test for failure to set all aggregates' aggtranstype
+--Testcase 67:
 explain (verbose, costs off)
 select sum(tenthous) as s1, sum(tenthous) + random()*0 as s2
   from tenk1 group by thousand order by thousand limit 3;
 
+--Testcase 68:
 select sum(tenthous) as s1, sum(tenthous) + random()*0 as s2
   from tenk1 group by thousand order by thousand limit 3;
+
+--
+-- FETCH FIRST
+-- Check the WITH TIES clause
+--
+
+--Testcase 69:
+SELECT  thousand
+		FROM onek WHERE thousand < 5
+		ORDER BY thousand FETCH FIRST 2 ROW WITH TIES;
+
+--Testcase 70:
+SELECT  thousand
+		FROM onek WHERE thousand < 5
+		ORDER BY thousand FETCH FIRST ROWS WITH TIES;
+
+--Testcase 71:
+SELECT  thousand
+		FROM onek WHERE thousand < 5
+		ORDER BY thousand FETCH FIRST 1 ROW WITH TIES;
+
+--Testcase 72:
+SELECT  thousand
+		FROM onek WHERE thousand < 5
+		ORDER BY thousand FETCH FIRST 2 ROW ONLY;
+
+-- should fail
+--Testcase 73:
+SELECT ''::text AS two, unique1, unique2, stringu1
+		FROM onek WHERE unique1 > 50
+		FETCH FIRST 2 ROW WITH TIES;
+
+-- test ruleutils
+--Testcase 74:
+CREATE VIEW limit_thousand_v_1 AS SELECT thousand FROM onek WHERE thousand < 995
+		ORDER BY thousand FETCH FIRST 5 ROWS WITH TIES OFFSET 10;
+--Testcase 75:
+\d+ limit_thousand_v_1
+--Testcase 76:
+CREATE VIEW limit_thousand_v_2 AS SELECT thousand FROM onek WHERE thousand < 995
+		ORDER BY thousand OFFSET 10 FETCH FIRST 5 ROWS ONLY;
+--Testcase 77:
+\d+ limit_thousand_v_2
+--Testcase 78:
+CREATE VIEW limit_thousand_v_3 AS SELECT thousand FROM onek WHERE thousand < 995
+		ORDER BY thousand FETCH FIRST NULL ROWS WITH TIES;		-- fails
+--Testcase 79:
+CREATE VIEW limit_thousand_v_3 AS SELECT thousand FROM onek WHERE thousand < 995
+		ORDER BY thousand FETCH FIRST (NULL+1) ROWS WITH TIES;
+--Testcase 80:
+\d+ limit_thousand_v_3
+--Testcase 81:
+CREATE VIEW limit_thousand_v_4 AS SELECT thousand FROM onek WHERE thousand < 995
+		ORDER BY thousand FETCH FIRST NULL ROWS ONLY;
+--Testcase 82:
+\d+ limit_thousand_v_4
+
+-- leave these views
+--Testcase 83:
+DROP VIEW limit_thousand_v_1;
+--Testcase 84:
+DROP VIEW limit_thousand_v_2;
+--Testcase 85:
+DROP VIEW limit_thousand_v_3;
+--Testcase 86:
+DROP VIEW limit_thousand_v_4;
 
 -- Clean up
 DO $d$
@@ -252,6 +347,9 @@ begin
 end;
 $d$;
 
+--Testcase 87:
 DROP USER MAPPING FOR CURRENT_USER SERVER influxdb_svr;
+--Testcase 88:
 DROP SERVER influxdb_svr CASCADE;
+--Testcase 89:
 DROP EXTENSION influxdb_fdw CASCADE;

@@ -120,21 +120,21 @@ generate_series1 a=1i 00000000000001
 generate_series1 a=2i 00000000000002
 generate_series1 a=3i 00000000000003
 
-infinite1 id=1i,a="1" 00000000000001
-infinite1 id=1i,a="infinity" 00000000000002
-infinite1 id=2i,a="infinity" 00000000000003
-infinite1 id=2i,a="1" 00000000000004
-infinite1 id=3i,a="infinity" 00000000000005
-infinite1 id=3i,a="infinity" 00000000000006
-infinite1 id=4i,a="-infinity" 00000000000007
-infinite1 id=4i,a="infinity" 00000000000008
+infinite1 id=1i,x="1" 00000000000001
+infinite1 id=1i,x="infinity" 00000000000002
+infinite1 id=2i,x="infinity" 00000000000003
+infinite1 id=2i,x="1" 00000000000004
+infinite1 id=3i,x="infinity" 00000000000005
+infinite1 id=3i,x="infinity" 00000000000006
+infinite1 id=4i,x="-infinity" 00000000000007
+infinite1 id=4i,x="infinity" 00000000000008
 
-large_input1 id=1i,a="100000003" 00000000000001
-large_input1 id=1i,a="100000004" 00000000000002
-large_input1 id=1i,a="100000006" 00000000000003
-large_input1 id=1i,a="100000007" 00000000000004
-large_input1 id=2i,a="7000000000005" 00000000000005
-large_input1 id=2i,a="7000000000007" 00000000000006
+large_input1 id=1i,x=100000003 00000000000001
+large_input1 id=1i,x=100000004 00000000000002
+large_input1 id=1i,x=100000006 00000000000003
+large_input1 id=1i,x=100000007 00000000000004
+large_input1 id=2i,x=7000000000005 00000000000005
+large_input1 id=2i,x=7000000000007 00000000000006
 
 regr_test1 x=10,y=150 00000000000001
 regr_test1 x=20,y=250 00000000000002
@@ -149,7 +149,7 @@ float8_arr1 id=4i,x="{0,0,0}",y="{2,180,200}" 00000000000004
 float8_arr1 id=5i,x="{3,60,200}",y="{2,180,200}" 00000000000005
 float8_arr1 id=6i,x="{3,60,200,750,20000,2000}",y="{0,0,0,0,0,0}" 00000000000006
 float8_arr1 id=7i,x="{0,0,0,0,0,0}",y="{2,180,200,740,57800,-3400}" 00000000000007
-float8_arr1 id=8i,x="{3,60,200,750,20000,200}",y="{2,180,200,740,57800,-3400}" 00000000000008
+float8_arr1 id=8i,x="{3,60,200,750,20000,2000}",y="{2,180,200,740,57800,-3400}" 00000000000008
 
 boolean1 x2=TRUE,x3=FALSE,y4=TRUE,y5=FALSE,x6=TRUE,y6=TRUE,x7=FALSE,y7=TRUE,x8=FALSE,y8=TRUE,x9=FALSE,y9=FALSE 00000000000001
 
@@ -204,6 +204,36 @@ dense_rank1 x=2i 00000000000004
 dense_rank1 x=3i 00000000000005
 dense_rank1 x=3i 00000000000006
 
+agg_t5 id=1i,a="1.0",b="2.0" 00000000000001
+agg_t5 id=2i,a="3.0",b="4.0" 00000000000002
+agg_t5 id=3i,a="inf",b="inf" 00000000000003
+agg_t5 id=4i,a="nan",b="nan" 00000000000004
+
+agg_t4 id=1i,a="1",b="2",c="3",d="4" 00000000000001
+agg_t4 id=2i,a="1",b="inf",c="3",d="inf" 00000000000002
+agg_t4 id=3i,a="1",b="nan",c="3",d="nan" 00000000000003
+
 
 # End for test aggregates.sql
 
+
+# For test limit.sql
+
+generate_series4 a=1i 1
+generate_series4 a=2i 2
+generate_series4 a=3i 3
+generate_series4 a=4i 4
+generate_series4 a=5i 5
+generate_series4 a=6i 6
+generate_series4 a=7i 7
+generate_series4 a=8i 8
+generate_series4 a=9i 9
+generate_series4 a=10i 10
+
+# End for test limit.sql
+
+# For test prepare.sql
+
+road_tmp a=1i,b=2i 1
+
+# End for test prepare.sql

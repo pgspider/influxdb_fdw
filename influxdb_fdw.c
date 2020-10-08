@@ -2,7 +2,7 @@
  *
  * InfluxDB Foreign Data Wrapper for PostgreSQL
  *
- * Portions Copyright (c) 2018, TOSHIBA CORPORATION
+ * Portions Copyright (c) 2020, TOSHIBA CORPORATION
  *
  * IDENTIFICATION
  *        influxdb_fdw.c
@@ -860,7 +860,11 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 				 */
 				elog(ERROR, "not supported");
 			}
+#if (PG_VERSION_NUM >= 130000)
+			targetc = lnext(festate->tlist, targetc);
+#else
 			targetc = lnext(targetc);
+#endif
 
 		}
 		else

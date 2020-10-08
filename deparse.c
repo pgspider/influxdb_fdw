@@ -2,7 +2,7 @@
  *
  * InfluxDB Foreign Data Wrapper for PostgreSQL
  *
- * Portions Copyright (c) 2018, TOSHIBA CORPORATION
+ * Portions Copyright (c) 2020, TOSHIBA CORPORATION
  *
  * IDENTIFICATION
  *        deparse.c
@@ -1110,11 +1110,11 @@ influxdb_deparse_select(List *tlist, List **retrieved_attrs, deparse_expr_cxt *c
 		 * Core code already has some lock on each rel being planned, so we
 		 * can use NoLock here.
 		 */
-		Relation	rel = heap_open(rte->relid, NoLock);
+		Relation	rel = table_open(rte->relid, NoLock);
 
 		influxdb_deparse_target_list(buf, root, foreignrel->relid, rel, fpinfo->attrs_used, retrieved_attrs);
 
-		heap_close(rel, NoLock);
+		table_close(rel, NoLock);
 	}
 }
 
@@ -1128,11 +1128,10 @@ static void
 deparseFromExpr(List *quals, deparse_expr_cxt *context)
 {
 	StringInfo	buf = context->buf;
-	RelOptInfo *foreignrel = context->foreignrel;
 	RelOptInfo *scanrel = context->scanrel;
 
 	/* For upper relations, scanrel must be either a joinrel or a baserel */
-	Assert(foreignrel->reloptkind != RELOPT_UPPER_REL ||
+	Assert(context->foreignrel->reloptkind != RELOPT_UPPER_REL ||
 		   scanrel->reloptkind == RELOPT_JOINREL ||
 		   scanrel->reloptkind == RELOPT_BASEREL);
 
@@ -1275,12 +1274,12 @@ deparseExplicitTargetList(List *tlist, List **retrieved_attrs,
 		 * Core code already has some lock on each rel being planned, so we
 		 * can use NoLock here.
 		 */
-		Relation	rel = heap_open(rte->relid, NoLock);
+		Relation	rel = table_open(rte->relid, NoLock);
 		TupleDesc	tupdesc = RelationGetDescr(rel);
 
 		influxdb_append_field_key(tupdesc, context->buf, context->scanrel->relid, context->root, first);
 
-		heap_close(rel, NoLock);
+		table_close(rel, NoLock);
 		return;
 	}
 }
@@ -1310,11 +1309,11 @@ deparseFromExprForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *foreignrel,
 		 * Core code already has some lock on each rel being planned, so we
 		 * can use NoLock here.
 		 */
-		Relation	rel = heap_open(rte->relid, NoLock);
+		Relation	rel = table_open(rte->relid, NoLock);
 
 		influxdb_deparse_relation(buf, rel);
 
-		heap_close(rel, NoLock);
+		table_close(rel, NoLock);
 	}
 }
 
@@ -2204,7 +2203,7 @@ influxdb_deparse_scalar_array_op_expr(ScalarArrayOpExpr *node, deparse_expr_cxt 
 				{
 					Var *var = (Var*) arg1;
 					/* Deparse bool column with convert argument is false */
-					influxdb_deparse_column_ref(buf, var->varno, var->varoattno, var->vartype, context->root, false);
+					influxdb_deparse_column_ref(buf, var->varno, var->varattno, var->vartype, context->root, false);
 				}
 			}
 			else{
@@ -2471,7 +2470,11 @@ deparseAggref(Aggref *node, deparse_expr_cxt *context)
 			first = false;
 
 			/* Add VARIADIC */
+#if (PG_VERSION_NUM >= 130000)
+			if (use_variadic && lnext(node->args, arg) == NULL)
+#else
 			if (use_variadic && lnext(arg) == NULL)
+#endif
 				appendStringInfoString(buf, "VARIADIC ");
 
 			deparseExpr((Expr *) n, context);

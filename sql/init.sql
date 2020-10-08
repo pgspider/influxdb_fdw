@@ -29,5 +29,4 @@ CREATE TABLE shorty (
    c   character(10)
 );
 
-
 analyze;
