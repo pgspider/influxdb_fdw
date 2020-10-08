@@ -4,9 +4,12 @@ SET datestyle=ISO;
 -- timestamp with time zone differs based on this
 SET timezone='Japan';
 
+--Testcase 57:
 CREATE EXTENSION influxdb_fdw;
+--Testcase 58:
 CREATE SERVER server1 FOREIGN DATA WRAPPER influxdb_fdw OPTIONS
 (dbname 'mydb', host 'http://localhost', port '8086') ;
+--Testcase 59:
 CREATE USER MAPPING FOR CURRENT_USER SERVER server1 OPTIONS(user 'user', password 'pass');
 
 -- import time column as timestamp and text type
@@ -19,8 +22,11 @@ SELECT tag1,value1 FROM cpu;
 SELECT value1,time,value2 FROM cpu;
 --Testcase 4:
 SELECT value1,time_text,value2 FROM cpu;
+--Testcase 60:
 DROP FOREIGN TABLE cpu;
+--Testcase 61:
 DROP FOREIGN TABLE t3;
+--Testcase 62:
 DROP FOREIGN TABLE t4;
 
 -- test EXECPT
@@ -32,8 +38,8 @@ SELECT ftoptions FROM pg_foreign_table;
 IMPORT FOREIGN SCHEMA public LIMIT TO (cpu) FROM SERVER server1 INTO public;
 --Testcase 6:
 SELECT ftoptions FROM pg_foreign_table;
+--Testcase 63:
 DROP FOREIGN TABLE cpu;
-
 
 IMPORT FOREIGN SCHEMA public FROM SERVER server1 INTO public OPTIONS(import_time_text 'false');
 
@@ -62,8 +68,8 @@ SELECT * FROM cpu WHERE NOT (value4 AND value1=100);
 --Testcase 17:
 SELECT * FROM cpu WHERE tag1='tag1_A';
 
+--Testcase 64:
 EXPLAIN (verbose,costs off)
---Testcase 18:
 SELECT * FROM cpu WHERE value3 IS NULL;
 --Testcase 19:
 SELECT * FROM cpu WHERE value3 IS NULL;
@@ -84,17 +90,18 @@ SELECT * FROM cpu WHERE time != '2015-08-18 09:48:08+09';
 --Testcase 25:
 SELECT * FROM cpu WHERE time <> '2015-08-18 09:48:08+09';
 
+--Testcase 65:
 SELECT * FROM cpu WHERE time = '2015-08-18 09:48:08+09' OR value2 = 0.5;
 
 -- There is inconsitency for search of missing values between tag and field
+--Testcase 66:
 EXPLAIN (verbose,costs off)
---Testcase 26:
 SELECT * FROM cpu WHERE value3 = '';
 --Testcase 27:
 SELECT * FROM cpu WHERE value3 = '';
 
+--Testcase 67:
 EXPLAIN (verbose,costs off)
---Testcase 28:
 SELECT * FROM cpu WHERE tag2 = '';
 --Testcase 29:
 SELECT * FROM cpu WHERE tag2 = '';
@@ -127,17 +134,27 @@ SELECT * FROM cpu WHERE value2 NOT IN (2, 9.7);
 SELECT * FROM cpu WHERE value4 NOT IN ('true', 'true');
 --Testcase 41:
 SELECT * FROM cpu WHERE time IN ('2015-08-18 09:48:08+09','2016-08-28 07:44:00+07');
+--Testcase 68:
 SELECT * FROM cpu WHERE time NOT IN ('2015-08-18 09:48:08+09','2016-08-28 07:44:00+07');
+--Testcase 69:
 SELECT * FROM cpu WHERE value1 NOT IN (100, 97);
+--Testcase 70:
 SELECT * FROM cpu WHERE value1 IN (100, 97);
+--Testcase 71:
 SELECT * FROM cpu WHERE value2 IN (0.5, 10.9);
+--Testcase 72:
 SELECT * FROM cpu WHERE value2 NOT IN (2, 9.7);
+--Testcase 73:
 SELECT * FROM cpu WHERE value4 NOT IN ('true', 'true');
+--Testcase 74:
 SELECT * FROM cpu WHERE value4 IN ('f', 't');
 
+--Testcase 75:
 DROP FOREIGN TABLE cpu;
 
+--Testcase 76:
 CREATE FOREIGN TABLE t1(time timestamp with time zone , tag1 text, value1 integer) SERVER server1  OPTIONS (table 'cpu');
+--Testcase 77:
 CREATE FOREIGN TABLE t2(time timestamp , tag1 text, value1 integer) SERVER server1  OPTIONS (table 'cpu');
 
 --Testcase 42:
@@ -158,6 +175,7 @@ SELECT * FROM t2 WHERE time = TIMESTAMP '2015-08-18 00:00:00';
 -- pushdown now()
 --Testcase 48:
 SELECT * FROM t2 WHERE now() > time;
+--Testcase 78:
 EXPLAIN (verbose) SELECT * FROM t2 WHERE now() > time;
 
 --Testcase 49:
@@ -169,7 +187,6 @@ EXPLAIN (verbose)  SELECT * FROM t2 WHERE time = TIMESTAMP  WITH TIME ZONE '2015
 -- SELECT * FROM t2 WHERE time + interval '1 week 1 day 5 hour 43 minute 21 second 100 millisecond' = TIMESTAMP  WITH TIME ZONE '2015-08-26 05:43:21.1+00';
 -- EXPLAIN (verbose, costs off) 
 -- SELECT * FROM t2 WHERE time + interval '1 week 1 day 5 hour 43 minute 21 second 100 millisecond' = TIMESTAMP  WITH TIME ZONE '2015-08-26 05:43:21.1+00';
-
 
 -- InfluxDB does not support month or year interval, so not push down
 --Testcase 51:
@@ -188,16 +205,25 @@ ALTER SERVER server1 OPTIONS (SET dbname 'mydb');
 SELECT * FROM t1;
 
 -- map time column to both timestamp and text
+--Testcase 79:
 CREATE FOREIGN TABLE t5(t timestamp OPTIONS (column_name 'time') , tag1 text OPTIONS (column_name 'time'), v1  integer OPTIONS (column_name 'value1')) SERVER server1  OPTIONS (table 'cpu');
 --Testcase 56:
 SELECT * FROM t5;
 
+--Testcase 80:
 DROP FOREIGN TABLE t1;
+--Testcase 81:
 DROP FOREIGN TABLE t2;
+--Testcase 82:
 DROP FOREIGN TABLE t3;
+--Testcase 83:
 DROP FOREIGN TABLE t4;
+--Testcase 84:
 DROP FOREIGN TABLE t5;
 
+--Testcase 85:
 DROP USER MAPPING FOR CURRENT_USER SERVER server1;
+--Testcase 86:
 DROP SERVER server1;
+--Testcase 87:
 DROP EXTENSION influxdb_fdw CASCADE;

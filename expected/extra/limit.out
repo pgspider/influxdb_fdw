@@ -1,6 +1,9 @@
+--Testcase 51:
 CREATE EXTENSION influxdb_fdw;
+--Testcase 52:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw
   OPTIONS (dbname 'coredb', host 'http://localhost', port '8086');
+--Testcase 53:
 CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user 'user', password 'pass');
 -- import time column as timestamp and text type
 -- IMPORT FOREIGN SCHEMA influxdb_schema FROM SERVER influxdb_svr INTO public;
@@ -8,6 +11,7 @@ CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user 'user', p
 -- LIMIT
 -- Check the LIMIT/OFFSET feature of SELECT
 --
+--Testcase 54:
 CREATE FOREIGN TABLE onek (
 	unique1	 	int4,
 	unique2	 	int4,
@@ -26,7 +30,9 @@ CREATE FOREIGN TABLE onek (
 	stringu2 	name,
 	string4	 	name
 ) SERVER influxdb_svr;
+--Testcase 55:
 CREATE FOREIGN TABLE int8_tbl(q1 int8, q2 int8) SERVER influxdb_svr;
+--Testcase 56:
 CREATE FOREIGN TABLE tenk1 (
 	unique1	 	int4,
 	unique2	 	int4,
@@ -364,15 +370,77 @@ fetch all in c4;
 ----+----
 (0 rows)
 
+declare c5 scroll cursor for select * from int8_tbl order by q1 fetch first 2 rows with ties;
+--Testcase 57:
+fetch all in c5;
+ q1  |        q2        
+-----+------------------
+ 123 |              456
+ 123 | 4567890123456789
+(2 rows)
+
+--Testcase 58:
+fetch 1 in c5;
+ q1 | q2 
+----+----
+(0 rows)
+
+--Testcase 59:
+fetch backward 1 in c5;
+ q1  |        q2        
+-----+------------------
+ 123 | 4567890123456789
+(1 row)
+
+--Testcase 60:
+fetch backward 1 in c5;
+ q1  | q2  
+-----+-----
+ 123 | 456
+(1 row)
+
+--Testcase 61:
+fetch all in c5;
+ q1  |        q2        
+-----+------------------
+ 123 | 4567890123456789
+(1 row)
+
+--Testcase 62:
+fetch backward all in c5;
+ q1  |        q2        
+-----+------------------
+ 123 | 4567890123456789
+ 123 |              456
+(2 rows)
+
+--Testcase 63:
+fetch all in c5;
+ q1  |        q2        
+-----+------------------
+ 123 |              456
+ 123 | 4567890123456789
+(2 rows)
+
+--Testcase 64:
+fetch backward all in c5;
+ q1  |        q2        
+-----+------------------
+ 123 | 4567890123456789
+ 123 |              456
+(2 rows)
+
 rollback;
 -- Stress test for variable LIMIT in conjunction with bounded-heap sorting
+--Testcase 65:
+CREATE FOREIGN TABLE generate_series4(a int) SERVER influxdb_svr;
 --Testcase 36:
 SELECT
-  (SELECT n
+  (SELECT a
      FROM (VALUES (1)) AS x,
-          (SELECT n FROM generate_series(1,10) AS n
-             ORDER BY n LIMIT 1 OFFSET s-1) AS y) AS z
-  FROM generate_series(1,10) AS s;
+          (SELECT a FROM generate_series4 AS n
+             ORDER BY a LIMIT 1 OFFSET s.a-1) AS y) AS z
+  FROM generate_series4 AS s;
  z  
 ----
   1
@@ -391,6 +459,7 @@ SELECT
 -- Test behavior of volatile and set-returning functions in conjunction
 -- with ORDER BY and LIMIT.
 --
+--Testcase 66:
 create temp sequence testseq;
 --Testcase 37:
 explain (verbose, costs off)
@@ -584,11 +653,13 @@ order by s2 desc;
   0 |  0
 (3 rows)
 
+-- test for failure to set all aggregates' aggtranstype
+--Testcase 67:
 explain (verbose, costs off)
 select sum(tenthous) as s1, sum(tenthous) + random()*0 as s2
   from tenk1 group by thousand order by thousand limit 3;
-                                                                               QUERY PLAN                                                                                
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
  Limit
    Output: (sum(tenthous)), ((((sum(tenthous)))::double precision + (random() * '0'::double precision))), thousand
    ->  Result
@@ -600,10 +671,11 @@ select sum(tenthous) as s1, sum(tenthous) + random()*0 as s2
                      Output: sum(tenthous), thousand
                      Group Key: tenk1.thousand
                      ->  Foreign Scan on public.tenk1
-                           Output: unique1, unique2, two, four, ten, twenty, hundred, thousand, twothousand, fivethous, tenthous, odd, even, stringu1, stringu2, string4
+                           Output: thousand, tenthous
                            InfluxDB query: SELECT "thousand", "tenthous" FROM "tenk"
 (13 rows)
 
+--Testcase 68:
 select sum(tenthous) as s1, sum(tenthous) + random()*0 as s2
   from tenk1 group by thousand order by thousand limit 3;
   s1   |  s2   
@@ -613,6 +685,160 @@ select sum(tenthous) as s1, sum(tenthous) + random()*0 as s2
  45020 | 45020
 (3 rows)
 
+--
+-- FETCH FIRST
+-- Check the WITH TIES clause
+--
+--Testcase 69:
+SELECT  thousand
+		FROM onek WHERE thousand < 5
+		ORDER BY thousand FETCH FIRST 2 ROW WITH TIES;
+ thousand 
+----------
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+(10 rows)
+
+--Testcase 70:
+SELECT  thousand
+		FROM onek WHERE thousand < 5
+		ORDER BY thousand FETCH FIRST ROWS WITH TIES;
+ thousand 
+----------
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+(10 rows)
+
+--Testcase 71:
+SELECT  thousand
+		FROM onek WHERE thousand < 5
+		ORDER BY thousand FETCH FIRST 1 ROW WITH TIES;
+ thousand 
+----------
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+(10 rows)
+
+--Testcase 72:
+SELECT  thousand
+		FROM onek WHERE thousand < 5
+		ORDER BY thousand FETCH FIRST 2 ROW ONLY;
+ thousand 
+----------
+        0
+        0
+(2 rows)
+
+-- should fail
+--Testcase 73:
+SELECT ''::text AS two, unique1, unique2, stringu1
+		FROM onek WHERE unique1 > 50
+		FETCH FIRST 2 ROW WITH TIES;
+ERROR:  WITH TIES options can not be specified without ORDER BY clause
+-- test ruleutils
+--Testcase 74:
+CREATE VIEW limit_thousand_v_1 AS SELECT thousand FROM onek WHERE thousand < 995
+		ORDER BY thousand FETCH FIRST 5 ROWS WITH TIES OFFSET 10;
+--Testcase 75:
+\d+ limit_thousand_v_1
+                      View "public.limit_thousand_v_1"
+  Column  |  Type   | Collation | Nullable | Default | Storage | Description 
+----------+---------+-----------+----------+---------+---------+-------------
+ thousand | integer |           |          |         | plain   | 
+View definition:
+ SELECT onek.thousand
+   FROM onek
+  WHERE onek.thousand < 995
+  ORDER BY onek.thousand
+ OFFSET 10
+ FETCH FIRST 5 ROWS WITH TIES;
+
+--Testcase 76:
+CREATE VIEW limit_thousand_v_2 AS SELECT thousand FROM onek WHERE thousand < 995
+		ORDER BY thousand OFFSET 10 FETCH FIRST 5 ROWS ONLY;
+--Testcase 77:
+\d+ limit_thousand_v_2
+                      View "public.limit_thousand_v_2"
+  Column  |  Type   | Collation | Nullable | Default | Storage | Description 
+----------+---------+-----------+----------+---------+---------+-------------
+ thousand | integer |           |          |         | plain   | 
+View definition:
+ SELECT onek.thousand
+   FROM onek
+  WHERE onek.thousand < 995
+  ORDER BY onek.thousand
+ OFFSET 10
+ LIMIT 5;
+
+--Testcase 78:
+CREATE VIEW limit_thousand_v_3 AS SELECT thousand FROM onek WHERE thousand < 995
+		ORDER BY thousand FETCH FIRST NULL ROWS WITH TIES;		-- fails
+ERROR:  row count cannot be NULL in FETCH FIRST ... WITH TIES clause
+--Testcase 79:
+CREATE VIEW limit_thousand_v_3 AS SELECT thousand FROM onek WHERE thousand < 995
+		ORDER BY thousand FETCH FIRST (NULL+1) ROWS WITH TIES;
+--Testcase 80:
+\d+ limit_thousand_v_3
+                      View "public.limit_thousand_v_3"
+  Column  |  Type   | Collation | Nullable | Default | Storage | Description 
+----------+---------+-----------+----------+---------+---------+-------------
+ thousand | integer |           |          |         | plain   | 
+View definition:
+ SELECT onek.thousand
+   FROM onek
+  WHERE onek.thousand < 995
+  ORDER BY onek.thousand
+ FETCH FIRST (NULL::integer + 1) ROWS WITH TIES;
+
+--Testcase 81:
+CREATE VIEW limit_thousand_v_4 AS SELECT thousand FROM onek WHERE thousand < 995
+		ORDER BY thousand FETCH FIRST NULL ROWS ONLY;
+--Testcase 82:
+\d+ limit_thousand_v_4
+                      View "public.limit_thousand_v_4"
+  Column  |  Type   | Collation | Nullable | Default | Storage | Description 
+----------+---------+-----------+----------+---------+---------+-------------
+ thousand | integer |           |          |         | plain   | 
+View definition:
+ SELECT onek.thousand
+   FROM onek
+  WHERE onek.thousand < 995
+  ORDER BY onek.thousand
+ LIMIT ALL;
+
+-- leave these views
+--Testcase 83:
+DROP VIEW limit_thousand_v_1;
+--Testcase 84:
+DROP VIEW limit_thousand_v_2;
+--Testcase 85:
+DROP VIEW limit_thousand_v_3;
+--Testcase 86:
+DROP VIEW limit_thousand_v_4;
 -- Clean up
 DO $d$
 declare
@@ -624,6 +850,9 @@ begin
   end loop;
 end;
 $d$;
+--Testcase 87:
 DROP USER MAPPING FOR CURRENT_USER SERVER influxdb_svr;
+--Testcase 88:
 DROP SERVER influxdb_svr CASCADE;
+--Testcase 89:
 DROP EXTENSION influxdb_fdw CASCADE;

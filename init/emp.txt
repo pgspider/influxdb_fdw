@@ -1,0 +1,6 @@
+# DML
+# CONTEXT-DATABASE: coredb
+
+emp name="sharon",age=25i,location="(15,12)",salary=1000i,manager="sam" 4330000000000000
+emp name="sam",age=30i,location="(10,5)",salary=2000i,manager="bill" 4340000000000000
+emp name="bill",age=20i,location="(11,10)",salary=1000i,manager="sharon" 4350000000000000

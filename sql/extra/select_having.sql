@@ -1,12 +1,16 @@
 --
 -- SELECT_HAVING
 --
+--Testcase 12:
 CREATE EXTENSION influxdb_fdw;
 
+--Testcase 13:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw
   OPTIONS (dbname 'coredb', host 'http://localhost', port '8086');
+--Testcase 14:
 CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user 'user', password 'pass');
 
+--Testcase 15:
 CREATE FOREIGN TABLE test_having(a int, b int, c char(8), d char) SERVER influxdb_svr;
 
 --Testcase 1:
@@ -52,6 +56,11 @@ SELECT 1 AS one FROM test_having HAVING 1 < 2;
 --Testcase 11:
 SELECT 1 AS one FROM test_having WHERE 1/a = 1 HAVING 1 < 2;
 
+--Testcase 16:
+DROP FOREIGN TABLE test_having;
+--Testcase 17:
 DROP USER MAPPING FOR CURRENT_USER SERVER influxdb_svr;
-DROP SERVER influxdb_svr;
+--Testcase 18:
+DROP SERVER influxdb_svr CASCADE;
+--Testcase 19:
 DROP EXTENSION influxdb_fdw CASCADE;
