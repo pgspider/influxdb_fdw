@@ -2,7 +2,7 @@
  *
  * InfluxDB Foreign Data Wrapper for PostgreSQL
  *
- * Portions Copyright (c) 2018, TOSHIBA CORPORATION
+ * Portions Copyright (c) 2020, TOSHIBA CORPORATION
  *
  * IDENTIFICATION
  * 		influxdbquery.c

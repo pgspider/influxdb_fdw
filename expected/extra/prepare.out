@@ -1,10 +1,14 @@
 -- Regression tests for prepareable statements. We query the content
 -- of the pg_prepared_statements view as prepared statements are
 -- created and removed.
+--Testcase 27:
 CREATE EXTENSION influxdb_fdw;
+--Testcase 28:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw
   OPTIONS (dbname 'coredb', host 'http://localhost', port '8086');
+--Testcase 29:
 CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user 'user', password 'pass');
+--Testcase 30:
 CREATE FOREIGN TABLE tenk1 (
 	unique1		int4,
 	unique2		int4,
@@ -25,10 +29,13 @@ CREATE FOREIGN TABLE tenk1 (
 ) SERVER influxdb_svr OPTIONS (table 'tenk');
 -- Does not support this command
 -- ALTER TABLE tenk1 SET WITH OIDS;
+--Testcase 31:
 CREATE FOREIGN TABLE road (
 	name		text,
 	thepath 	path
 ) SERVER influxdb_svr;
+--Testcase 32:
+CREATE FOREIGN TABLE road_tmp (a int, b int) SERVER influxdb_svr;
 --Testcase 1:
 SELECT name, statement, parameter_types FROM pg_prepared_statements;
  name | statement | parameter_types 
@@ -36,7 +43,7 @@ SELECT name, statement, parameter_types FROM pg_prepared_statements;
 (0 rows)
 
 --Testcase 2:
-PREPARE q1 AS SELECT 1 AS a;
+PREPARE q1 AS SELECT a AS a FROM road_tmp;
 --Testcase 3:
 EXECUTE q1;
  a 
@@ -46,43 +53,43 @@ EXECUTE q1;
 
 --Testcase 4:
 SELECT name, statement, parameter_types FROM pg_prepared_statements;
- name |          statement           | parameter_types 
-------+------------------------------+-----------------
- q1   | PREPARE q1 AS SELECT 1 AS a; | {}
+ name |                 statement                  | parameter_types 
+------+--------------------------------------------+-----------------
+ q1   | PREPARE q1 AS SELECT a AS a FROM road_tmp; | {}
 (1 row)
 
 -- should fail
 --Testcase 5:
-PREPARE q1 AS SELECT 2;
+PREPARE q1 AS SELECT b FROM road_tmp;
 ERROR:  prepared statement "q1" already exists
 -- should succeed
 DEALLOCATE q1;
 --Testcase 6:
-PREPARE q1 AS SELECT 2;
+PREPARE q1 AS SELECT b FROM road_tmp;
 --Testcase 7:
 EXECUTE q1;
- ?column? 
-----------
-        2
+ b 
+---
+ 2
 (1 row)
 
 --Testcase 8:
-PREPARE q2 AS SELECT 2 AS b;
+PREPARE q2 AS SELECT b AS b FROM road_tmp;
 --Testcase 9:
 SELECT name, statement, parameter_types FROM pg_prepared_statements;
- name |          statement           | parameter_types 
-------+------------------------------+-----------------
- q1   | PREPARE q1 AS SELECT 2;      | {}
- q2   | PREPARE q2 AS SELECT 2 AS b; | {}
+ name |                 statement                  | parameter_types 
+------+--------------------------------------------+-----------------
+ q1   | PREPARE q1 AS SELECT b FROM road_tmp;      | {}
+ q2   | PREPARE q2 AS SELECT b AS b FROM road_tmp; | {}
 (2 rows)
 
 -- sql92 syntax
 DEALLOCATE PREPARE q1;
 --Testcase 10:
 SELECT name, statement, parameter_types FROM pg_prepared_statements;
- name |          statement           | parameter_types 
-------+------------------------------+-----------------
- q2   | PREPARE q2 AS SELECT 2 AS b; | {}
+ name |                 statement                  | parameter_types 
+------+--------------------------------------------+-----------------
+ q2   | PREPARE q2 AS SELECT b AS b FROM road_tmp; | {}
 (1 row)
 
 DEALLOCATE PREPARE q2;
@@ -159,6 +166,8 @@ DETAIL:  Expected 5 parameters but got 6.
 --Testcase 18:
 EXECUTE q3(5::smallint, 10.5::float, false, 4::bigint, 'bytea');
 ERROR:  parameter $3 of type boolean cannot be coerced to the expected type double precision
+LINE 1: EXECUTE q3(5::smallint, 10.5::float, false, 4::bigint, 'byte...
+                                             ^
 HINT:  You will need to rewrite or cast the expression.
 -- invalid type
 --Testcase 19:
@@ -171,6 +180,7 @@ LINE 1: PREPARE q4(nonexistenttype) AS SELECT $1;
 PREPARE q5(int, text) AS
 	SELECT * FROM tenk1 WHERE unique1 = $1 OR stringu1 = $2
 	ORDER BY unique1;
+--Testcase 33:
 CREATE TEMPORARY TABLE q5_prep_results AS EXECUTE q5(200, 'DTAAAA');
 --Testcase 21:
 SELECT * FROM q5_prep_results;
@@ -194,6 +204,7 @@ SELECT * FROM q5_prep_results;
     9961 |    2058 |   1 |    1 |   1 |      1 |      61 |      961 |        1961 |      4961 |     9961 | 122 |  123 | DTAAAA   | EBDAAA   | OOOOxx
 (16 rows)
 
+--Testcase 34:
 CREATE TEMPORARY TABLE q5_prep_nodata AS EXECUTE q5(200, 'DTAAAA')
     WITH NO DATA;
 --Testcase 22:
@@ -239,9 +250,13 @@ SELECT name, statement, parameter_types FROM pg_prepared_statements
 ------+-----------+-----------------
 (0 rows)
 
+--Testcase 35:
 DROP USER MAPPING FOR CURRENT_USER SERVER influxdb_svr;
+--Testcase 36:
 DROP SERVER influxdb_svr CASCADE;
-NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 3 other objects
 DETAIL:  drop cascades to foreign table tenk1
 drop cascades to foreign table road
+drop cascades to foreign table road_tmp
+--Testcase 37:
 DROP EXTENSION influxdb_fdw CASCADE;

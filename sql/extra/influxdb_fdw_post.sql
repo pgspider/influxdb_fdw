@@ -1,10 +1,11 @@
--- SET datestyle=ISO;
 -- ===================================================================
 -- create FDW objects
 -- ===================================================================
 
+--Testcase 589:
 CREATE EXTENSION influxdb_fdw;
 
+--Testcase 590:
 CREATE SERVER testserver1 FOREIGN DATA WRAPPER influxdb_fdw;
 DO $d$
     BEGIN
@@ -15,24 +16,30 @@ DO $d$
     END;
 $d$;
 
+--Testcase 591:
 CREATE USER MAPPING FOR public SERVER testserver1 OPTIONS (user 'value', password 'value');
+--Testcase 592:
 CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user 'user', password 'pass');
+--Testcase 593:
 CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr2 OPTIONS (user 'user', password 'pass');
 
 -- import time column as timestamp and text type
+--Testcase 594:
 CREATE TYPE user_enum AS ENUM ('foo', 'bar', 'buz');
+--Testcase 595:
 CREATE SCHEMA "S 1";
 IMPORT FOREIGN SCHEMA public FROM SERVER influxdb_svr INTO "S 1";
 
 -- ===================================================================
 -- create foreign tables
 -- ===================================================================
+--Testcase 596:
 CREATE FOREIGN TABLE ft1 (
-	time timestamp,
 	c0 int,
 	c1 int NOT NULL,
 	c2 int NOT NULL,
 	c3 text,
+	time timestamp,
 	-- c4 timestamptz,
 	-- c5 timestamp,
 	c6 varchar(10),
@@ -41,12 +48,13 @@ CREATE FOREIGN TABLE ft1 (
 ) SERVER influxdb_svr;
 ALTER FOREIGN TABLE ft1 DROP COLUMN c0;
 
+--Testcase 597:
 CREATE FOREIGN TABLE ft2 (
-	time timestamp,
 	c1 int NOT NULL,
 	c2 int NOT NULL,
 	cx int,
 	c3 text,
+	time timestamp,
 	-- c4 timestamptz,
 	-- c5 timestamp,
 	c6 varchar(10),
@@ -55,18 +63,21 @@ CREATE FOREIGN TABLE ft2 (
 ) SERVER influxdb_svr;
 ALTER FOREIGN TABLE ft2 DROP COLUMN cx;
 
+--Testcase 598:
 CREATE FOREIGN TABLE ft4 (
 	c1 int NOT NULL,
 	c2 int NOT NULL,
 	c3 text
 ) SERVER influxdb_svr OPTIONS (table 'T3');
 
+--Testcase 599:
 CREATE FOREIGN TABLE ft5 (
 	c1 int NOT NULL,
 	c2 int NOT NULL,
 	c3 text
 ) SERVER influxdb_svr OPTIONS (table 'T4');
 
+--Testcase 600:
 CREATE FOREIGN TABLE ft6 (
 	c1 int NOT NULL,
 	c2 int NOT NULL,
@@ -87,11 +98,11 @@ ALTER SERVER testserver1 OPTIONS (
 	-- connect_timeout 'value',
 	dbname 'value',
 	host 'value',
-	port 'value'
 	-- hostaddr 'value',
-	-- client_encoding 'value',
+	port 'value'
+	--client_encoding 'value',
 	-- application_name 'value',
-	-- fallback_application_name 'value',
+	--fallback_application_name 'value',
 	-- keepalives 'value',
 	-- keepalives_idle 'value',
 	-- keepalives_interval 'value',
@@ -102,19 +113,20 @@ ALTER SERVER testserver1 OPTIONS (
 	-- sslcert 'value',
 	-- sslkey 'value',
 	-- sslrootcert 'value',
-	-- sslcrl 'value'
-	-- --requirepeer 'value',
+	-- sslcrl 'value',
+	--requirepeer 'value',
 	-- krbsrvname 'value',
 	-- gsslib 'value',
-	-- replication 'value'
+	--replication 'value'
 );
 
+-- InfluxDB does not support option extensions
 -- Error, invalid list syntax
-ALTER SERVER testserver1 OPTIONS (ADD extensions 'foo; bar');
+--ALTER SERVER testserver1 OPTIONS (ADD extensions 'foo; bar');
 
 -- OK but gets a warning
-ALTER SERVER testserver1 OPTIONS (ADD extensions 'foo, bar');
-ALTER SERVER testserver1 OPTIONS (DROP extensions);
+--ALTER SERVER testserver1 OPTIONS (ADD extensions 'foo, bar');
+--ALTER SERVER testserver1 OPTIONS (DROP extensions);
 
 ALTER USER MAPPING FOR public SERVER testserver1
 	OPTIONS (DROP user, DROP password);
@@ -125,19 +137,6 @@ ALTER FOREIGN TABLE ft1 ALTER COLUMN c1 OPTIONS (column_name 'C1');
 ALTER FOREIGN TABLE ft2 ALTER COLUMN c1 OPTIONS (column_name 'C1');
 --Testcase 1:
 \det+
-
---Testcase 2:
-SELECT * FROM "S 1"."T1" LIMIT 10;
---Testcase 3:
-SELECT * FROM ft1 LIMIT 10;
---Testcase 4:
-SELECT * FROM ft2 LIMIT 10;
---Testcase 5:
-SELECT * FROM ft4 LIMIT 10;
---Testcase 6:
-SELECT * FROM ft5 LIMIT 10;
---Testcase 7:
-SELECT * FROM ft6 LIMIT 10;
 
 -- Test that alteration of server options causes reconnection
 -- Remote's errors might be non-English, so hide them to ensure stable results
@@ -156,13 +155,14 @@ $d$;
 --Testcase 10:
 SELECT c3, time FROM ft1 ORDER BY c3, c1 LIMIT 1;  -- should work again
 
+-- InfluxDB cannot add user more than one
 -- Test that alteration of user mapping options causes reconnection
-ALTER USER MAPPING FOR CURRENT_USER SERVER influxdb_svr
-  OPTIONS (ADD user 'no such user');               -- error
+--ALTER USER MAPPING FOR CURRENT_USER SERVER influxdb_svr
+--  OPTIONS (ADD user 'no such user');
 --Testcase 11:
-SELECT c3, time FROM ft1 ORDER BY c3, c1 LIMIT 1;  -- should work
-ALTER USER MAPPING FOR CURRENT_USER SERVER influxdb_svr
-  OPTIONS (DROP user);
+--SELECT c3, time FROM ft1 ORDER BY c3, c1 LIMIT 1;  -- should fail
+--ALTER USER MAPPING FOR CURRENT_USER SERVER influxdb_svr
+--  OPTIONS (DROP user);
 --Testcase 12:
 SELECT c3, time FROM ft1 ORDER BY c3, c1 LIMIT 1;  -- should work
 \set VERBOSITY default
@@ -170,8 +170,8 @@ SELECT c3, time FROM ft1 ORDER BY c3, c1 LIMIT 1;  -- should work
 -- Now we should be able to run ANALYZE.
 -- To exercise multiple code paths, we use local stats on ft1
 -- and remote-estimate mode on ft2.
-ANALYZE ft1;
-ALTER FOREIGN TABLE ft2 OPTIONS (use_remote_estimate 'true');
+--ANALYZE ft1;
+--ALTER FOREIGN TABLE ft2 OPTIONS (use_remote_estimate 'true');
 
 -- ===================================================================
 -- simple queries
@@ -215,10 +215,8 @@ SELECT COUNT(*) FROM ft1 t1;
 --Testcase 27:
 SELECT * FROM ft1 t1 WHERE t1.c3 IN (SELECT c3 FROM ft2 t2 WHERE c1 <= 10) ORDER BY c1;
 -- subquery+MAX
--- TODO
--- SELECT * FROM ft1 t1 WHERE t1.c3 = (SELECT MAX(c3) FROM ft2 t2) ORDER BY c1;
 --Testcase 28:
-SELECT * FROM ft1 t1 WHERE t1.c2 = (SELECT MAX(c2) FROM ft2 t2) ORDER BY c1;
+SELECT * FROM ft1 t1 WHERE t1.c3 = (SELECT MAX(c3) FROM ft2 t2) ORDER BY c1;
 -- used in CTE
 --Testcase 29:
 WITH t1 AS (SELECT * FROM ft1 WHERE c1 <= 10) SELECT t2.c1, t2.c2, t2.c3, t2.time FROM t1, ft2 t2 WHERE t1.c1 = t2.c1 ORDER BY t1.c1;
@@ -322,11 +320,13 @@ EXPLAIN (VERBOSE, COSTS OFF)
 	SELECT * FROM ft2 ORDER BY ft2.c1, ft2.c3 collate "C";
 
 -- user-defined operator/function
+--Testcase 601:
 CREATE FUNCTION influxdb_fdw_abs(int) RETURNS int AS $$
 BEGIN
 RETURN abs($1);
 END
 $$ LANGUAGE plpgsql IMMUTABLE;
+--Testcase 602:
 CREATE OPERATOR === (
     LEFTARG = int,
     RIGHTARG = int,
@@ -394,8 +394,8 @@ SELECT * FROM ft1 t1 WHERE t1.c1 === t1.c2 order by t1.c2 limit 1;
 -- ===================================================================
 -- Analyze ft4 and ft5 so that we have better statistics. These tables do not
 -- have use_remote_estimate set.
-ANALYZE ft4;
-ANALYZE ft5;
+--ANALYZE ft4;
+--ANALYZE ft5;
 
 -- join two tables
 --Testcase 77:
@@ -657,9 +657,10 @@ SELECT q.a, ft2.c1 FROM (SELECT 13 FROM ft1 WHERE c1 = 13) q(a) RIGHT JOIN ft2 O
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT ft4.c1, q.* FROM ft4 LEFT JOIN (SELECT 13, ft1.c1, ft2.c1 FROM ft1 RIGHT JOIN ft2 ON (ft1.c1 = ft2.c1) WHERE ft1.c1 = 12) q(a, b, c) ON (ft4.c1 = q.b) WHERE ft4.c1 BETWEEN 10 AND 15;
 --Testcase 156:
-SELECT ft4.c1, q.* FROM ft4 LEFT JOIN (SELECT 13, ft1.c1, ft2.c1 FROM ft1 RIGHT JOIN ft2 ON (ft1.c1 = ft2.c1) WHERE ft1.c1 = 12) q(a, b, c) ON (ft4.c1 = q.b) WHERE ft4.c1 BETWEEN 10 AND 15;
+SELECT ft4.c1, q.* FROM ft4 LEFT JOIN (SELECT 13, ft1.c1, ft2.c1 FROM ft1 RIGHT JOIN ft2 ON (ft1.c1 = ft2.c1) WHERE ft1.c1 = 12) q(a, b, c) ON (ft4.c1 = q.b) WHERE ft4.c1 BETWEEN 10 AND 15 ORDER BY ft4.c1;
 
 -- join with nullable side with some columns with null values
+-- InfluxDB_FDW does not support UPDATE
 -- UPDATE ft5 SET c3 = null where c1 % 9 = 0;
 --Testcase 157:
 EXPLAIN (VERBOSE, COSTS OFF)
@@ -669,30 +670,36 @@ SELECT ft5, ft5.c1, ft5.c2, ft5.c3, ft4.c1, ft4.c2 FROM ft5 left join ft4 on ft5
 
 -- multi-way join involving multiple merge joins
 -- (this case used to have EPQ-related planning problems)
-CREATE TABLE local_tbl (c1 int NOT NULL, c2 int NOT NULL, c3 text, CONSTRAINT local_tbl_pkey PRIMARY KEY (c1));
+--Testcase 603:
+CREATE FOREIGN TABLE local_tbl (c1 int NOT NULL, c2 int NOT NULL, c3 text) SERVER influxdb_svr;
 --Testcase 159:
-INSERT INTO local_tbl SELECT id, id % 10, to_char(id, 'FM0000') FROM generate_series(1, 1000) id;
-ANALYZE local_tbl;
+--INSERT INTO local_tbl SELECT id, id % 10, to_char(id, 'FM0000') FROM generate_series(1, 1000) id;
+--ANALYZE local_tbl;
 SET enable_nestloop TO false;
 SET enable_hashjoin TO false;
 --Testcase 160:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT * FROM ft1, ft2, ft4, ft5, local_tbl WHERE ft1.c1 = ft2.c1 AND ft1.c2 = ft4.c1
-    AND ft1.c2 = ft5.c1 AND ft1.c2 = local_tbl.c1 AND ft1.c1 < 100 AND ft2.c1 < 100 FOR UPDATE;
+    AND ft1.c2 = ft5.c1 AND ft1.c2 = local_tbl.c1 AND ft1.c1 < 100 AND ft2.c1 < 100 ORDER BY ft1.c1 FOR UPDATE;
 --Testcase 161:
 SELECT * FROM ft1, ft2, ft4, ft5, local_tbl WHERE ft1.c1 = ft2.c1 AND ft1.c2 = ft4.c1
-    AND ft1.c2 = ft5.c1 AND ft1.c2 = local_tbl.c1 AND ft1.c1 < 100 AND ft2.c1 < 100 FOR UPDATE;
+    AND ft1.c2 = ft5.c1 AND ft1.c2 = local_tbl.c1 AND ft1.c1 < 100 AND ft2.c1 < 100 ORDER BY ft1.c1 FOR UPDATE;
 RESET enable_nestloop;
 RESET enable_hashjoin;
-DROP TABLE local_tbl;
+--Testcase 604:
+DROP FOREIGN TABLE local_tbl;
 
 -- check join pushdown in situations where multiple userids are involved
+--Testcase 605:
 CREATE ROLE regress_view_owner SUPERUSER;
+--Testcase 606:
 CREATE USER MAPPING FOR regress_view_owner SERVER influxdb_svr OPTIONS (user 'user', password 'pass');
 GRANT SELECT ON ft4 TO regress_view_owner;
 GRANT SELECT ON ft5 TO regress_view_owner;
 
+--Testcase 607:
 CREATE VIEW v4 AS SELECT * FROM ft4;
+--Testcase 608:
 CREATE VIEW v5 AS SELECT * FROM ft5;
 ALTER VIEW v5 OWNER TO regress_view_owner;
 --Testcase 162:
@@ -721,7 +728,9 @@ SELECT t1.c1, t2.c2 FROM v4 t1 LEFT JOIN ft5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c
 ALTER VIEW v4 OWNER TO regress_view_owner;
 
 -- cleanup
+--Testcase 609:
 DROP OWNED BY regress_view_owner;
+--Testcase 610:
 DROP ROLE regress_view_owner;
 
 
@@ -920,11 +929,13 @@ select c1, rank(c1, c2) within group (order by c1, c2) from ft1 group by c1, c2 
 select c1, rank(c1, c2) within group (order by c1, c2) from ft1 group by c1, c2 having c1 = 6 order by 1;
 
 -- User defined function for user defined aggregate, VARIADIC
-create function least_accum1(anyelement, variadic anyarray)
+--Testcase 611:
+create function least_accum(anyelement, variadic anyarray)
 returns anyelement language sql as
   'select least($1, min($2[i])) from generate_subscripts($2,1) g(i)';
-create aggregate least_agg1(variadic items anyarray) (
-  stype = anyelement, sfunc = least_accum1
+--Testcase 612:
+create aggregate least_agg(variadic items anyarray) (
+  stype = anyelement, sfunc = least_accum
 );
 
 -- Disable hash aggregation for plan stability.
@@ -933,32 +944,34 @@ set enable_hashagg to false;
 -- Not pushed down due to user defined aggregate
 --Testcase 222:
 explain (verbose, costs off)
-select c2, least_agg1(c1) from ft1 group by c2 order by c2;
+select c2, least_agg(c1) from ft1 group by c2 order by c2;
 
 -- Add function and aggregate into extension
-alter extension influxdb_fdw add function least_accum1(anyelement, variadic anyarray);
-alter extension influxdb_fdw add aggregate least_agg1(variadic items anyarray);
+alter extension influxdb_fdw add function least_accum(anyelement, variadic anyarray);
+alter extension influxdb_fdw add aggregate least_agg(variadic items anyarray);
 
 -- Now aggregate will be pushed.  Aggregate will display VARIADIC argument.
 --Testcase 223:
 explain (verbose, costs off)
-select c2, least_agg1(c1) from ft1 where c2 < 100 group by c2 order by c2;
+select c2, least_agg(c1) from ft1 where c2 < 100 group by c2 order by c2;
 --Testcase 224:
-select c2, least_agg1(c1) from ft1 where c2 < 100 group by c2 order by c2;
+select c2, least_agg(c1) from ft1 where c2 < 100 group by c2 order by c2;
 
 -- Remove function and aggregate from extension
-alter extension influxdb_fdw drop function least_accum1(anyelement, variadic anyarray);
-alter extension influxdb_fdw drop aggregate least_agg1(variadic items anyarray);
+alter extension influxdb_fdw drop function least_accum(anyelement, variadic anyarray);
+alter extension influxdb_fdw drop aggregate least_agg(variadic items anyarray);
 
 -- Not pushed down as we have dropped objects from extension.
 --Testcase 225:
 explain (verbose, costs off)
-select c2, least_agg1(c1) from ft1 group by c2 order by c2;
+select c2, least_agg(c1) from ft1 group by c2 order by c2;
 
 -- Cleanup
 reset enable_hashagg;
-drop aggregate least_agg1(variadic items anyarray);
-drop function least_accum1(anyelement, variadic anyarray);
+--Testcase 613:
+drop aggregate least_agg(variadic items anyarray);
+--Testcase 614:
+drop function least_accum(anyelement, variadic anyarray);
 
 
 -- Testing USING OPERATOR() in ORDER BY within aggregate.
@@ -966,29 +979,35 @@ drop function least_accum1(anyelement, variadic anyarray);
 -- operator class.  Create those and then add them in extension.  Note that
 -- user defined objects are considered unshippable unless they are part of
 -- the extension.
+--Testcase 615:
 create operator public.<^ (
  leftarg = int4,
  rightarg = int4,
  procedure = int4eq
 );
 
+--Testcase 616:
 create operator public.=^ (
  leftarg = int4,
  rightarg = int4,
  procedure = int4lt
 );
 
+--Testcase 617:
 create operator public.>^ (
  leftarg = int4,
  rightarg = int4,
  procedure = int4gt
 );
 
+--Testcase 618:
 create operator family my_op_family using btree;
 
+--Testcase 619:
 create function my_op_cmp(a int, b int) returns int as
   $$begin return btint4cmp(a, b); end $$ language plpgsql;
 
+--Testcase 620:
 create operator class my_op_class for type int using btree family my_op_family as
  operator 1 public.<^,
  operator 3 public.=^,
@@ -1033,11 +1052,17 @@ explain (verbose, costs off)
 select array_agg(c1 order by c1 using operator(public.<^)) from ft2 where c2 = 6 and c1 < 100 group by c2;
 
 -- Cleanup
+--Testcase 621:
 drop operator class my_op_class using btree;
+--Testcase 622:
 drop function my_op_cmp(a int, b int);
+--Testcase 623:
 drop operator family my_op_family using btree;
+--Testcase 624:
 drop operator public.>^(int, int);
+--Testcase 625:
 drop operator public.=^(int, int);
+--Testcase 626:
 drop operator public.<^(int, int);
 
 -- Input relation to aggregate push down hook is not safe to pushdown and thus
@@ -1241,14 +1266,14 @@ EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st6;
 -- influxdb doesnot support INSERT
 -- PREPARE st7 AS INSERT INTO ft1 (c1,c2,c3) VALUES (1001,101,'foo');
 -- EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st7;
-ALTER TABLE "S 1"."T1" RENAME TO "T0";
+-- ALTER TABLE "S 1"."T 1" RENAME TO "T 0";
 ALTER FOREIGN TABLE ft1 OPTIONS (SET table 'T0');
 --Testcase 290:
 EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st6;
 --Testcase 291:
 EXECUTE st6;
 -- EXPLAIN (VERBOSE, COSTS OFF) EXECUTE st7;
-ALTER TABLE "S 1"."T0" RENAME TO "T1";
+--ALTER TABLE "S 1"."T 0" RENAME TO "T 1";
 ALTER FOREIGN TABLE ft1 OPTIONS (SET table 'T1');
 
 --Testcase 292:
@@ -1296,10 +1321,12 @@ SELECT ctid, * FROM ft1 t1 LIMIT 1;
 -- ===================================================================
 -- used in PL/pgSQL function
 -- ===================================================================
+--Testcase 627:
 CREATE OR REPLACE FUNCTION f_test(p_c1 int) RETURNS int AS $$
 DECLARE
 	v_c1 int;
 BEGIN
+--Testcase 628:
     SELECT c1 INTO v_c1 FROM ft1 WHERE c1 = p_c1 LIMIT 1;
     PERFORM c1 FROM ft1 WHERE c1 = p_c1 AND p_c1 = v_c1 LIMIT 1;
     RETURN v_c1;
@@ -1307,6 +1334,7 @@ END;
 $$ LANGUAGE plpgsql;
 --Testcase 302:
 SELECT f_test(100);
+--Testcase 629:
 DROP FUNCTION f_test(int);
 
 -- ===================================================================
@@ -1322,8 +1350,6 @@ SELECT  ft1.c1,  ft2.c2, ft1 FROM ft1, ft2 WHERE ft1.c1 = ft2.c1 AND ft1.c1 = 1;
 --Testcase 306:
 SELECT sum(c2), array_agg(c8) FROM ft1 GROUP BY c8; -- ERROR
 ALTER FOREIGN TABLE ft1 ALTER COLUMN c8 TYPE text;
---Testcase 307:
-SELECT * FROM ft1 WHERE c1 = 1;  -- Should work
 
 -- ===================================================================
 -- subtransaction
@@ -1339,6 +1365,7 @@ ROLLBACK TO s;
 --Testcase 309:
 FETCH c;
 SAVEPOINT s;
+-- InfluxDB does not display ERROR "division by zero", just displays the record success
 --Testcase 310:
 SELECT * FROM ft1 WHERE 1 / (c1 - 1) > 0;  -- ERROR
 ROLLBACK TO s;
@@ -1351,7 +1378,9 @@ COMMIT;
 -- ===================================================================
 -- test handling of collations
 -- ===================================================================
-create table loct3 (f1 text collate "C" unique, f2 text, f3 varchar(10) unique);
+--Testcase 630:
+create foreign table loct3 (f1 text collate "C", f2 text, f3 varchar(10)) server influxdb_svr;
+--Testcase 631:
 create foreign table ft3 (f1 text collate "C", f2 text, f3 varchar(10))
   server influxdb_svr options (table 'loct3');
 
@@ -1380,151 +1409,173 @@ explain (verbose, costs off) select * from ft3 where f2 = 'foo' COLLATE "C";
 explain (verbose, costs off) select * from ft3 f, loct3 l
   where f.f3 = l.f3 COLLATE "POSIX" and l.f1 = 'foo';
 
+/*
+-- Skip test because InfluxDB_FDW does not support INSERT, UPDATE, DELETE
 -- ===================================================================
 -- test writable foreign table stuff
 -- ===================================================================
--- Skip
--- EXPLAIN (verbose, costs off)
--- INSERT INTO ft2 (c1,c2,c3) SELECT c1+1000,c2+100, c3 || c3 FROM ft2 LIMIT 20;
--- INSERT INTO ft2 (c1,c2,c3) SELECT c1+1000,c2+100, c3 || c3 FROM ft2 LIMIT 20;
--- INSERT INTO ft2 (c1,c2,c3)
---  VALUES (1101,201,'aaa'), (1102,202,'bbb'), (1103,203,'ccc') RETURNING *;
--- INSERT INTO ft2 (c1,c2,c3) VALUES (1104,204,'ddd'), (1105,205,'eee');
--- EXPLAIN (verbose, costs off)
--- UPDATE ft2 SET c2 = c2 + 300, c3 = c3 || '_update3' WHERE c1 % 10 = 3;              -- can be pushed down
--- UPDATE ft2 SET c2 = c2 + 300, c3 = c3 || '_update3' WHERE c1 % 10 = 3;
--- EXPLAIN (verbose, costs off)
--- UPDATE ft2 SET c2 = c2 + 400, c3 = c3 || '_update7' WHERE c1 % 10 = 7 RETURNING *;  -- can be pushed down
--- UPDATE ft2 SET c2 = c2 + 400, c3 = c3 || '_update7' WHERE c1 % 10 = 7 RETURNING *;
--- EXPLAIN (verbose, costs off)
--- UPDATE ft2 SET c2 = ft2.c2 + 500, c3 = ft2.c3 || '_update9', c7 = DEFAULT
---   FROM ft1 WHERE ft1.c1 = ft2.c2 AND ft1.c1 % 10 = 9;                               -- can be pushed down
--- UPDATE ft2 SET c2 = ft2.c2 + 500, c3 = ft2.c3 || '_update9', c7 = DEFAULT
---   FROM ft1 WHERE ft1.c1 = ft2.c2 AND ft1.c1 % 10 = 9;
--- EXPLAIN (verbose, costs off)
---   DELETE FROM ft2 WHERE c1 % 10 = 5 RETURNING c1, c4;                               -- can be pushed down
--- DELETE FROM ft2 WHERE c1 % 10 = 5 RETURNING c1, c4;
--- EXPLAIN (verbose, costs off)
--- DELETE FROM ft2 USING ft1 WHERE ft1.c1 = ft2.c2 AND ft1.c1 % 10 = 2;                -- can be pushed down
--- DELETE FROM ft2 USING ft1 WHERE ft1.c1 = ft2.c2 AND ft1.c1 % 10 = 2;
--- SELECT c1,c2,c3,c4 FROM ft2 ORDER BY c1;
--- EXPLAIN (verbose, costs off)
--- INSERT INTO ft2 (c1,c2,c3) VALUES (1200,999,'foo') RETURNING tableoid::regclass;
--- INSERT INTO ft2 (c1,c2,c3) VALUES (1200,999,'foo') RETURNING tableoid::regclass;
--- EXPLAIN (verbose, costs off)
--- UPDATE ft2 SET c3 = 'bar' WHERE c1 = 1200 RETURNING tableoid::regclass;             -- can be pushed down
--- UPDATE ft2 SET c3 = 'bar' WHERE c1 = 1200 RETURNING tableoid::regclass;
--- EXPLAIN (verbose, costs off)
--- DELETE FROM ft2 WHERE c1 = 1200 RETURNING tableoid::regclass;                       -- can be pushed down
--- DELETE FROM ft2 WHERE c1 = 1200 RETURNING tableoid::regclass;
+EXPLAIN (verbose, costs off)
+INSERT INTO ft2 (c1,c2,c3) SELECT c1+1000,c2+100, c3 || c3 FROM ft2 LIMIT 20;
+INSERT INTO ft2 (c1,c2,c3) SELECT c1+1000,c2+100, c3 || c3 FROM ft2 LIMIT 20;
+INSERT INTO ft2 (c1,c2,c3)
+  VALUES (1101,201,'aaa'), (1102,202,'bbb'), (1103,203,'ccc') RETURNING *;
+INSERT INTO ft2 (c1,c2,c3) VALUES (1104,204,'ddd'), (1105,205,'eee');
+EXPLAIN (verbose, costs off)
+UPDATE ft2 SET c2 = c2 + 300, c3 = c3 || '_update3' WHERE c1 % 10 = 3;              -- can be pushed down
+UPDATE ft2 SET c2 = c2 + 300, c3 = c3 || '_update3' WHERE c1 % 10 = 3;
+EXPLAIN (verbose, costs off)
+UPDATE ft2 SET c2 = c2 + 400, c3 = c3 || '_update7' WHERE c1 % 10 = 7 RETURNING *;  -- can be pushed down
+UPDATE ft2 SET c2 = c2 + 400, c3 = c3 || '_update7' WHERE c1 % 10 = 7 RETURNING *;
+EXPLAIN (verbose, costs off)
+UPDATE ft2 SET c2 = ft2.c2 + 500, c3 = ft2.c3 || '_update9', c7 = DEFAULT
+  FROM ft1 WHERE ft1.c1 = ft2.c2 AND ft1.c1 % 10 = 9;                               -- can be pushed down
+UPDATE ft2 SET c2 = ft2.c2 + 500, c3 = ft2.c3 || '_update9', c7 = DEFAULT
+  FROM ft1 WHERE ft1.c1 = ft2.c2 AND ft1.c1 % 10 = 9;
+EXPLAIN (verbose, costs off)
+  DELETE FROM ft2 WHERE c1 % 10 = 5 RETURNING c1, c4;                               -- can be pushed down
+DELETE FROM ft2 WHERE c1 % 10 = 5 RETURNING c1, c4;
+EXPLAIN (verbose, costs off)
+DELETE FROM ft2 USING ft1 WHERE ft1.c1 = ft2.c2 AND ft1.c1 % 10 = 2;                -- can be pushed down
+DELETE FROM ft2 USING ft1 WHERE ft1.c1 = ft2.c2 AND ft1.c1 % 10 = 2;
+SELECT c1,c2,c3,c4 FROM ft2 ORDER BY c1;
+EXPLAIN (verbose, costs off)
+INSERT INTO ft2 (c1,c2,c3) VALUES (1200,999,'foo') RETURNING tableoid::regclass;
+INSERT INTO ft2 (c1,c2,c3) VALUES (1200,999,'foo') RETURNING tableoid::regclass;
+EXPLAIN (verbose, costs off)
+UPDATE ft2 SET c3 = 'bar' WHERE c1 = 1200 RETURNING tableoid::regclass;             -- can be pushed down
+UPDATE ft2 SET c3 = 'bar' WHERE c1 = 1200 RETURNING tableoid::regclass;
+EXPLAIN (verbose, costs off)
+DELETE FROM ft2 WHERE c1 = 1200 RETURNING tableoid::regclass;                       -- can be pushed down
+DELETE FROM ft2 WHERE c1 = 1200 RETURNING tableoid::regclass;
 
 -- Test UPDATE/DELETE with RETURNING on a three-table join
--- INSERT INTO ft2 (c1,c2,c3)
---   SELECT id, id - 1200, to_char(id, 'FM00000') FROM generate_series(1201, 1300) id;
--- EXPLAIN (verbose, costs off)
--- UPDATE ft2 SET c3 = 'foo'
---   FROM ft4 INNER JOIN ft5 ON (ft4.c1 = ft5.c1)
---   WHERE ft2.c1 > 1200 AND ft2.c2 = ft4.c1
---   RETURNING ft2, ft2.*, ft4, ft4.*;       -- can be pushed down
--- UPDATE ft2 SET c3 = 'foo'
---   FROM ft4 INNER JOIN ft5 ON (ft4.c1 = ft5.c1)
---   WHERE ft2.c1 > 1200 AND ft2.c2 = ft4.c1
---   RETURNING ft2, ft2.*, ft4, ft4.*;
--- EXPLAIN (verbose, costs off)
--- DELETE FROM ft2
---   USING ft4 LEFT JOIN ft5 ON (ft4.c1 = ft5.c1)
---   WHERE ft2.c1 > 1200 AND ft2.c1 % 10 = 0 AND ft2.c2 = ft4.c1
---   RETURNING 100;                          -- can be pushed down
--- DELETE FROM ft2
---   USING ft4 LEFT JOIN ft5 ON (ft4.c1 = ft5.c1)
---   WHERE ft2.c1 > 1200 AND ft2.c1 % 10 = 0 AND ft2.c2 = ft4.c1
---   RETURNING 100;
--- DELETE FROM ft2 WHERE ft2.c1 > 1200;
--- 
+INSERT INTO ft2 (c1,c2,c3)
+  SELECT id, id - 1200, to_char(id, 'FM00000') FROM generate_series(1201, 1300) id;
+EXPLAIN (verbose, costs off)
+UPDATE ft2 SET c3 = 'foo'
+  FROM ft4 INNER JOIN ft5 ON (ft4.c1 = ft5.c1)
+  WHERE ft2.c1 > 1200 AND ft2.c2 = ft4.c1
+  RETURNING ft2, ft2.*, ft4, ft4.*;       -- can be pushed down
+UPDATE ft2 SET c3 = 'foo'
+  FROM ft4 INNER JOIN ft5 ON (ft4.c1 = ft5.c1)
+  WHERE ft2.c1 > 1200 AND ft2.c2 = ft4.c1
+  RETURNING ft2, ft2.*, ft4, ft4.*;
+EXPLAIN (verbose, costs off)
+DELETE FROM ft2
+  USING ft4 LEFT JOIN ft5 ON (ft4.c1 = ft5.c1)
+  WHERE ft2.c1 > 1200 AND ft2.c1 % 10 = 0 AND ft2.c2 = ft4.c1
+  RETURNING 100;                          -- can be pushed down
+DELETE FROM ft2
+  USING ft4 LEFT JOIN ft5 ON (ft4.c1 = ft5.c1)
+  WHERE ft2.c1 > 1200 AND ft2.c1 % 10 = 0 AND ft2.c2 = ft4.c1
+  RETURNING 100;
+DELETE FROM ft2 WHERE ft2.c1 > 1200;
+
+-- Test UPDATE with a MULTIEXPR sub-select
+-- (maybe someday this'll be remotely executable, but not today)
+EXPLAIN (verbose, costs off)
+UPDATE ft2 AS target SET (c2, c7) = (
+    SELECT c2 * 10, c7
+        FROM ft2 AS src
+        WHERE target.c1 = src.c1
+) WHERE c1 > 1100;
+UPDATE ft2 AS target SET (c2, c7) = (
+    SELECT c2 * 10, c7
+        FROM ft2 AS src
+        WHERE target.c1 = src.c1
+) WHERE c1 > 1100;
+
+UPDATE ft2 AS target SET (c2) = (
+    SELECT c2 / 10
+        FROM ft2 AS src
+        WHERE target.c1 = src.c1
+) WHERE c1 > 1100;
+
 -- Test UPDATE/DELETE with WHERE or JOIN/ON conditions containing
 -- user-defined operators/functions
--- ALTER SERVER loopback OPTIONS (DROP extensions);
--- INSERT INTO ft2 (c1,c2,c3)
---   SELECT id, id % 10, to_char(id, 'FM00000') FROM generate_series(2001, 2010) id;
--- EXPLAIN (verbose, costs off)
--- UPDATE ft2 SET c3 = 'bar' WHERE postgres_fdw_abs(c1) > 2000 RETURNING *;            -- can't be pushed down
--- UPDATE ft2 SET c3 = 'bar' WHERE postgres_fdw_abs(c1) > 2000 RETURNING *;
--- EXPLAIN (verbose, costs off)
--- UPDATE ft2 SET c3 = 'baz'
---   FROM ft4 INNER JOIN ft5 ON (ft4.c1 = ft5.c1)
---   WHERE ft2.c1 > 2000 AND ft2.c2 === ft4.c1
---   RETURNING ft2.*, ft4.*, ft5.*;                                                    -- can't be pushed down
--- UPDATE ft2 SET c3 = 'baz'
---   FROM ft4 INNER JOIN ft5 ON (ft4.c1 = ft5.c1)
---   WHERE ft2.c1 > 2000 AND ft2.c2 === ft4.c1
---   RETURNING ft2.*, ft4.*, ft5.*;
--- EXPLAIN (verbose, costs off)
--- DELETE FROM ft2
---   USING ft4 INNER JOIN ft5 ON (ft4.c1 === ft5.c1)
---   WHERE ft2.c1 > 2000 AND ft2.c2 = ft4.c1
---   RETURNING ft2.c1, ft2.c2, ft2.c3;       -- can't be pushed down
--- DELETE FROM ft2
---   USING ft4 INNER JOIN ft5 ON (ft4.c1 === ft5.c1)
---   WHERE ft2.c1 > 2000 AND ft2.c2 = ft4.c1
---   RETURNING ft2.c1, ft2.c2, ft2.c3;
--- DELETE FROM ft2 WHERE ft2.c1 > 2000;
--- ALTER SERVER loopback OPTIONS (ADD extensions 'postgres_fdw');
+ALTER SERVER loopback OPTIONS (DROP extensions);
+INSERT INTO ft2 (c1,c2,c3)
+  SELECT id, id % 10, to_char(id, 'FM00000') FROM generate_series(2001, 2010) id;
+EXPLAIN (verbose, costs off)
+UPDATE ft2 SET c3 = 'bar' WHERE postgres_fdw_abs(c1) > 2000 RETURNING *;            -- can't be pushed down
+UPDATE ft2 SET c3 = 'bar' WHERE postgres_fdw_abs(c1) > 2000 RETURNING *;
+EXPLAIN (verbose, costs off)
+UPDATE ft2 SET c3 = 'baz'
+  FROM ft4 INNER JOIN ft5 ON (ft4.c1 = ft5.c1)
+  WHERE ft2.c1 > 2000 AND ft2.c2 === ft4.c1
+  RETURNING ft2.*, ft4.*, ft5.*;                                                    -- can't be pushed down
+UPDATE ft2 SET c3 = 'baz'
+  FROM ft4 INNER JOIN ft5 ON (ft4.c1 = ft5.c1)
+  WHERE ft2.c1 > 2000 AND ft2.c2 === ft4.c1
+  RETURNING ft2.*, ft4.*, ft5.*;
+EXPLAIN (verbose, costs off)
+DELETE FROM ft2
+  USING ft4 INNER JOIN ft5 ON (ft4.c1 === ft5.c1)
+  WHERE ft2.c1 > 2000 AND ft2.c2 = ft4.c1
+  RETURNING ft2.c1, ft2.c2, ft2.c3;       -- can't be pushed down
+DELETE FROM ft2
+  USING ft4 INNER JOIN ft5 ON (ft4.c1 === ft5.c1)
+  WHERE ft2.c1 > 2000 AND ft2.c2 = ft4.c1
+  RETURNING ft2.c1, ft2.c2, ft2.c3;
+DELETE FROM ft2 WHERE ft2.c1 > 2000;
+ALTER SERVER loopback OPTIONS (ADD extensions 'postgres_fdw');
 
 -- Test that trigger on remote table works as expected
--- CREATE OR REPLACE FUNCTION "S 1".F_BRTRIG() RETURNS trigger AS $$
--- BEGIN
---     NEW.c3 = NEW.c3 || '_trig_update';
---     RETURN NEW;
--- END;
--- $$ LANGUAGE plpgsql;
--- CREATE TRIGGER t1_br_insert BEFORE INSERT OR UPDATE
---     ON "S 1"."T1" FOR EACH ROW EXECUTE PROCEDURE "S 1".F_BRTRIG();
+CREATE OR REPLACE FUNCTION "S 1".F_BRTRIG() RETURNS trigger AS $$
+BEGIN
+    NEW.c3 = NEW.c3 || '_trig_update';
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER t1_br_insert BEFORE INSERT OR UPDATE
+    ON "S 1"."T 1" FOR EACH ROW EXECUTE PROCEDURE "S 1".F_BRTRIG();
 
--- INSERT INTO ft2 (c1,c2,c3) VALUES (1208, 818, 'fff') RETURNING *;
--- INSERT INTO ft2 (c1,c2,c3,c6) VALUES (1218, 818, 'ggg', '(--;') RETURNING *;
--- UPDATE ft2 SET c2 = c2 + 600 WHERE c1 % 10 = 8 AND c1 < 1200 RETURNING *;
+INSERT INTO ft2 (c1,c2,c3) VALUES (1208, 818, 'fff') RETURNING *;
+INSERT INTO ft2 (c1,c2,c3,c6) VALUES (1218, 818, 'ggg', '(--;') RETURNING *;
+UPDATE ft2 SET c2 = c2 + 600 WHERE c1 % 10 = 8 AND c1 < 1200 RETURNING *;
 
 -- Test errors thrown on remote side during update
--- ALTER TABLE "S 1"."T1" ADD CONSTRAINT c2positive CHECK (c2 >= 0);
+ALTER TABLE "S 1"."T 1" ADD CONSTRAINT c2positive CHECK (c2 >= 0);
 
--- INSERT INTO ft1(c1, c2) VALUES(11, 12);  -- duplicate key
--- INSERT INTO ft1(c1, c2) VALUES(11, 12) ON CONFLICT DO NOTHING; -- works
--- INSERT INTO ft1(c1, c2) VALUES(11, 12) ON CONFLICT (c1, c2) DO NOTHING; -- unsupported
--- INSERT INTO ft1(c1, c2) VALUES(11, 12) ON CONFLICT (c1, c2) DO UPDATE SET c3 = 'ffg'; -- unsupported
--- INSERT INTO ft1(c1, c2) VALUES(1111, -2);  -- c2positive
--- UPDATE ft1 SET c2 = -c2 WHERE c1 = 1;  -- c2positive
+INSERT INTO ft1(c1, c2) VALUES(11, 12);  -- duplicate key
+INSERT INTO ft1(c1, c2) VALUES(11, 12) ON CONFLICT DO NOTHING; -- works
+INSERT INTO ft1(c1, c2) VALUES(11, 12) ON CONFLICT (c1, c2) DO NOTHING; -- unsupported
+INSERT INTO ft1(c1, c2) VALUES(11, 12) ON CONFLICT (c1, c2) DO UPDATE SET c3 = 'ffg'; -- unsupported
+INSERT INTO ft1(c1, c2) VALUES(1111, -2);  -- c2positive
+UPDATE ft1 SET c2 = -c2 WHERE c1 = 1;  -- c2positive
 
 -- Test savepoint/rollback behavior
--- select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
--- select c2, count(*) from "S 1"."T1" where c2 < 500 group by 1 order by 1;
--- begin;
--- update ft2 set c2 = 42 where c2 = 0;
--- select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
--- savepoint s1;
--- update ft2 set c2 = 44 where c2 = 4;
--- select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
--- release savepoint s1;
--- select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
--- savepoint s2;
--- update ft2 set c2 = 46 where c2 = 6;
--- select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
--- rollback to savepoint s2;
--- select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
--- release savepoint s2;
--- select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
--- savepoint s3;
--- update ft2 set c2 = -2 where c2 = 42 and c1 = 10; -- fail on remote side
--- rollback to savepoint s3;
--- select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
--- release savepoint s3;
--- select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
+select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
+select c2, count(*) from "S 1"."T 1" where c2 < 500 group by 1 order by 1;
+begin;
+update ft2 set c2 = 42 where c2 = 0;
+select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
+savepoint s1;
+update ft2 set c2 = 44 where c2 = 4;
+select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
+release savepoint s1;
+select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
+savepoint s2;
+update ft2 set c2 = 46 where c2 = 6;
+select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
+rollback to savepoint s2;
+select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
+release savepoint s2;
+select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
+savepoint s3;
+update ft2 set c2 = -2 where c2 = 42 and c1 = 10; -- fail on remote side
+rollback to savepoint s3;
+select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
+release savepoint s3;
+select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
 -- none of the above is committed yet remotely
--- select c2, count(*) from "S 1"."T1" where c2 < 500 group by 1 order by 1;
--- commit;
--- select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
--- select c2, count(*) from "S 1"."T1" where c2 < 500 group by 1 order by 1;
+select c2, count(*) from "S 1"."T 1" where c2 < 500 group by 1 order by 1;
+commit;
+select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
+select c2, count(*) from "S 1"."T 1" where c2 < 500 group by 1 order by 1;
 
--- VACUUM ANALYZE "S 1"."T1";
+VACUUM ANALYZE "S 1"."T 1";
+*/
 
 -- Above DMLs add data with c6 as NULL in ft1, so test ORDER BY NULLS LAST and NULLs
 -- FIRST behavior here.
@@ -1552,6 +1603,7 @@ SELECT * FROM ft1 ORDER BY c6 ASC NULLS FIRST, c1 OFFSET 15 LIMIT 10;
 ALTER FOREIGN TABLE ft1 ADD CONSTRAINT ft1_c2positive CHECK (c2 >= 0);
 --Testcase 329:
 EXPLAIN (VERBOSE, COSTS OFF) SELECT count(*) FROM ft1 WHERE c2 < 0;
+-- InfluxDB return null value because it does not have any record.
 --Testcase 330:
 SELECT count(*) FROM ft1 WHERE c2 < 0;
 SET constraint_exclusion = 'on';
@@ -1586,21 +1638,21 @@ ALTER FOREIGN TABLE ft1 DROP CONSTRAINT ft1_c2negative;
 -- test WITH CHECK OPTION constraints
 -- ===================================================================
 
-CREATE FUNCTION row_before_insupd_trigfunc() 
-RETURNS trigger AS $$BEGIN NEW.a := NEW.a + 10; 
-RETURN NEW; END$$ LANGUAGE plpgsql;
+--Testcase 632:
+CREATE FUNCTION row_before_insupd_trigfunc() RETURNS trigger AS $$BEGIN NEW.a := NEW.a + 10; RETURN NEW; END$$ LANGUAGE plpgsql;
 
+--Testcase 633:
 CREATE TABLE base_tbl (a int, b int);
 ALTER TABLE base_tbl SET (autovacuum_enabled = 'false');
-CREATE TRIGGER row_before_insupd_trigger 
-BEFORE INSERT OR UPDATE ON base_tbl 
-FOR EACH ROW EXECUTE PROCEDURE row_before_insupd_trigfunc();
--- skip, Influxdb does not support INSERT. However, we keep this test case
--- to test locally
+--Testcase 634:
+CREATE TRIGGER row_before_insupd_trigger BEFORE INSERT OR UPDATE ON base_tbl FOR EACH ROW EXECUTE PROCEDURE row_before_insupd_trigfunc();
+-- skip, Influxdb does not support INSERT. However, we keep this test case to test locally
 --CREATE FOREIGN TABLE foreign_tbl (a int, b int)
 --  SERVER influxdb_svr OPTIONS (table 'base_tbl');
+--Testcase 635:
 CREATE VIEW rw_view AS SELECT * FROM base_tbl
   WHERE a < b WITH CHECK OPTION;
+--Testcase 636:
 \d+ rw_view
 
 --Testcase 337:
@@ -1630,24 +1682,29 @@ UPDATE rw_view SET b = b + 15; -- ok
 SELECT * FROM base_tbl;
 
 --DROP FOREIGN TABLE foreign_tbl CASCADE;
+--Testcase 637:
 DROP TRIGGER row_before_insupd_trigger ON base_tbl;
+--Testcase 638:
 DROP TABLE base_tbl CASCADE;
 
 -- test WCO for partitions
 
+--Testcase 639:
 CREATE TABLE child_tbl (a int, b int);
 ALTER TABLE child_tbl SET (autovacuum_enabled = 'false');
-CREATE TRIGGER row_before_insupd_trigger
- BEFORE INSERT OR UPDATE ON child_tbl
- FOR EACH ROW EXECUTE PROCEDURE row_before_insupd_trigfunc();
+--Testcase 640:
+CREATE TRIGGER row_before_insupd_trigger BEFORE INSERT OR UPDATE ON child_tbl FOR EACH ROW EXECUTE PROCEDURE row_before_insupd_trigfunc();
 --CREATE FOREIGN TABLE foreign_tbl (a int, b int)
 --  SERVER influxdb_svr OPTIONS (table 'child_tbl');
 
+--Testcase 641:
 CREATE TABLE parent_tbl (a int, b int) PARTITION BY RANGE(a);
 ALTER TABLE parent_tbl ATTACH PARTITION child_tbl FOR VALUES FROM (0) TO (100);
 
+--Testcase 642:
 CREATE VIEW rw_view AS SELECT * FROM parent_tbl
   WHERE a < b WITH CHECK OPTION;
+--Testcase 643:
 \d+ rw_view
 
 --Testcase 347:
@@ -1677,20 +1734,24 @@ UPDATE rw_view SET b = b + 15; -- ok
 SELECT * FROM child_tbl;
 
 --DROP FOREIGN TABLE foreign_tbl CASCADE;
+--Testcase 644:
 DROP TRIGGER row_before_insupd_trigger ON child_tbl;
+--Testcase 645:
 DROP TABLE parent_tbl CASCADE;
 
+--Testcase 646:
 DROP FUNCTION row_before_insupd_trigfunc;
 
 -- ===================================================================
 -- test serial columns (ie, sequence-based defaults)
 -- ===================================================================
+--Testcase 647:
 create table loc1 (f1 serial, f2 text);
 alter table loc1 set (autovacuum_enabled = 'false');
 --create foreign table rem1 (f1 serial, f2 text)
 --  server influxdb_svr options(table 'loc1');
 --Testcase 357:
-select pg_catalog.setval('rem1_f1_seq', 10, false);
+select pg_catalog.setval('loc1_f1_seq', 10, false);
 --Testcase 358:
 insert into loc1(f2) values('hi');
 --Testcase 359:
@@ -1706,6 +1767,7 @@ select * from loc1;
 -- ===================================================================
 -- test generated columns
 -- ===================================================================
+--Testcase 648:
 create table gloc1 (a int, b int generated always as (a * 2) stored);
 alter table gloc1 set (autovacuum_enabled = 'false');
 --create foreign table grem1 (
@@ -1725,6 +1787,7 @@ select * from gloc1;
 -- ===================================================================
 
 -- Trigger functions "borrowed" from triggers regress test.
+--Testcase 649:
 CREATE FUNCTION trigger_func() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
 	RAISE NOTICE 'trigger_func(%) called: action = %, when = %, level = %',
@@ -1732,11 +1795,14 @@ BEGIN
 	RETURN NULL;
 END;$$;
 
-CREATE TRIGGER trig_stmt_before BEFORE DELETE OR INSERT OR UPDATE ON rem1
+--Testcase 650:
+CREATE TRIGGER trig_stmt_before BEFORE DELETE OR INSERT OR UPDATE ON loc1
 	FOR EACH STATEMENT EXECUTE PROCEDURE trigger_func();
-CREATE TRIGGER trig_stmt_after AFTER DELETE OR INSERT OR UPDATE ON rem1
+--Testcase 651:
+CREATE TRIGGER trig_stmt_after AFTER DELETE OR INSERT OR UPDATE ON loc1
 	FOR EACH STATEMENT EXECUTE PROCEDURE trigger_func();
 
+--Testcase 652:
 CREATE OR REPLACE FUNCTION trigger_data()  RETURNS trigger
 LANGUAGE plpgsql AS $$
 
@@ -1777,10 +1843,12 @@ end;
 $$;
 
 -- Test basic functionality
+--Testcase 653:
 CREATE TRIGGER trig_row_before
 BEFORE INSERT OR UPDATE OR DELETE ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
 
+--Testcase 654:
 CREATE TRIGGER trig_row_after
 AFTER INSERT OR UPDATE OR DELETE ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
@@ -1796,29 +1864,58 @@ update loc1 set f2 = f2 || f2;
 
 
 -- cleanup
+--Testcase 655:
 DROP TRIGGER trig_row_before ON loc1;
+--Testcase 656:
 DROP TRIGGER trig_row_after ON loc1;
+--Testcase 657:
 DROP TRIGGER trig_stmt_before ON loc1;
+--Testcase 658:
 DROP TRIGGER trig_stmt_after ON loc1;
 
 --Testcase 370:
 DELETE from loc1;
 
+-- Test multiple AFTER ROW triggers on a foreign table
+--Testcase 659:
+CREATE TRIGGER trig_row_after1
+AFTER INSERT OR UPDATE OR DELETE ON loc1
+FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
+
+--Testcase 660:
+CREATE TRIGGER trig_row_after2
+AFTER INSERT OR UPDATE OR DELETE ON loc1
+FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
+
+--Testcase 661:
+insert into loc1 values(1,'insert');
+--Testcase 662:
+update loc1 set f2  = 'update' where f1 = 1;
+--Testcase 663:
+update loc1 set f2 = f2 || f2;
+--Testcase 664:
+delete from loc1;
+
+-- cleanup
+--Testcase 665:
+DROP TRIGGER trig_row_after1 ON loc1;
+--Testcase 666:
+DROP TRIGGER trig_row_after2 ON loc1;
 
 -- Test WHEN conditions
 
+--Testcase 667:
 CREATE TRIGGER trig_row_before_insupd
 BEFORE INSERT OR UPDATE ON loc1
 FOR EACH ROW
 WHEN (NEW.f2 like '%update%')
---Testcase 371:
 EXECUTE PROCEDURE trigger_data(23,'skidoo');
 
+--Testcase 668:
 CREATE TRIGGER trig_row_after_insupd
 AFTER INSERT OR UPDATE ON loc1
 FOR EACH ROW
 WHEN (NEW.f2 like '%update%')
---Testcase 372:
 EXECUTE PROCEDURE trigger_data(23,'skidoo');
 
 -- Insert or update not matching: nothing happens
@@ -1833,18 +1930,18 @@ INSERT INTO loc1 values(2, 'update');
 --Testcase 376:
 UPDATE loc1 set f2 = 'update update' where f1 = '2';
 
+--Testcase 669:
 CREATE TRIGGER trig_row_before_delete
 BEFORE DELETE ON loc1
 FOR EACH ROW
 WHEN (OLD.f2 like '%update%')
---Testcase 377:
 EXECUTE PROCEDURE trigger_data(23,'skidoo');
 
+--Testcase 670:
 CREATE TRIGGER trig_row_after_delete
 AFTER DELETE ON loc1
 FOR EACH ROW
 WHEN (OLD.f2 like '%update%')
---Testcase 378:
 EXECUTE PROCEDURE trigger_data(23,'skidoo');
 
 -- Trigger is fired for f1=2, not for f1=1
@@ -1852,14 +1949,19 @@ EXECUTE PROCEDURE trigger_data(23,'skidoo');
 DELETE FROM loc1;
 
 -- cleanup
+--Testcase 671:
 DROP TRIGGER trig_row_before_insupd ON loc1;
+--Testcase 672:
 DROP TRIGGER trig_row_after_insupd ON loc1;
+--Testcase 673:
 DROP TRIGGER trig_row_before_delete ON loc1;
+--Testcase 674:
 DROP TRIGGER trig_row_after_delete ON loc1;
 
 
 -- Test various RETURN statements in BEFORE triggers.
 
+--Testcase 675:
 CREATE FUNCTION trig_row_before_insupdate() RETURNS TRIGGER AS $$
   BEGIN
     NEW.f2 := NEW.f2 || ' triggered !';
@@ -1867,6 +1969,7 @@ CREATE FUNCTION trig_row_before_insupdate() RETURNS TRIGGER AS $$
   END
 $$ language plpgsql;
 
+--Testcase 676:
 CREATE TRIGGER trig_row_before_insupd
 BEFORE INSERT OR UPDATE ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trig_row_before_insupdate();
@@ -1902,6 +2005,7 @@ DELETE FROM loc1;
 
 -- Add a second trigger, to check that the changes are propagated correctly
 -- from trigger to trigger
+--Testcase 677:
 CREATE TRIGGER trig_row_before_insupd2
 BEFORE INSERT OR UPDATE ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trig_row_before_insupdate();
@@ -1923,7 +2027,9 @@ UPDATE loc1 set f2 = 'skidoo' RETURNING f2;
 --Testcase 399:
 SELECT * from loc1;
 
+--Testcase 678:
 DROP TRIGGER trig_row_before_insupd ON loc1;
+--Testcase 679:
 DROP TRIGGER trig_row_before_insupd2 ON loc1;
 
 --Testcase 400:
@@ -1933,12 +2039,14 @@ DELETE from loc1;
 INSERT INTO loc1 VALUES (1, 'test');
 
 -- Test with a trigger returning NULL
+--Testcase 680:
 CREATE FUNCTION trig_null() RETURNS TRIGGER AS $$
   BEGIN
     RETURN NULL;
   END
 $$ language plpgsql;
 
+--Testcase 681:
 CREATE TRIGGER trig_null
 BEFORE INSERT OR UPDATE OR DELETE ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trig_null();
@@ -1962,19 +2070,23 @@ DELETE from loc1;
 --Testcase 407:
 SELECT * from loc1;
 
+--Testcase 682:
 DROP TRIGGER trig_null ON loc1;
 --Testcase 408:
 DELETE from loc1;
 
 -- Test a combination of local and remote triggers
+--Testcase 683:
 CREATE TRIGGER trig_row_before
 BEFORE INSERT OR UPDATE OR DELETE ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
 
+--Testcase 684:
 CREATE TRIGGER trig_row_after
 AFTER INSERT OR UPDATE OR DELETE ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
 
+--Testcase 685:
 CREATE TRIGGER trig_local_before BEFORE INSERT OR UPDATE ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trig_row_before_insupdate();
 
@@ -1988,14 +2100,18 @@ UPDATE loc1 SET f2 = 'testo';
 INSERT INTO loc1(f2) VALUES ('test') RETURNING ctid;
 
 -- cleanup
+--Testcase 686:
 DROP TRIGGER trig_row_before ON loc1;
+--Testcase 687:
 DROP TRIGGER trig_row_after ON loc1;
+--Testcase 688:
 DROP TRIGGER trig_local_before ON loc1;
 
 
 -- Test direct foreign table modification functionality
 
 -- Test with statement-level triggers
+--Testcase 689:
 CREATE TRIGGER trig_stmt_before
 	BEFORE DELETE OR INSERT OR UPDATE ON loc1
 	FOR EACH STATEMENT EXECUTE PROCEDURE trigger_func();
@@ -2005,8 +2121,10 @@ UPDATE loc1 set f2 = '';          -- can be pushed down
 --Testcase 413:
 EXPLAIN (verbose, costs off)
 DELETE FROM loc1;                 -- can be pushed down
+--Testcase 690:
 DROP TRIGGER trig_stmt_before ON loc1;
 
+--Testcase 691:
 CREATE TRIGGER trig_stmt_after
 	AFTER DELETE OR INSERT OR UPDATE ON loc1
 	FOR EACH STATEMENT EXECUTE PROCEDURE trigger_func();
@@ -2016,9 +2134,11 @@ UPDATE loc1 set f2 = '';          -- can be pushed down
 --Testcase 415:
 EXPLAIN (verbose, costs off)
 DELETE FROM loc1;                 -- can be pushed down
+--Testcase 692:
 DROP TRIGGER trig_stmt_after ON loc1;
 
 -- Test with row-level ON INSERT triggers
+--Testcase 693:
 CREATE TRIGGER trig_row_before_insert
 BEFORE INSERT ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
@@ -2028,8 +2148,10 @@ UPDATE loc1 set f2 = '';          -- can be pushed down
 --Testcase 417:
 EXPLAIN (verbose, costs off)
 DELETE FROM loc1;                 -- can be pushed down
+--Testcase 694:
 DROP TRIGGER trig_row_before_insert ON loc1;
 
+--Testcase 695:
 CREATE TRIGGER trig_row_after_insert
 AFTER INSERT ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
@@ -2039,9 +2161,11 @@ UPDATE loc1 set f2 = '';          -- can be pushed down
 --Testcase 419:
 EXPLAIN (verbose, costs off)
 DELETE FROM loc1;                 -- can be pushed down
+--Testcase 696:
 DROP TRIGGER trig_row_after_insert ON loc1;
 
 -- Test with row-level ON UPDATE triggers
+--Testcase 697:
 CREATE TRIGGER trig_row_before_update
 BEFORE UPDATE ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
@@ -2051,8 +2175,10 @@ UPDATE loc1 set f2 = '';          -- can't be pushed down
 --Testcase 421:
 EXPLAIN (verbose, costs off)
 DELETE FROM loc1;                 -- can be pushed down
+--Testcase 698:
 DROP TRIGGER trig_row_before_update ON loc1;
 
+--Testcase 699:
 CREATE TRIGGER trig_row_after_update
 AFTER UPDATE ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
@@ -2062,9 +2188,11 @@ UPDATE loc1 set f2 = '';          -- can't be pushed down
 --Testcase 423:
 EXPLAIN (verbose, costs off)
 DELETE FROM loc1;                 -- can be pushed down
+--Testcase 700:
 DROP TRIGGER trig_row_after_update ON loc1;
 
 -- Test with row-level ON DELETE triggers
+--Testcase 701:
 CREATE TRIGGER trig_row_before_delete
 BEFORE DELETE ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
@@ -2074,8 +2202,10 @@ UPDATE loc1 set f2 = '';          -- can be pushed down
 --Testcase 425:
 EXPLAIN (verbose, costs off)
 DELETE FROM loc1;                 -- can't be pushed down
+--Testcase 702:
 DROP TRIGGER trig_row_before_delete ON loc1;
 
+--Testcase 703:
 CREATE TRIGGER trig_row_after_delete
 AFTER DELETE ON loc1
 FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
@@ -2085,18 +2215,21 @@ UPDATE loc1 set f2 = '';          -- can be pushed down
 --Testcase 427:
 EXPLAIN (verbose, costs off)
 DELETE FROM loc1;                 -- can't be pushed down
+--Testcase 704:
 DROP TRIGGER trig_row_after_delete ON loc1;
 
 -- ===================================================================
 -- test inheritance features
 -- ===================================================================
 
+--Testcase 705:
 CREATE TABLE a (aa TEXT);
 --CREATE TABLE loct (aa TEXT, bb TEXT);
 ALTER TABLE a SET (autovacuum_enabled = 'false');
 --ALTER TABLE loct SET (autovacuum_enabled = 'false');
 -- Because Influxdb does not support UPDATE, to test locally 
 -- we create local table.
+--Testcase 706:
 CREATE TABLE b (bb TEXT) INHERITS (a);
 
 
@@ -2161,6 +2294,7 @@ SELECT tableoid::regclass, * FROM b;
 --Testcase 452:
 SELECT tableoid::regclass, * FROM ONLY a;
 
+--Testcase 707:
 DROP TABLE a CASCADE;
 --DROP TABLE loct;
 
@@ -2171,10 +2305,14 @@ DROP TABLE a CASCADE;
 --alter table loct1 set (autovacuum_enabled = 'false');
 --alter table loct2 set (autovacuum_enabled = 'false');
 
+--Testcase 708:
 create table foo (f1 int, f2 int);
+--Testcase 709:
 create foreign table foo2 (f3 int) inherits (foo)
   server influxdb_svr options (table 'loct1_1');
+--Testcase 710:
 create table bar (f1 int, f2 int);
+--Testcase 711:
 create foreign table bar2 (f3 int) inherits (bar)
   server influxdb_svr options (table 'loct2_1');
 
@@ -2197,15 +2335,11 @@ insert into bar values(6,66);
 -- insert into bar2 values(4,44,44);
 -- insert into bar2 values(7,77,77);
 
---explain (verbose, costs off)
---select * from ftbar where f1 in (select f1 from ftfoo) for update;
---select * from ftbar where f1 in (select f1 from ftfoo) for update;
-
 --Testcase 458:
 explain (verbose, costs off)
-select * from bar2 where f1 in (select f1 from foo2) for update;
+select * from bar where f1 in (select f1 from foo) for update;
 --Testcase 459:
-select * from bar2 where f1 in (select f1 from foo2) for update;
+select * from bar where f1 in (select f1 from foo) for update;
 
 --Testcase 460:
 explain (verbose, costs off)
@@ -2213,33 +2347,27 @@ select * from bar where f1 in (select f1 from foo) for share;
 --Testcase 461:
 select * from bar where f1 in (select f1 from foo) for share;
 
+/*
 -- Check UPDATE with inherited target and an inherited source table
 -- skip, if we update to bar, bar2 also is updated because it inherits bar
 -- and Influxdb fdw does not support update on bar2.
-/*
---Testcase 462:
 explain (verbose, costs off)
 update bar set f2 = f2 + 100 where f1 in (select f1 from foo);
---Testcase 463:
 update bar set f2 = f2 + 100 where f1 in (select f1 from foo);
 
---Testcase 464:
 select tableoid::regclass, * from bar order by 1,2;
 
 -- Check UPDATE with inherited target and an appendrel subquery
---Testcase 465:
 explain (verbose, costs off)
 update bar set f2 = f2 + 100
 from
   ( select f1 from foo union all select f1+3 from foo ) ss
 where bar.f1 = ss.f1;
---Testcase 466:
 update bar set f2 = f2 + 100
 from
   ( select f1 from foo union all select f1+3 from foo ) ss
 where bar.f1 = ss.f1;
 
---Testcase 467:
 select tableoid::regclass, * from bar order by 1,2;
 
 -- Test forcing the remote server to produce sorted data for a merge join,
@@ -2247,9 +2375,7 @@ select tableoid::regclass, * from bar order by 1,2;
 truncate table loct1;
 truncate table only foo;
 \set num_rows_foo 2000
---Testcase 468:
 insert into loct1 select generate_series(0, :num_rows_foo, 2), generate_series(0, :num_rows_foo, 2), generate_series(0, :num_rows_foo, 2);
---Testcase 469:
 insert into foo select generate_series(1, :num_rows_foo, 2), generate_series(1, :num_rows_foo, 2);
 SET enable_hashjoin to false;
 SET enable_nestloop to false;
@@ -2259,17 +2385,13 @@ create index i_foo_f1 on foo(f1);
 analyze foo;
 analyze loct1;
 -- inner join; expressions in the clauses appear in the equivalence class list
---Testcase 470:
 explain (verbose, costs off)
 	select foo.f1, loct1.f1 from foo join loct1 on (foo.f1 = loct1.f1) order by foo.f2 offset 10 limit 10;
---Testcase 471:
 select foo.f1, loct1.f1 from foo join loct1 on (foo.f1 = loct1.f1) order by foo.f2 offset 10 limit 10;
 -- outer join; expressions in the clauses do not appear in equivalence class
 -- list but no output change as compared to the previous query
---Testcase 472:
 explain (verbose, costs off)
 	select foo.f1, loct1.f1 from foo left join loct1 on (foo.f1 = loct1.f1) order by foo.f2 offset 10 limit 10;
---Testcase 473:
 select foo.f1, loct1.f1 from foo left join loct1 on (foo.f1 = loct1.f1) order by foo.f2 offset 10 limit 10;
 RESET enable_hashjoin;
 RESET enable_nestloop;
@@ -2277,21 +2399,15 @@ RESET enable_nestloop;
 -- Test that WHERE CURRENT OF is not supported
 begin;
 declare c cursor for select * from bar where f1 = 7;
---Testcase 474:
 fetch from c;
---Testcase 475:
 update bar set f2 = null where current of c;
 rollback;
 
---Testcase 476:
 explain (verbose, costs off)
 delete from foo where f1 < 5 returning *;
---Testcase 477:
 delete from foo where f1 < 5 returning *;
---Testcase 478:
 explain (verbose, costs off)
 update bar set f2 = f2 + 100 returning *;
---Testcase 479:
 update bar set f2 = f2 + 100 returning *;
 
 -- Test that UPDATE/DELETE with inherited target works with row-level triggers
@@ -2303,16 +2419,12 @@ CREATE TRIGGER trig_row_after
 AFTER UPDATE OR DELETE ON bar2
 FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
 
---Testcase 480:
 explain (verbose, costs off)
 update bar set f2 = f2 + 100;
---Testcase 481:
 update bar set f2 = f2 + 100;
 
---Testcase 482:
 explain (verbose, costs off)
 delete from bar where f2 < 400;
---Testcase 483:
 delete from bar where f2 < 400;
 
 -- cleanup
@@ -2323,35 +2435,27 @@ drop table loct2;
 
 -- Test pushing down UPDATE/DELETE joins to the remote server
 create table parent (a int, b text);
---create table loct1 (a int, b text);
---create table loct2 (a int, b text);
+create table loct1 (a int, b text);
+create table loct2 (a int, b text);
 create foreign table remt1 (a int, b text)
   server influxdb_svr options (table 'loct1');
 create foreign table remt2 (a int, b text)
   server influxdb_svr options (table 'loct2');
 alter foreign table remt1 inherit parent;
 
---Testcase 484:
 insert into remt1 values (1, 'foo');
---Testcase 485:
 insert into remt1 values (2, 'bar');
---Testcase 486:
 insert into remt2 values (1, 'foo');
---Testcase 487:
 insert into remt2 values (2, 'bar');
 
 analyze remt1;
 analyze remt2;
 
---Testcase 488:
 explain (verbose, costs off)
 update parent set b = parent.b || remt2.b from remt2 where parent.a = remt2.a returning *;
---Testcase 489:
 update parent set b = parent.b || remt2.b from remt2 where parent.a = remt2.a returning *;
---Testcase 490:
 explain (verbose, costs off)
 delete from parent using remt2 where parent.a = remt2.a returning parent;
---Testcase 491:
 delete from parent using remt2 where parent.a = remt2.a returning parent;
 
 -- cleanup
@@ -2361,10 +2465,12 @@ drop table loct1;
 drop table loct2;
 drop table parent;
 */
+/*
+-- Skip test because influxdb does not support partitions table, COPY
 -- ===================================================================
 -- test tuple routing for foreign-table partitions
 -- ===================================================================
-/*
+
 -- Test insert tuple routing
 create table itrtest (a int, b text) partition by list (a);
 create table loct1 (a int check (a in (1)), b text);
@@ -2613,11 +2719,11 @@ select tableoid::regclass, * FROM remp1;
 drop table ctrtest;
 drop table loct1;
 drop table loct2;
-*/
+
 -- ===================================================================
 -- test COPY FROM
 -- ===================================================================
-/*
+
 create table loc2 (f1 int, f2 text);
 alter table loc2 set (autovacuum_enabled = 'false');
 create foreign table rem2 (f1 int, f2 text) server loopback options(table_name 'loc2');
@@ -2785,6 +2891,7 @@ drop table loc3;
 -- test IMPORT FOREIGN SCHEMA
 -- ===================================================================
 
+--Testcase 712:
 CREATE SCHEMA import_influx1;
 IMPORT FOREIGN SCHEMA public FROM SERVER influxdb_svr INTO import_influx1;
 --Testcase 567:
@@ -2792,98 +2899,139 @@ IMPORT FOREIGN SCHEMA public FROM SERVER influxdb_svr INTO import_influx1;
 --Testcase 568:
 \d import_influx1.*
 
--- Check LIMIT TO and EXCEPT
+-- Options
+--Testcase 713:
 CREATE SCHEMA import_influx2;
+IMPORT FOREIGN SCHEMA public FROM SERVER influxdb_svr INTO import_influx2
+  OPTIONS (import_default 'true');
+--Testcase 714:
+\det+ import_influx2.*
+--Testcase 715:
+\d import_influx2.*
+
+--Testcase 716:
+CREATE SCHEMA import_influx3;
+IMPORT FOREIGN SCHEMA public FROM SERVER influxdb_svr INTO import_influx3
+  OPTIONS (import_collate 'false', import_not_null 'false');
+--Testcase 717:
+\det+ import_influx3.*
+--Testcase 718:
+\d import_influx3.*
+
+-- Check LIMIT TO and EXCEPT
+--Testcase 719:
+CREATE SCHEMA import_influx4;
 IMPORT FOREIGN SCHEMA public LIMIT TO ("T1", loct, nonesuch)
-  FROM SERVER influxdb_svr INTO import_influx2;
+  FROM SERVER influxdb_svr INTO import_influx4;
 --Testcase 569:
-\det+ import_influx2.*
+\det+ import_influx4.*
 IMPORT FOREIGN SCHEMA public EXCEPT ("T1", loct, nonesuch)
-  FROM SERVER influxdb_svr INTO import_influx2;
+  FROM SERVER influxdb_svr INTO import_influx4;
 --Testcase 570:
-\det+ import_influx2.*
+\det+ import_influx4.*
 
 -- Assorted error cases
-IMPORT FOREIGN SCHEMA public FROM SERVER influxdb_svr INTO import_influx2;
-IMPORT FOREIGN SCHEMA nonesuch FROM SERVER influxdb_svr INTO import_influx2; -- same as 'public'
+IMPORT FOREIGN SCHEMA public FROM SERVER influxdb_svr INTO import_influx4;
+IMPORT FOREIGN SCHEMA nonesuch FROM SERVER influxdb_svr INTO import_influx4; -- same as 'public'
 IMPORT FOREIGN SCHEMA nonesuch FROM SERVER influxdb_svr INTO notthere;
 IMPORT FOREIGN SCHEMA nonesuch FROM SERVER nowhere INTO notthere;
 
+/*
+-- Skip test
 -- Check case of a type present only on the remote server.
 -- We can fake this by dropping the type locally in our transaction.
 CREATE TYPE "Colors" AS ENUM ('red', 'green', 'blue');
--- CREATE TABLE import_source.t5 (c1 int, c2 text collate "C", "Col" "Colors");
+CREATE TABLE import_source.t5 (c1 int, c2 text collate "C", "Col" "Colors");
 
 CREATE SCHEMA import_dest5;
 BEGIN;
 DROP TYPE "Colors" CASCADE;
---IMPORT FOREIGN SCHEMA import_source LIMIT TO (t5)
---  FROM SERVER influxdb_svr INTO import_dest5;  -- ERROR
+IMPORT FOREIGN SCHEMA import_source LIMIT TO (t5)
+  FROM SERVER influxdb_svr INTO import_dest5;  -- ERROR
 
 ROLLBACK;
 
--- BEGIN;
+BEGIN;
 
 
--- CREATE SERVER fetch101 FOREIGN DATA WRAPPER postgres_fdw OPTIONS( fetch_size '101' );
+CREATE SERVER fetch101 FOREIGN DATA WRAPPER postgres_fdw OPTIONS( fetch_size '101' );
 
--- SELECT count(*)
--- FROM pg_foreign_server
--- WHERE srvname = 'fetch101'
--- AND srvoptions @> array['fetch_size=101'];
+SELECT count(*)
+FROM pg_foreign_server
+WHERE srvname = 'fetch101'
+AND srvoptions @> array['fetch_size=101'];
 
--- ALTER SERVER fetch101 OPTIONS( SET fetch_size '202' );
+ALTER SERVER fetch101 OPTIONS( SET fetch_size '202' );
 
--- SELECT count(*)
--- FROM pg_foreign_server
--- WHERE srvname = 'fetch101'
--- AND srvoptions @> array['fetch_size=101'];
+SELECT count(*)
+FROM pg_foreign_server
+WHERE srvname = 'fetch101'
+AND srvoptions @> array['fetch_size=101'];
 
--- SELECT count(*)
--- FROM pg_foreign_server
--- WHERE srvname = 'fetch101'
--- AND srvoptions @> array['fetch_size=202'];
+SELECT count(*)
+FROM pg_foreign_server
+WHERE srvname = 'fetch101'
+AND srvoptions @> array['fetch_size=202'];
 
--- CREATE FOREIGN TABLE table30000 ( x int ) SERVER fetch101 OPTIONS ( fetch_size '30000' );
+CREATE FOREIGN TABLE table30000 ( x int ) SERVER fetch101 OPTIONS ( fetch_size '30000' );
 
--- SELECT COUNT(*)
--- FROM pg_foreign_table
--- WHERE ftrelid = 'table30000'::regclass
--- AND ftoptions @> array['fetch_size=30000'];
+SELECT COUNT(*)
+FROM pg_foreign_table
+WHERE ftrelid = 'table30000'::regclass
+AND ftoptions @> array['fetch_size=30000'];
 
--- ALTER FOREIGN TABLE table30000 OPTIONS ( SET fetch_size '60000');
+ALTER FOREIGN TABLE table30000 OPTIONS ( SET fetch_size '60000');
 
--- SELECT COUNT(*)
--- FROM pg_foreign_table
--- WHERE ftrelid = 'table30000'::regclass
--- AND ftoptions @> array['fetch_size=30000'];
+SELECT COUNT(*)
+FROM pg_foreign_table
+WHERE ftrelid = 'table30000'::regclass
+AND ftoptions @> array['fetch_size=30000'];
 
--- SELECT COUNT(*)
--- FROM pg_foreign_table
--- WHERE ftrelid = 'table30000'::regclass
--- AND ftoptions @> array['fetch_size=60000'];
+SELECT COUNT(*)
+FROM pg_foreign_table
+WHERE ftrelid = 'table30000'::regclass
+AND ftoptions @> array['fetch_size=60000'];
 
--- ROLLBACK;
+ROLLBACK;
+*/
 
 -- ===================================================================
 -- test partitionwise joins
 -- ===================================================================
 SET enable_partitionwise_join=on;
 
+--Testcase 720:
 CREATE TABLE fprt1 (a int, b int, c text) PARTITION BY RANGE(a);
+--CREATE TABLE fprt1_p1 (LIKE fprt1);
+--CREATE TABLE fprt1_p2 (LIKE fprt1);
+--ALTER TABLE fprt1_p1 SET (autovacuum_enabled = 'false');
+--ALTER TABLE fprt1_p2 SET (autovacuum_enabled = 'false');
+--INSERT INTO fprt1_p1 SELECT i, i, to_char(i/50, 'FM0000') FROM generate_series(0, 249, 2) i;
+--INSERT INTO fprt1_p2 SELECT i, i, to_char(i/50, 'FM0000') FROM generate_series(250, 499, 2) i;
+--Testcase 721:
 CREATE FOREIGN TABLE ftprt1_p1 PARTITION OF fprt1 FOR VALUES FROM (0) TO (250)
 	SERVER influxdb_svr OPTIONS (table 'fprt1_p1');
+--Testcase 722:
 CREATE FOREIGN TABLE ftprt1_p2 PARTITION OF fprt1 FOR VALUES FROM (250) TO (500)
 	SERVER influxdb_svr OPTIONS (TABLE 'fprt1_p2');
+--ANALYZE fprt1;
+--ANALYZE fprt1_p1;
+--ANALYZE fprt1_p2;
 
--- SELECT * FROM ftprt1_p1 OFFSET 100 LIMIT 50;
--- SELECT * FROM ftprt1_p2 OFFSET 100 LIMIT 50;
 
-
+--Testcase 723:
 CREATE TABLE fprt2 (a int, b int, c text) PARTITION BY RANGE(b);
+--CREATE TABLE fprt2_p1 (LIKE fprt2);
+--CREATE TABLE fprt2_p2 (LIKE fprt2);
+--ALTER TABLE fprt2_p1 SET (autovacuum_enabled = 'false');
+--ALTER TABLE fprt2_p2 SET (autovacuum_enabled = 'false');
+--INSERT INTO fprt2_p1 SELECT i, i, to_char(i/50, 'FM0000') FROM generate_series(0, 249, 3) i;
+--INSERT INTO fprt2_p2 SELECT i, i, to_char(i/50, 'FM0000') FROM generate_series(250, 499, 3) i;
+--Testcase 724:
 CREATE FOREIGN TABLE ftprt2_p1 (a int, b int, c text)
 	SERVER influxdb_svr OPTIONS (table 'fprt2_p1');
 ALTER TABLE fprt2 ATTACH PARTITION ftprt2_p1 FOR VALUES FROM (0) TO (250);
+--Testcase 725:
 CREATE FOREIGN TABLE ftprt2_p2 PARTITION OF fprt2 FOR VALUES FROM (250) TO (500)
 	SERVER influxdb_svr OPTIONS (table 'fprt2_p2');
 -- ANALYZE fprt2;
@@ -2939,11 +3087,23 @@ RESET enable_partitionwise_join;
 -- test partitionwise aggregates
 -- ===================================================================
 
+--Testcase 726:
 CREATE TABLE pagg_tab (t int, a int, b int, c text) PARTITION BY RANGE(a);
 
+--CREATE TABLE pagg_tab_p1 (LIKE pagg_tab);
+--CREATE TABLE pagg_tab_p2 (LIKE pagg_tab);
+--CREATE TABLE pagg_tab_p3 (LIKE pagg_tab);
+
+--INSERT INTO pagg_tab_p1 SELECT i % 30, i % 50, to_char(i/30, 'FM0000') FROM generate_series(1, 3000) i WHERE (i % 30) < 10;
+--INSERT INTO pagg_tab_p2 SELECT i % 30, i % 50, to_char(i/30, 'FM0000') FROM generate_series(1, 3000) i WHERE (i % 30) < 20 and (i % 30) >= 10;
+--INSERT INTO pagg_tab_p3 SELECT i % 30, i % 50, to_char(i/30, 'FM0000') FROM generate_series(1, 3000) i WHERE (i % 30) < 30 and (i % 30) >= 20;
+
 -- Create foreign partitions
+--Testcase 727:
 CREATE FOREIGN TABLE fpagg_tab_p1 PARTITION OF pagg_tab FOR VALUES FROM (0) TO (10) SERVER influxdb_svr OPTIONS (table 'pagg_tab_p1');
+--Testcase 728:
 CREATE FOREIGN TABLE fpagg_tab_p2 PARTITION OF pagg_tab FOR VALUES FROM (10) TO (20) SERVER influxdb_svr OPTIONS (table 'pagg_tab_p2');;
+--Testcase 729:
 CREATE FOREIGN TABLE fpagg_tab_p3 PARTITION OF pagg_tab FOR VALUES FROM (20) TO (30) SERVER influxdb_svr2 OPTIONS (table 'pagg_tab_p3');;
 
 -- ANALYZE pagg_tab;
@@ -2979,13 +3139,121 @@ SELECT a, count(t1) FROM pagg_tab t1 GROUP BY a HAVING avg(b) < 22 ORDER BY 1;
 EXPLAIN (COSTS OFF)
 SELECT b, avg(a), max(a), count(*) FROM pagg_tab GROUP BY b HAVING sum(a) < 700 ORDER BY 1;
 
+/*
+-- Skip test, influxdb_fdw does not support nosuperuser
+-- ===================================================================
+-- access rights and superuser
+-- ===================================================================
+
+-- Non-superuser cannot create a FDW without a password in the connstr
+CREATE ROLE regress_nosuper NOSUPERUSER;
+
+GRANT USAGE ON FOREIGN DATA WRAPPER postgres_fdw TO regress_nosuper;
+
+SET ROLE regress_nosuper;
+
+SHOW is_superuser;
+
+-- This will be OK, we can create the FDW
+DO $d$
+    BEGIN
+        EXECUTE $$CREATE SERVER loopback_nopw FOREIGN DATA WRAPPER postgres_fdw
+            OPTIONS (dbname '$$||current_database()||$$',
+                     port '$$||current_setting('port')||$$'
+            )$$;
+    END;
+$d$;
+
+-- But creation of user mappings for non-superusers should fail
+CREATE USER MAPPING FOR public SERVER loopback_nopw;
+CREATE USER MAPPING FOR CURRENT_USER SERVER loopback_nopw;
+
+CREATE FOREIGN TABLE ft1_nopw (
+	c1 int NOT NULL,
+	c2 int NOT NULL,
+	c3 text,
+	c4 timestamptz,
+	c5 timestamp,
+	c6 varchar(10),
+	c7 char(10) default 'ft1',
+	c8 user_enum
+) SERVER loopback_nopw OPTIONS (schema_name 'public', table_name 'ft1');
+
+SELECT * FROM ft1_nopw LIMIT 1;
+
+-- If we add a password to the connstr it'll fail, because we don't allow passwords
+-- in connstrs only in user mappings.
+
+DO $d$
+    BEGIN
+        EXECUTE $$ALTER SERVER loopback_nopw OPTIONS (ADD password 'dummypw')$$;
+    END;
+$d$;
+
+-- If we add a password for our user mapping instead, we should get a different
+-- error because the password wasn't actually *used* when we run with trust auth.
+--
+-- This won't work with installcheck, but neither will most of the FDW checks.
+
+ALTER USER MAPPING FOR CURRENT_USER SERVER loopback_nopw OPTIONS (ADD password 'dummypw');
+
+SELECT * FROM ft1_nopw LIMIT 1;
+
+-- Unpriv user cannot make the mapping passwordless
+ALTER USER MAPPING FOR CURRENT_USER SERVER loopback_nopw OPTIONS (ADD password_required 'false');
+
+
+SELECT * FROM ft1_nopw LIMIT 1;
+
+RESET ROLE;
+
+-- But the superuser can
+ALTER USER MAPPING FOR regress_nosuper SERVER loopback_nopw OPTIONS (ADD password_required 'false');
+
+SET ROLE regress_nosuper;
+
+-- Should finally work now
+SELECT * FROM ft1_nopw LIMIT 1;
+
+-- unpriv user also cannot set sslcert / sslkey on the user mapping
+-- first set password_required so we see the right error messages
+ALTER USER MAPPING FOR CURRENT_USER SERVER loopback_nopw OPTIONS (SET password_required 'true');
+ALTER USER MAPPING FOR CURRENT_USER SERVER loopback_nopw OPTIONS (ADD sslcert 'foo.crt');
+ALTER USER MAPPING FOR CURRENT_USER SERVER loopback_nopw OPTIONS (ADD sslkey 'foo.key');
+
+-- We're done with the role named after a specific user and need to check the
+-- changes to the public mapping.
+DROP USER MAPPING FOR CURRENT_USER SERVER loopback_nopw;
+
+-- This will fail again as it'll resolve the user mapping for public, which
+-- lacks password_required=false
+SELECT * FROM ft1_nopw LIMIT 1;
+
+RESET ROLE;
+
+-- The user mapping for public is passwordless and lacks the password_required=false
+-- mapping option, but will work because the current user is a superuser.
+SELECT * FROM ft1_nopw LIMIT 1;
+
+-- cleanup
+DROP USER MAPPING FOR public SERVER loopback_nopw;
+DROP OWNED BY regress_nosuper;
+DROP ROLE regress_nosuper;
+*/
 
 -- Clean-up
+--Testcase 730:
 DROP USER MAPPING FOR public SERVER testserver1;
+--Testcase 731:
 DROP USER MAPPING FOR CURRENT_USER SERVER influxdb_svr;
+--Testcase 732:
 DROP USER MAPPING FOR CURRENT_USER SERVER influxdb_svr2;
 
+--Testcase 733:
 DROP SERVER testserver1 CASCADE;
+--Testcase 734:
 DROP SERVER influxdb_svr CASCADE;
+--Testcase 735:
 DROP SERVER influxdb_svr2 CASCADE;
+--Testcase 736:
 DROP EXTENSION influxdb_fdw CASCADE;

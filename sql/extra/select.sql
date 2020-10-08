@@ -1,12 +1,16 @@
 --
 -- SELECT
 --
+--Testcase 52:
 CREATE EXTENSION influxdb_fdw;
 
+--Testcase 53:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw
   OPTIONS (dbname 'coredb', host 'http://localhost', port '8086');
+--Testcase 54:
 CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user 'user', password 'pass');
 
+--Testcase 55:
 CREATE FOREIGN TABLE onek (
   unique1   int4,
   unique2   int4,
@@ -26,6 +30,7 @@ CREATE FOREIGN TABLE onek (
   string4   name
 ) SERVER influxdb_svr;
 
+--Testcase 56:
 CREATE FOREIGN TABLE onek2 (
   unique1   int4,
   unique2   int4,
@@ -45,16 +50,37 @@ CREATE FOREIGN TABLE onek2 (
   string4   name
 ) SERVER influxdb_svr OPTIONS (table 'onek');
 
+--Testcase 57:
 CREATE FOREIGN TABLE INT8_TBL (
   q1 int8,
   q2 int8
 ) SERVER influxdb_svr;
 
+--Testcase 58:
 CREATE FOREIGN TABLE person (
   name    text,
   age     int4,
   location  point
 ) SERVER influxdb_svr;
+
+
+--Testcase 59:
+CREATE FOREIGN TABLE emp (
+	salary 		int4,
+	manager 	text
+) INHERITS (person) SERVER influxdb_svr;
+
+
+--Testcase 60:
+CREATE FOREIGN TABLE student (
+	gpa 		float8
+) INHERITS (person) SERVER influxdb_svr;
+
+
+--Testcase 61:
+CREATE FOREIGN TABLE stud_emp (
+	percent 	int4
+) INHERITS (emp, student) SERVER influxdb_svr;
 
 -- btree index
 -- awk '{if($1<10){print;}else{next;}}' onek.data | sort +0n -1
@@ -133,7 +159,7 @@ SET enable_sort TO off;
 -- awk '{if($1<10){print $0;}else{next;}}' onek.data | sort +0n -1
 --
 --Testcase 8:
-SELECT onek2.* FROM onek2 WHERE onek2.unique1 < 10;
+SELECT onek2.* FROM onek2 WHERE onek2.unique1 < 10 order by 1;
 
 --
 -- awk '{if($1<20){print $1,$14;}else{next;}}' onek.data | sort +0nr -1
@@ -148,7 +174,7 @@ SELECT onek2.unique1, onek2.stringu1 FROM onek2
 --
 --Testcase 10:
 SELECT onek2.unique1, onek2.stringu1 FROM onek2
-   WHERE onek2.unique1 > 980;
+   WHERE onek2.unique1 > 980 order by 1;
 
 RESET enable_seqscan;
 RESET enable_bitmapscan;
@@ -227,6 +253,7 @@ TABLE int8_tbl;
 -- Test ORDER BY options
 --
 
+--Testcase 62:
 CREATE FOREIGN TABLE foo (f1 int) SERVER influxdb_svr;
 
 --Testcase 22:
@@ -276,8 +303,8 @@ select * from onek2 where unique2 = 11 and stringu1 = 'ATAAAA';
 --Testcase 28:
 select * from onek2 where unique2 = 11 and stringu1 = 'ATAAAA';
 -- actually run the query with an analyze to use the partial index
+--Testcase 63:
 explain (costs off, analyze on, timing off, summary off)
---Testcase 29:
 select * from onek2 where unique2 = 11 and stringu1 = 'ATAAAA';
 --Testcase 30:
 explain (costs off)
@@ -340,6 +367,7 @@ select unique1, unique2 from onek2
 SELECT 1 AS x ORDER BY x;
 
 -- But ORDER BY on a set-valued expression does
+--Testcase 64:
 create function sillysrf(int) returns setof int as
   'values (1),(10),(2),($1)' language sql immutable;
 
@@ -348,6 +376,7 @@ select sillysrf(42);
 --Testcase 48:
 select sillysrf(-1) order by 1;
 
+--Testcase 65:
 drop function sillysrf(int);
 
 -- X = X isn't a no-op, it's effectively X IS NOT NULL assuming = is strict
@@ -359,13 +388,19 @@ select * from (values (2),(null),(1)) v(k) where k = k;
 
 -- Test partitioned tables with no partitions, which should be handled the
 -- same as the non-inheritance case when expanding its RTE.
+--Testcase 66:
 create table list_parted_tbl (a int,b int) partition by list (a);
+--Testcase 67:
 create table list_parted_tbl1 partition of list_parted_tbl
   for values in (1) partition by list(b);
 --Testcase 51:
 explain (costs off) select * from list_parted_tbl;
+--Testcase 68:
 drop table list_parted_tbl;
 
+--Testcase 69:
 DROP USER MAPPING FOR CURRENT_USER SERVER influxdb_svr;
+--Testcase 70:
 DROP SERVER influxdb_svr CASCADE;
+--Testcase 71:
 DROP EXTENSION influxdb_fdw CASCADE;
