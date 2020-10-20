@@ -33,15 +33,19 @@ include $(PGXS)
 ifndef MAJORVERSION
 MAJORVERSION := $(basename $(VERSION))
 endif
-ifeq (,$(findstring $(MAJORVERSION), 9.6 10 11 12 13))
-$(error PostgreSQL 9.6, 10, 11, 12 or 13 is required to compile this extension)
-endif
 
 else
 subdir = contrib/influxdb_fdw
 top_builddir = ../..
 include $(top_builddir)/src/Makefile.global
 include $(top_srcdir)/contrib/contrib-global.mk
+ifndef MAJORVERSION
+MAJORVERSION := $(basename $(VERSION))
+endif
+endif
+
+ifeq (,$(findstring $(MAJORVERSION), 9.6 10 11 12 13))
+$(error PostgreSQL 9.6, 10, 11, 12 or 13 is required to compile this extension)
 endif
 
 query.a: query.go
