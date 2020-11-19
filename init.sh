@@ -1,4 +1,5 @@
 influx -import -path=init/init.txt -precision=s
+influx -import -path=init/selectfunc.txt -precision=s
 
 influx -import -path=init/others.txt -precision=ns
 influx -import -path=init/join.txt -precision=ns
