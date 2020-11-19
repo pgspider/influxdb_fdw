@@ -38,6 +38,7 @@
 #define QUOTE '"'
 
 static char *influxdb_quote_identifier(const char *s, char q);
+static bool influxdb_contain_immutable_functions_walker(Node *node, void *context);
 
 /*
  * Global context for foreign_expr_walker's search of an expression tree.
@@ -52,6 +53,8 @@ typedef struct foreign_glob_cxt
 	unsigned int mixing_aggref_status; /* mixing_aggref_status contains information about whether expression
 										* includes both of aggregate and non-aggregate.
 										*/
+	bool		for_tlist;		/* whether evaluation for the expression of tlist */
+	bool		is_inner_func;  /* exist or not in inner exprs */
 } foreign_glob_cxt;
 
 /*
@@ -69,6 +72,7 @@ typedef struct foreign_loc_cxt
 {
 	Oid			collation;		/* OID of current collation, if any */
 	FDWCollateState state;		/* state of current collation choice */
+	bool        can_skip_cast;  /* outer function can skip float8/numeric cast */
 } foreign_loc_cxt;
 
 /*
@@ -84,6 +88,8 @@ typedef struct deparse_expr_cxt
 	StringInfo	buf;			/* output buffer to append to */
 	List	  **params_list;	/* exprs that will become remote Params */
 	bool		require_regex;	/* require regex for LIKE operator */
+	bool        is_tlist;       /* deparse during target list exprs */
+	bool        can_skip_cast;  /* outer function can skip float8/numeric cast */
 } deparse_expr_cxt;
 
 /*
@@ -203,7 +209,8 @@ influxdb_quote_identifier(const char *s, char q)
 bool
 influxdb_is_foreign_expr(PlannerInfo *root,
 						 RelOptInfo *baserel,
-						 Expr *expr)
+						 Expr *expr,
+						 bool for_tlist)
 {
 	foreign_glob_cxt glob_cxt;
 	foreign_loc_cxt loc_cxt;
@@ -217,6 +224,8 @@ influxdb_is_foreign_expr(PlannerInfo *root,
 	glob_cxt.foreignrel = baserel;
 	glob_cxt.relid = fpinfo->table->relid;
 	glob_cxt.mixing_aggref_status = INFLUXDB_TARGETS_MIXING_AGGREF_SAFE;
+	glob_cxt.for_tlist = for_tlist;
+	glob_cxt.is_inner_func = false;
 
 	/*
 	 * For an upper relation, use relids from its underneath scan relation,
@@ -229,6 +238,7 @@ influxdb_is_foreign_expr(PlannerInfo *root,
 		glob_cxt.relids = baserel->relids;
 	loc_cxt.collation = InvalidOid;
 	loc_cxt.state = FDW_COLLATE_NONE;
+	loc_cxt.can_skip_cast = false;
 	if (!foreign_expr_walker((Node *) expr, &glob_cxt, &loc_cxt))
 		return false;
 
@@ -300,6 +310,7 @@ foreign_expr_walker(Node *node,
 	/* Set up inner_cxt for possible recursion to child nodes */
 	inner_cxt.collation = InvalidOid;
 	inner_cxt.state = FDW_COLLATE_NONE;
+	inner_cxt.can_skip_cast = false;
 
 	switch (nodeTag(node))
 	{
@@ -419,8 +430,9 @@ foreign_expr_walker(Node *node,
 		case T_FuncExpr:
 			{
 
-				FuncExpr   *fe = (FuncExpr *) node;
-				char	   *opername = NULL;
+				FuncExpr	*fe = (FuncExpr *) node;
+				char		*opername = NULL;
+				bool		is_cast_func = false;
 
 				/* get function name and schema */
 				tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(fe->funcid));
@@ -431,11 +443,58 @@ foreign_expr_walker(Node *node,
 				opername = pstrdup(((Form_pg_proc) GETSTRUCT(tuple))->proname.data);
 				ReleaseSysCache(tuple);
 
+				if (strcmp(opername, "float8") == 0 || strcmp(opername, "numeric") == 0)
+				{
+					is_cast_func = true;
+				}
+
 				/* pushed down to InfluxDB */
 				if (strcmp(opername, "now") != 0 &&
-					strcmp(opername, "influx_time") != 0)
+					strcmp(opername, "sqrt") != 0 &&
+					strcmp(opername, "log") != 0 &&
+					strcmp(opername, "log2") != 0 &&
+					strcmp(opername, "abs") != 0 &&
+					strcmp(opername, "cumulative_sum") != 0 &&
+					strcmp(opername, "derivative") != 0 &&
+					strcmp(opername, "non_negative_derivative") != 0 &&
+					strcmp(opername, "difference") != 0 &&
+					strcmp(opername, "non_negative_difference") != 0 &&
+					strcmp(opername, "elapsed") != 0 &&
+					strcmp(opername, "moving_average") != 0 &&
+					strcmp(opername, "exponential_moving_average") != 0 &&
+					strcmp(opername, "influx_time") != 0 &&
+					is_cast_func != true)
 				{
 					return false;
+				}
+
+#if PG_VERSION_NUM < 100000
+				if (strcmp(opername, "influx_time") == 0)
+				{
+					return false;
+				}
+#endif
+
+				/* inner function can skip float/numeric cast if any */
+				if (strcmp(opername, "sqrt") == 0 || strcmp(opername, "log") == 0)
+					inner_cxt.can_skip_cast = true;
+
+				/* Accept type cast functions if outer is specific functions */
+				if (is_cast_func)
+				{
+					if (outer_cxt->can_skip_cast == false)
+						return false;
+				}
+
+				if (!is_cast_func)
+				{
+					/*
+					 * Nested function cannot be executed in non tlist
+					 */
+					if (!glob_cxt->for_tlist && glob_cxt->is_inner_func)
+						return false;
+
+					glob_cxt->is_inner_func = true;
 				}
 
 				/*
@@ -444,6 +503,9 @@ foreign_expr_walker(Node *node,
 				if (!foreign_expr_walker((Node *) fe->args,
 										 glob_cxt, &inner_cxt))
 					return false;
+
+				if (!is_cast_func)
+					glob_cxt->is_inner_func = false;
 
 				/*
 				 * If function's input collation is not derived from a foreign
@@ -708,6 +770,9 @@ foreign_expr_walker(Node *node,
 				List	   *l = (List *) node;
 				ListCell   *lc;
 
+				/* inherit can_skip_cast flag */
+				inner_cxt.can_skip_cast = outer_cxt->can_skip_cast;
+
 				/*
 				 * Recurse to component subexpressions.
 				 */
@@ -736,6 +801,8 @@ foreign_expr_walker(Node *node,
 				FuncExpr	*func = (FuncExpr *) node;
 				char		*opername = NULL;
 				bool		old_val;
+				int			index_const = -1;
+				int			index;
 
 				/* get function name and schema */
 				tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(agg->aggfnoid));
@@ -751,17 +818,25 @@ foreign_expr_walker(Node *node,
 					  || strcmp(opername, "max") == 0
 					  || strcmp(opername, "min") == 0
 					  || strcmp(opername, "count") == 0
+					  || strcmp(opername, "spread") == 0
+					  || strcmp(opername, "sample") == 0
+					  || strcmp(opername, "first") == 0
 					  || strcmp(opername, "last") == 0))
 				{
 					return false;
 				}
 
+				/* Some aggregate influxdb functions have a const argument. */
+				if (strcmp(opername, "sample") == 0)
+					index_const = 1;
+
 				/*
-				 * Only sum() and count() are aggregate functions,
+				 * Only sum(), count() and spread() are aggregate functions,
 				 * max(), min() and last() are selector functions
 				 */
 				if (strcmp(opername, "sum") == 0
-					  || strcmp(opername, "count") == 0)
+					|| strcmp(opername, "spread") == 0
+					|| strcmp(opername, "count") == 0)
 				{
 					/* Mark target as aggregate function */
 					glob_cxt->mixing_aggref_status |= INFLUXDB_TARGETS_MARK_AGGREF;
@@ -786,9 +861,11 @@ foreign_expr_walker(Node *node,
 				 * aggdistinct are all present in args, so no need to check
 				 * their shippability explicitly.
 				 */
+				index = -1;
 				foreach(lc, agg->args)
 				{
 					Node	   *n = (Node *) lfirst(lc);
+					index++;
 
 					/* If TargetEntry, extract the expression from it */
 					if (IsA(n, TargetEntry))
@@ -797,10 +874,11 @@ foreign_expr_walker(Node *node,
 
 						n = (Node *) tle->expr;
 
-						if (!IsA(n, Var))
-						{
+						if (IsA(n, Var) ||
+							((index == index_const) && IsA(n, Const)))
+							/* arguments checking is OK*/ ;
+						else
 							return false;
-						}
 					}
 
 					/* Check if arg is Var */
@@ -824,10 +902,10 @@ foreign_expr_walker(Node *node,
 
 					/*
 					 * Does not pushdown time column argument within aggregate function
-					 * except last() function, because this function is converted from
-					 * last(time, value) to last(value) when deparsing.
+					 * except time related functions, because these functions are converted from
+					 * func(time, value) to func(value) when deparsing.
 					 */
-					if (is_time_column && (strcmp(opername, "last") != 0))
+					if (is_time_column && !(strcmp(opername, "last") == 0 || strcmp(opername, "first") == 0))
 					{
 						is_time_column = false;
 						return false;
@@ -1034,6 +1112,8 @@ influxdbDeparseSelectStmtForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *r
 	context.scanrel = (rel->reloptkind == RELOPT_UPPER_REL) ? fpinfo->outerrel : rel;
 	context.params_list = params_list;
 	context.require_regex = false;
+	context.is_tlist = false;
+	context.can_skip_cast = false;
 	/* Construct SELECT clause */
 	influxdb_deparse_select(tlist, retrieved_attrs, &context);
 
@@ -1073,6 +1153,34 @@ influxdbDeparseSelectStmtForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *r
 		appendOrderByClause(pathkeys, &context);
 }
 
+/**
+ * get_proname
+ *
+ * Add a aggregate function name of 'oid' to 'proname'
+ * by fetching from pg_proc system catalog.
+ *
+ * @param[in] oid
+ * @param[out] procname
+ */
+static void
+get_proname(Oid oid, StringInfo proname)
+{
+	HeapTuple	proctup;
+	Form_pg_proc procform;
+	const char *name;
+
+	proctup = SearchSysCache1(PROCOID, ObjectIdGetDatum(oid));
+	if (!HeapTupleIsValid(proctup))
+		elog(ERROR, "cache lookup failed for function %u", oid);
+	procform = (Form_pg_proc) GETSTRUCT(proctup);
+
+	/* Always print the function name */
+	name = NameStr(procform->proname);
+	appendStringInfoString(proname, name);
+
+	ReleaseSysCache(proctup);
+}
+
 /*
  * Deparese SELECT statment
  */
@@ -1090,6 +1198,7 @@ influxdb_deparse_select(List *tlist, List **retrieved_attrs, deparse_expr_cxt *c
 	appendStringInfoString(buf, "SELECT ");
 
 	if (foreignrel->reloptkind == RELOPT_JOINREL ||
+		fpinfo->is_tlist_func_pushdown == true ||
 		foreignrel->reloptkind == RELOPT_UPPER_REL)
 	{
 		/*
@@ -1203,9 +1312,11 @@ deparseExplicitTargetList(List *tlist, List **retrieved_attrs,
 	ListCell   *lc;
 	StringInfo	buf = context->buf;
 	int			i = 0;
-	bool		first = true;
-	bool		is_col_grouping_target;
+	bool        first = true;
+	bool		is_col_grouping_target = false;
 	bool		need_field_key;
+	bool		is_need_comma = false;
+	InfluxDBFdwRelationInfo *fpinfo = (InfluxDBFdwRelationInfo *) context->foreignrel->fdw_private;
 
 	*retrieved_attrs = NIL;
 	/*
@@ -1217,26 +1328,45 @@ deparseExplicitTargetList(List *tlist, List **retrieved_attrs,
 	 */
 	need_field_key = true;
 
+	context->is_tlist = true;
+
 	/* Contruct targets for remote SELECT statement */
 	foreach(lc, tlist)
 	{
 		TargetEntry *tle = lfirst_node(TargetEntry, lc);
 
 		/* Check whether column is a grouping target or not */
-		if (IsA((Expr *) tle->expr, Var))
+		if (!fpinfo->is_tlist_func_pushdown && IsA((Expr *) tle->expr, Var))
 		{
 			is_col_grouping_target = is_grouping_target(tle, context);
 		}
 
 		if (IsA((Expr *) tle->expr, Aggref)
 			|| IsA((Expr *) tle->expr, OpExpr)
+			|| IsA((Expr *) tle->expr, FuncExpr)
 			|| (IsA((Expr *) tle->expr, Var) && !is_col_grouping_target))
 		{
-			if (!first)
+			bool is_skip_expr = false;
+
+			if (IsA((Expr *) tle->expr, FuncExpr))
+			{
+				FuncExpr *fe = (FuncExpr *) tle->expr;
+				StringInfo func_name = makeStringInfo();
+				get_proname(fe->funcid, func_name);
+				if (strcmp(func_name->data, "influx_time") == 0)
+					is_skip_expr = true;
+			}
+
+			if (is_need_comma && !is_skip_expr)
 				appendStringInfoString(buf, ", ");
-			first = false;
 			need_field_key = false;
-			deparseExpr((Expr *) tle->expr, context);
+
+			if (!is_skip_expr)
+			{
+				first = false;
+				deparseExpr((Expr *) tle->expr, context);
+				is_need_comma = true;
+			}
 		}
 
 		/*
@@ -1255,6 +1385,7 @@ deparseExplicitTargetList(List *tlist, List **retrieved_attrs,
 		*retrieved_attrs = lappend_int(*retrieved_attrs, i + 1);
 		i++;
 	}
+	context->is_tlist = false;
 
 	if (i == 0)
 	{
@@ -1430,6 +1561,8 @@ influxdb_append_where_clause(StringInfo buf,
 	context.foreignrel = baserel;
 	context.buf = buf;
 	context.params_list = params;
+	context.is_tlist = false;
+	context.can_skip_cast = false;
 
 	foreach(lc, exprs)
 	{
@@ -1661,8 +1794,12 @@ influxdb_deparse_string_literal(StringInfo buf, const char *val)
 static void
 deparseExpr(Expr *node, deparse_expr_cxt *context)
 {
+	bool outer_can_skip_cast = context->can_skip_cast;
+
 	if (node == NULL)
 		return;
+
+	context->can_skip_cast = false;
 
 	switch (nodeTag(node))
 	{
@@ -1676,6 +1813,7 @@ deparseExpr(Expr *node, deparse_expr_cxt *context)
 			influxdb_deparse_param((Param *) node, context);
 			break;
 		case T_FuncExpr:
+			context->can_skip_cast = outer_can_skip_cast;
 			influxdb_deparse_func_expr((FuncExpr *) node, context);
 			break;
 		case T_OpExpr:
@@ -1727,8 +1865,15 @@ influxdb_deparse_var(Var *node, deparse_expr_cxt *context)
 		/* if (node->varno == context->foreignrel->relid && */
 		/* node->varlevelsup == 0) */
 	{
+		InfluxDBFdwRelationInfo *fpinfo = (InfluxDBFdwRelationInfo *) context->foreignrel->fdw_private;
+		bool convert = true;
+
+		/* Var with BOOLOID type should be deparsed without conversion in target list. */
+		if (context->is_tlist && fpinfo->is_tlist_func_pushdown)
+			convert = false;
+
 		/* Var belongs to foreign table */
-		influxdb_deparse_column_ref(buf, node->varno, node->varattno, node->vartype, context->root, true);
+		influxdb_deparse_column_ref(buf, node->varno, node->varattno, node->vartype, context->root, convert);
 	}
 	else
 	{
@@ -1950,6 +2095,9 @@ influxdb_deparse_func_expr(FuncExpr *node, deparse_expr_cxt *context)
 	const char *proname;
 	bool		first;
 	ListCell   *arg;
+	bool        arg_swap = false;
+	bool        can_skip_cast = false;
+	List       *args;
 
 	/*
 	 * Normal function: display as proname(args).
@@ -1968,6 +2116,12 @@ influxdb_deparse_func_expr(FuncExpr *node, deparse_expr_cxt *context)
 		int			idx = 0;
 
 		Assert(list_length(node->args) == 2 || list_length(node->args) == 3);
+
+		if (context->is_tlist)
+		{
+			ReleaseSysCache(proctup);
+			return;
+		}
 
 		appendStringInfo(buf, "time(");
 		first = true;
@@ -1990,24 +2144,54 @@ influxdb_deparse_func_expr(FuncExpr *node, deparse_expr_cxt *context)
 		return;
 	}
 
+	/* remove cast function if parent function is can handle without cast */
+	if (context->can_skip_cast == true &&
+		(strcmp(NameStr(procform->proname), "float8") == 0 || strcmp(NameStr(procform->proname), "numeric") == 0))
+	{
+		ReleaseSysCache(proctup);
+		arg = list_head(node->args);
+		context->can_skip_cast = false;
+		deparseExpr((Expr *) lfirst(arg), context);
+		return;
+	}
+	
+	if (strcmp(NameStr(procform->proname), "log") == 0)
+	{
+		arg_swap = true;
+	}
+
+	/* inner function can skip cast if any */
+	if (strcmp(NameStr(procform->proname), "sqrt") == 0 || strcmp(NameStr(procform->proname), "log") == 0)
+		can_skip_cast = true;
+
 	/* Translate PostgreSQL function into influxdb function */
 	proname = influxdb_replace_function(NameStr(procform->proname));
 
 	/* Deparse the function name ... */
 	appendStringInfo(buf, "%s(", proname);
 
+	ReleaseSysCache(proctup);
+
+	/* swap arguments */
+	args = node->args;
+	if (arg_swap && list_length(args) == 2)
+	{
+		args = list_make2(lfirst(list_tail(args)), lfirst(list_head(args)));
+	}
+
 	/* ... and all the arguments */
 	first = true;
-	foreach(arg, node->args)
+	foreach(arg, args)
 	{
 		if (!first)
 			appendStringInfoString(buf, ", ");
 
+		if (can_skip_cast)
+			context->can_skip_cast = true;
 		deparseExpr((Expr *) lfirst(arg), context);
 		first = false;
 	}
 	appendStringInfoChar(buf, ')');
-	ReleaseSysCache(proctup);
 }
 
 /*
@@ -2432,11 +2616,11 @@ deparseAggref(Aggref *node, deparse_expr_cxt *context)
 	/* Find aggregate name from aggfnoid which is a pg_proc entry */
 	func_name = influxdb_get_function_name(node->aggfnoid);
 
-	if (strcmp(func_name, "last") == 0)
+	if (strcmp(func_name, "last") == 0 || strcmp(func_name, "first") == 0)
 	{
-		/* Convert last(time, value) to last(value) */
+		/* Convert func(time, value) to func(value) */
 		Assert(list_length(node->args) == 2);
-		appendStringInfo(buf, "last(");
+		appendStringInfo(buf, "%s(", func_name);
 		deparseExpr((Expr *) (((TargetEntry *) list_nth(node->args, 1))->expr), context);
 		appendStringInfoChar(buf, ')');
 		return;
@@ -2792,4 +2976,116 @@ bool influxdb_is_tag_key(const char *colname, Oid reloid)
 	}
 
 	return false;
+}
+
+/*****************************************************************************
+ *		Check clauses for immutable functions
+ *****************************************************************************/
+
+/*
+ * contain_immutable_functions
+ *	  Recursively search for immutable functions within a clause.
+ *
+ * Returns true if any immutable function (or operator implemented by a
+ * immutable function) is found.
+ *
+ * We will recursively look into TargetEntry exprs.
+ */
+static bool
+influxdb_contain_immutable_functions(Node *clause)
+{
+	return influxdb_contain_immutable_functions_walker(clause, NULL);
+}
+
+static bool
+influxdb_contain_immutable_functions_walker(Node *node, void *context)
+{
+	if (node == NULL)
+		return false;
+	/* Check for mutable functions in node itself */
+	if (nodeTag(node) == T_FuncExpr)
+	{
+		FuncExpr *expr = (FuncExpr *) node;
+		if (func_volatile(expr->funcid) == PROVOLATILE_IMMUTABLE)
+			return true;
+	}
+
+	/*
+	 * It should be safe to treat MinMaxExpr as immutable, because it will
+	 * depend on a non-cross-type btree comparison function, and those should
+	 * always be immutable.  Treating XmlExpr as immutable is more dubious,
+	 * and treating CoerceToDomain as immutable is outright dangerous.  But we
+	 * have done so historically, and changing this would probably cause more
+	 * problems than it would fix.  In practice, if you have a non-immutable
+	 * domain constraint you are in for pain anyhow.
+	 */
+
+	/* Recurse to check arguments */
+	if (IsA(node, Query))
+	{
+		/* Recurse into subselects */
+		return query_tree_walker((Query *) node,
+								 influxdb_contain_immutable_functions_walker,
+								 context, 0);
+	}
+	return expression_tree_walker(node, influxdb_contain_immutable_functions_walker,
+								  context);
+}
+
+/*
+ * Returns true if given tlist is safe to evaluate on the foreign server.
+ */
+bool influxdb_is_foreign_function_tlist(PlannerInfo *root,
+										RelOptInfo *baserel,
+										List *tlist)
+{
+	ListCell        *lc;
+	bool             is_contain_function;
+
+	if (!(baserel->reloptkind == RELOPT_BASEREL ||
+		  baserel->reloptkind == RELOPT_OTHER_MEMBER_REL))
+		return false;
+
+	/*
+	 * Check that the expression consists of any immutable function.
+	 */
+	is_contain_function = false;
+	foreach(lc, tlist)
+	{
+		TargetEntry *tle = lfirst_node(TargetEntry, lc);
+
+		if (influxdb_contain_immutable_functions((Node *) tle->expr))
+		{
+			is_contain_function = true;
+			break;
+		}
+	}
+
+	if (!is_contain_function)
+		return false;
+
+	/*
+	 * Check that the expression consists of nodes that are safe to execute
+	 * remotely.
+	 */
+	foreach(lc, tlist)
+	{
+		TargetEntry *tle = lfirst_node(TargetEntry, lc);
+
+		if (!influxdb_is_foreign_expr(root, baserel, tle->expr, true))
+			return false;
+
+		/*
+		 * An expression which includes any mutable functions can't be sent over
+		 * because its result is not stable.  For example, sending now() remote
+		 * side could cause confusion from clock offsets.  Future versions might
+		 * be able to make this choice with more granularity.  (We check this last
+		 * because it requires a lot of expensive catalog lookups.)
+		 */
+		if (contain_mutable_functions((Node *) tle->expr))
+			return false;
+	}
+
+	/* OK for the target list with functions to evaluate on the remote server */
+	return true;
 }

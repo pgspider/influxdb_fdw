@@ -117,6 +117,9 @@ typedef struct InfluxDBFdwExecState
 	/* working memory context */
 	MemoryContext temp_cxt;		/* context for per-tuple temporary data */
 	AttrNumber *junk_idx;
+
+	/* Function pushdown surppot in target list */
+	bool		is_tlist_func_pushdown;
 }			InfluxDBFdwExecState;
 
 
@@ -171,12 +174,19 @@ typedef struct InfluxDBFdwRelationInfo
 
 	/* Grouping information */
 	List	   *grouped_tlist;
+
+	/* Function pushdown surppot in target list */
+	bool		is_tlist_func_pushdown;
 }			InfluxDBFdwRelationInfo;
 
 
 extern bool influxdb_is_foreign_expr(PlannerInfo *root,
 									 RelOptInfo *baserel,
-									 Expr *expr);
+									 Expr *expr,
+									 bool for_tlist);
+extern bool influxdb_is_foreign_function_tlist(PlannerInfo *root,
+											   RelOptInfo *baserel,
+											   List *tlist);
 
 
 /* option.c headers */

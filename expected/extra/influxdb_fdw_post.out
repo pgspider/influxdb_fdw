@@ -979,15 +979,12 @@ CREATE OPERATOR === (
 --Testcase 61:
 EXPLAIN (VERBOSE, COSTS OFF)
   SELECT count(c3) FROM ft1 t1 WHERE t1.c1 = abs(t1.c2);
-                        QUERY PLAN                         
------------------------------------------------------------
- Aggregate
-   Output: count(c3)
-   ->  Foreign Scan on public.ft1 t1
-         Output: c3
-         Filter: (t1.c1 = abs(t1.c2))
-         InfluxDB query: SELECT "C1", "c2", "c3" FROM "T1"
-(6 rows)
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ Foreign Scan
+   Output: (count(c3))
+   InfluxDB query: SELECT count("c3") FROM "T1" WHERE (("C1" = abs("c2")))
+(3 rows)
 
 --Testcase 62:
 SELECT count(c3) FROM ft1 t1 WHERE t1.c1 = abs(t1.c2);
