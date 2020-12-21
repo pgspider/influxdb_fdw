@@ -1,14 +1,18 @@
 --
 -- SELECT
 --
+\set ECHO none
+\ir sql/parameters.conf
+\set ECHO all
+
 --Testcase 52:
 CREATE EXTENSION influxdb_fdw;
 
 --Testcase 53:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw
-  OPTIONS (dbname 'coredb', host 'http://localhost', port '8086');
+  OPTIONS (dbname 'coredb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
 --Testcase 54:
-CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user 'user', password 'pass');
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
 
 --Testcase 55:
 CREATE FOREIGN TABLE onek (

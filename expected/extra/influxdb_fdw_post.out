@@ -1,24 +1,21 @@
 -- ===================================================================
 -- create FDW objects
 -- ===================================================================
+\set ECHO none
 --Testcase 589:
 CREATE EXTENSION influxdb_fdw;
 --Testcase 590:
 CREATE SERVER testserver1 FOREIGN DATA WRAPPER influxdb_fdw;
-DO $d$
-    BEGIN
-        EXECUTE $$CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw
-            OPTIONS (dbname 'postdb', host 'http://localhost', port '8086')$$;
-        EXECUTE $$CREATE SERVER influxdb_svr2 FOREIGN DATA WRAPPER influxdb_fdw
-            OPTIONS (dbname 'postdb', host 'http://localhost', port '8086')$$;
-    END;
-$d$;
+CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw
+    OPTIONS (dbname 'postdb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
+CREATE SERVER influxdb_svr2 FOREIGN DATA WRAPPER influxdb_fdw
+    OPTIONS (dbname 'postdb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
 --Testcase 591:
 CREATE USER MAPPING FOR public SERVER testserver1 OPTIONS (user 'value', password 'value');
 --Testcase 592:
-CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user 'user', password 'pass');
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
 --Testcase 593:
-CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr2 OPTIONS (user 'user', password 'pass');
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr2 OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
 -- import time column as timestamp and text type
 --Testcase 594:
 CREATE TYPE user_enum AS ENUM ('foo', 'bar', 'buz');
@@ -3018,7 +3015,7 @@ DROP FOREIGN TABLE local_tbl;
 --Testcase 605:
 CREATE ROLE regress_view_owner SUPERUSER;
 --Testcase 606:
-CREATE USER MAPPING FOR regress_view_owner SERVER influxdb_svr OPTIONS (user 'user', password 'pass');
+CREATE USER MAPPING FOR regress_view_owner SERVER influxdb_svr OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
 GRANT SELECT ON ft4 TO regress_view_owner;
 GRANT SELECT ON ft5 TO regress_view_owner;
 --Testcase 607:
@@ -3228,7 +3225,7 @@ select count(c6), sum(c1), avg(c1), min(c2), max(c1), stddev(c2), sum(c1) * (ran
                Output: count(c6), sum(c1), avg(c1), min(c2), max(c1), stddev(c2), c2
                Group Key: ft1.c2
                ->  Foreign Scan on public.ft1
-                     Output: c2, c6, c1
+                     Output: c6, c1, c2
                      InfluxDB query: SELECT "C1", "c2", "c6" FROM "T1" WHERE (("c2" < 5))
 (11 rows)
 
@@ -3259,7 +3256,7 @@ select count(c6), sum(c1), avg(c1), min(c2), max(c1), stddev(c2), sum(c1) * (ran
                      Output: count(c6), sum(c1), avg(c1), min(c2), max(c1), stddev(c2), c2
                      Group Key: ft1.c2
                      ->  Foreign Scan on public.ft1
-                           Output: c2, c6, c1
+                           Output: c6, c1, c2
                            InfluxDB query: SELECT "C1", "c2", "c6" FROM "T1" WHERE (("c2" < 5))
 (13 rows)
 
@@ -3564,7 +3561,7 @@ select sum(c1) from ft1 group by c2 having avg(c1 * (random() <= 1)::int) > 100 
          Group Key: ft1.c2
          Filter: (avg((ft1.c1 * ((random() <= '1'::double precision))::integer)) > '100'::numeric)
          ->  Foreign Scan on public.ft1
-               Output: c2, c1
+               Output: c1, c2
                InfluxDB query: SELECT "C1", "c2" FROM "T1"
 (10 rows)
 
@@ -3803,7 +3800,7 @@ select sum(c1) filter (where c1 < 100 and c2 > 5) from ft1 group by c2 order by 
          Output: sum(c1) FILTER (WHERE ((c1 < 100) AND (c2 > 5))), c2
          Group Key: ft1.c2
          ->  Foreign Scan on public.ft1
-               Output: c2, c1
+               Output: c1, c2
                InfluxDB query: SELECT "C1", "c2" FROM "T1"
 (9 rows)
 
@@ -3916,7 +3913,7 @@ select sum(c1) filter (where (c1 / c1) * random() <= 1) from ft1 group by c2 ord
          Output: sum(c1) FILTER (WHERE ((((c1 / c1))::double precision * random()) <= '1'::double precision)), c2
          Group Key: ft1.c2
          ->  Foreign Scan on public.ft1
-               Output: c2, c1
+               Output: c1, c2
                InfluxDB query: SELECT "C1", "c2" FROM "T1"
 (9 rows)
 
@@ -4621,7 +4618,7 @@ select distinct sum(c1)/1000 s from ft2 where c2 < 6 group by c2 order by 1;
                Output: (sum(c1) / 1000), c2
                Group Key: ft2.c2
                ->  Foreign Scan on public.ft2
-                     Output: c2, c1
+                     Output: c1, c2
                      InfluxDB query: SELECT "C1", "c2" FROM "T1" WHERE (("c2" < 6))
 (11 rows)
 
