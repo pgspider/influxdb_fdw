@@ -4,14 +4,17 @@ SET datestyle=ISO;
 -- timestamp with time zone differs based on this
 SET timezone='Japan';
 
+\set ECHO none
+\ir sql/parameters.conf
+\set ECHO all
+
 --Testcase 57:
 CREATE EXTENSION influxdb_fdw;
 --Testcase 58:
 CREATE SERVER server1 FOREIGN DATA WRAPPER influxdb_fdw OPTIONS
-(dbname 'mydb', host 'http://localhost', port '8086') ;
+(dbname 'mydb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
 --Testcase 59:
-CREATE USER MAPPING FOR CURRENT_USER SERVER server1 OPTIONS(user 'user', password 'pass');
-
+CREATE USER MAPPING FOR CURRENT_USER SERVER server1 OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
 -- import time column as timestamp and text type
 IMPORT FOREIGN SCHEMA public FROM SERVER server1 INTO public OPTIONS(import_time_text 'true');
 --Testcase 1:

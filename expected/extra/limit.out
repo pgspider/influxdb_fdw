@@ -1,10 +1,11 @@
+\set ECHO none
 --Testcase 51:
 CREATE EXTENSION influxdb_fdw;
 --Testcase 52:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw
-  OPTIONS (dbname 'coredb', host 'http://localhost', port '8086');
+  OPTIONS (dbname 'coredb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
 --Testcase 53:
-CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user 'user', password 'pass');
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
 -- import time column as timestamp and text type
 -- IMPORT FOREIGN SCHEMA influxdb_schema FROM SERVER influxdb_svr INTO public;
 --
@@ -658,8 +659,8 @@ order by s2 desc;
 explain (verbose, costs off)
 select sum(tenthous) as s1, sum(tenthous) + random()*0 as s2
   from tenk1 group by thousand order by thousand limit 3;
-                                                      QUERY PLAN                                                       
------------------------------------------------------------------------------------------------------------------------
+                                                                               QUERY PLAN                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: (sum(tenthous)), ((((sum(tenthous)))::double precision + (random() * '0'::double precision))), thousand
    ->  Result
@@ -671,7 +672,7 @@ select sum(tenthous) as s1, sum(tenthous) + random()*0 as s2
                      Output: sum(tenthous), thousand
                      Group Key: tenk1.thousand
                      ->  Foreign Scan on public.tenk1
-                           Output: thousand, tenthous
+                           Output: unique1, unique2, two, four, ten, twenty, hundred, thousand, twothousand, fivethous, tenthous, odd, even, stringu1, stringu2, string4
                            InfluxDB query: SELECT "thousand", "tenthous" FROM "tenk"
 (13 rows)
 
@@ -758,7 +759,7 @@ SELECT  thousand
 SELECT ''::text AS two, unique1, unique2, stringu1
 		FROM onek WHERE unique1 > 50
 		FETCH FIRST 2 ROW WITH TIES;
-ERROR:  WITH TIES options can not be specified without ORDER BY clause
+ERROR:  WITH TIES cannot be specified without ORDER BY clause
 -- test ruleutils
 --Testcase 74:
 CREATE VIEW limit_thousand_v_1 AS SELECT thousand FROM onek WHERE thousand < 995
@@ -797,7 +798,7 @@ View definition:
 --Testcase 78:
 CREATE VIEW limit_thousand_v_3 AS SELECT thousand FROM onek WHERE thousand < 995
 		ORDER BY thousand FETCH FIRST NULL ROWS WITH TIES;		-- fails
-ERROR:  row count cannot be NULL in FETCH FIRST ... WITH TIES clause
+ERROR:  row count cannot be null in FETCH FIRST ... WITH TIES clause
 --Testcase 79:
 CREATE VIEW limit_thousand_v_3 AS SELECT thousand FROM onek WHERE thousand < 995
 		ORDER BY thousand FETCH FIRST (NULL+1) ROWS WITH TIES;

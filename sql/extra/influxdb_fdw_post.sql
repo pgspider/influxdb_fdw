@@ -1,27 +1,27 @@
 -- ===================================================================
 -- create FDW objects
 -- ===================================================================
+\set ECHO none
+\ir sql/parameters.conf
+\set ECHO all
 
 --Testcase 589:
 CREATE EXTENSION influxdb_fdw;
 
 --Testcase 590:
 CREATE SERVER testserver1 FOREIGN DATA WRAPPER influxdb_fdw;
-DO $d$
-    BEGIN
-        EXECUTE $$CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw
-            OPTIONS (dbname 'postdb', host 'http://localhost', port '8086')$$;
-        EXECUTE $$CREATE SERVER influxdb_svr2 FOREIGN DATA WRAPPER influxdb_fdw
-            OPTIONS (dbname 'postdb', host 'http://localhost', port '8086')$$;
-    END;
-$d$;
+
+CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw
+    OPTIONS (dbname 'postdb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
+CREATE SERVER influxdb_svr2 FOREIGN DATA WRAPPER influxdb_fdw
+    OPTIONS (dbname 'postdb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
 
 --Testcase 591:
 CREATE USER MAPPING FOR public SERVER testserver1 OPTIONS (user 'value', password 'value');
 --Testcase 592:
-CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user 'user', password 'pass');
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
 --Testcase 593:
-CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr2 OPTIONS (user 'user', password 'pass');
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr2 OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
 
 -- import time column as timestamp and text type
 --Testcase 594:
@@ -693,7 +693,7 @@ DROP FOREIGN TABLE local_tbl;
 --Testcase 605:
 CREATE ROLE regress_view_owner SUPERUSER;
 --Testcase 606:
-CREATE USER MAPPING FOR regress_view_owner SERVER influxdb_svr OPTIONS (user 'user', password 'pass');
+CREATE USER MAPPING FOR regress_view_owner SERVER influxdb_svr OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
 GRANT SELECT ON ft4 TO regress_view_owner;
 GRANT SELECT ON ft5 TO regress_view_owner;
 

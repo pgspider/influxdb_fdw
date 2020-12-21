@@ -1,13 +1,17 @@
 SET datestyle=ISO;
 SET timezone='Japan';
 
+\set ECHO none
+\ir sql/parameters.conf
+\set ECHO all
+
 --Testcase 1:
 CREATE EXTENSION influxdb_fdw;
 --Testcase 2:
 CREATE SERVER server1 FOREIGN DATA WRAPPER influxdb_fdw OPTIONS
-(dbname 'mydb2', host 'http://localhost', port '8086') ;
+(dbname 'mydb2', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
 --Testcase 3:
-CREATE USER MAPPING FOR CURRENT_USER SERVER server1 OPTIONS(user 'user', password 'pass');
+CREATE USER MAPPING FOR CURRENT_USER SERVER server1 OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
 
 --IMPORT FOREIGN SCHEMA public FROM SERVER server1 INTO public OPTIONS(import_time_text 'false');
 --Testcase 4:

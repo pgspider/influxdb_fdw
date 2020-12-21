@@ -1,12 +1,13 @@
 SET datestyle=ISO;
 SET timezone='Japan';
+\set ECHO none
 --Testcase 1:
 CREATE EXTENSION influxdb_fdw;
 --Testcase 2:
 CREATE SERVER server1 FOREIGN DATA WRAPPER influxdb_fdw OPTIONS
-(dbname 'mydb2', host 'http://localhost', port '8086') ;
+(dbname 'mydb2', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
 --Testcase 3:
-CREATE USER MAPPING FOR CURRENT_USER SERVER server1 OPTIONS(user 'user', password 'pass');
+CREATE USER MAPPING FOR CURRENT_USER SERVER server1 OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
 --IMPORT FOREIGN SCHEMA public FROM SERVER server1 INTO public OPTIONS(import_time_text 'false');
 --Testcase 4:
 CREATE FOREIGN TABLE s3(time timestamp with time zone, tag1 text, value1 float8, value2 bigint, value3 float8, value4 bigint) SERVER server1 OPTIONS(table 's3', tags 'tag1');
@@ -634,7 +635,7 @@ SELECT sqrt(abs(value3)),min(value1) FROM s3 GROUP BY value3 HAVING sqrt(abs(val
          Output: sqrt(abs(value3)), min(value1), value3
          Group Key: s3.value3
          ->  Foreign Scan on public.s3  (cost=10.00..683.00 rows=683 width=16)
-               Output: value3, value1
+               Output: "time", tag1, value1, value2, value3, value4
                Filter: (sqrt(abs(s3.value3)) > '0'::double precision)
                InfluxDB query: SELECT "value1", "value3" FROM "s3"
 (10 rows)

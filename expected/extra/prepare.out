@@ -1,13 +1,14 @@
 -- Regression tests for prepareable statements. We query the content
 -- of the pg_prepared_statements view as prepared statements are
 -- created and removed.
+\set ECHO none
 --Testcase 27:
 CREATE EXTENSION influxdb_fdw;
 --Testcase 28:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw
-  OPTIONS (dbname 'coredb', host 'http://localhost', port '8086');
+  OPTIONS (dbname 'coredb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
 --Testcase 29:
-CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user 'user', password 'pass');
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
 --Testcase 30:
 CREATE FOREIGN TABLE tenk1 (
 	unique1		int4,
