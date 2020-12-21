@@ -1,14 +1,18 @@
 --
 -- SELECT_HAVING
 --
+\set ECHO none
+\ir sql/parameters.conf
+\set ECHO all
+
 --Testcase 12:
 CREATE EXTENSION influxdb_fdw;
 
 --Testcase 13:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw
-  OPTIONS (dbname 'coredb', host 'http://localhost', port '8086');
+  OPTIONS (dbname 'coredb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
 --Testcase 14:
-CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user 'user', password 'pass');
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
 
 --Testcase 15:
 CREATE FOREIGN TABLE test_having(a int, b int, c char(8), d char) SERVER influxdb_svr;

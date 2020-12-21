@@ -1,11 +1,15 @@
+\set ECHO none
+\ir sql/parameters.conf
+\set ECHO all
+
 --Testcase 281:
 CREATE EXTENSION influxdb_fdw;
 
 --Testcase 282:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw
-  OPTIONS (dbname 'coredb', host 'http://localhost', port '8086');
+  OPTIONS (dbname 'coredb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
 --Testcase 283:
-CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user 'user', password 'pass');
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
 
 -- import time column as timestamp and text type
 -- IMPORT FOREIGN SCHEMA influxdb_schema FROM SERVER influxdb_svr INTO public;
