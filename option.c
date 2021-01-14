@@ -2,7 +2,7 @@
  *
  * InfluxDB Foreign Data Wrapper for PostgreSQL
  *
- * Portions Copyright (c) 2018, TOSHIBA CORPORATION
+ * Portions Copyright (c) 2020, TOSHIBA CORPORATION
  *
  * IDENTIFICATION
  *        option.c
@@ -39,6 +39,10 @@
 #include "optimizer/pathnode.h"
 #include "optimizer/restrictinfo.h"
 #include "optimizer/planmain.h"
+#if (PG_VERSION_NUM >= 100000)
+#include "utils/varlena.h"
+#endif
+
 /*
  * Describes the valid options for objects that use this wrapper.
  */
@@ -64,9 +68,12 @@ static struct InfluxDBFdwOption valid_options[] =
 
 	{"table", ForeignTableRelationId},
 	{"column_name", AttributeRelationId},
+	{"tags", ForeignTableRelationId},
 	/* Sentinel */
 	{NULL, InvalidOid}
 };
+
+static List *influxdbExtractTagsList(char *in_string);
 
 extern Datum influxdb_fdw_validator(PG_FUNCTION_ARGS);
 
@@ -204,11 +211,34 @@ influxdb_get_options(Oid foreignoid)
 		if (strcmp(def->defname, "table_name") == 0)
 			opt->svr_table = defGetString(def);
 
-
+		if (strcmp(def->defname, "tags") == 0)
+		{
+			opt->tags_list = influxdbExtractTagsList(defGetString(def));
+		}
 	}
 
 	if (!opt->svr_table && f_table)
 		opt->svr_table = get_rel_name(foreignoid);
 
 	return opt;
+}
+
+/*
+ * Parse a comma-separated string and return a list of tag keys of a foreign table.
+ */
+static List *influxdbExtractTagsList(char *in_string)
+{
+	List *tags_list = NIL;
+
+	/* SplitIdentifierString scribbles on its input, so pstrdup first */
+	if (!SplitIdentifierString(pstrdup(in_string), ',', &tags_list))
+	{
+		/* Syntax error in tags list */
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("parameter \"%s\" must be a list of tag keys",
+						"tags")));
+	}
+
+	return tags_list;
 }

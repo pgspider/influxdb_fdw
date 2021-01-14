@@ -1,4 +1,6 @@
-#export USE_PGXS=1
-sed -i 's/REGRESS =.*/REGRESS = aggregate influxdb_fdw/' Makefile
-
-./init.sh && make clean && make && make install && make check
+./init.sh
+sed -i 's/REGRESS =.*/REGRESS = aggregate influxdb_fdw selectfunc extra\/join extra\/limit extra\/aggregates extra\/prepare extra\/select_having extra\/select extra\/influxdb_fdw_post/' Makefile
+make clean
+make
+mkdir -p results/extra || true
+make check | tee make_check.out

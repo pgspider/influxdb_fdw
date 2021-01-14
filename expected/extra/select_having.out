@@ -1,18 +1,36 @@
 --
 -- SELECT_HAVING
 --
+\set ECHO none
+--Testcase 12:
 CREATE EXTENSION influxdb_fdw;
+--Testcase 13:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw
-  OPTIONS (dbname 'coredb', host 'http://localhost', port '8086');
-CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user 'user', password 'pass');
+  OPTIONS (dbname 'coredb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
+--Testcase 14:
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
+--Testcase 15:
 CREATE FOREIGN TABLE test_having(a int, b int, c char(8), d char) SERVER influxdb_svr;
+--Testcase 1:
 SELECT b, c FROM test_having
 	GROUP BY b, c HAVING count(*) = 1 ORDER BY b, c;
-ERROR:  influxdb_fdw : error parsing query: found FROM, expected identifier, string, number, bool at line 1, char 9
+ b |  c   
+---+------
+ 1 | XXXX
+ 3 | bbbb
+(2 rows)
+
 -- HAVING is effectively equivalent to WHERE in this case
+--Testcase 2:
 SELECT b, c FROM test_having
 	GROUP BY b, c HAVING b = 3 ORDER BY b, c;
-ERROR:  influxdb_fdw : error parsing query: found FROM, expected identifier, string, number, bool at line 1, char 9
+ b |  c   
+---+------
+ 3 | bbbb
+ 3 | BBBB
+(2 rows)
+
+--Testcase 3:
 SELECT lower(c), count(c) FROM test_having
 	GROUP BY lower(c) HAVING count(*) > 2 OR min(a) = max(a)
 	ORDER BY lower(c);
@@ -23,31 +41,50 @@ SELECT lower(c), count(c) FROM test_having
  xxxx  |     1
 (3 rows)
 
+--Testcase 4:
 SELECT c, max(a) FROM test_having
 	GROUP BY c HAVING count(*) > 2 OR min(a) = max(a)
 	ORDER BY c;
-ERROR:  influxdb_fdw : error parsing query: found HAVING, expected ; at line 1, char 49
+  c   | max 
+------+-----
+ bbbb |   5
+ XXXX |   0
+(2 rows)
+
 -- test degenerate cases involving HAVING without GROUP BY
 -- Per SQL spec, these should generate 0 or 1 row, even without aggregates
+--Testcase 5:
 SELECT min(a), max(a) FROM test_having HAVING min(a) = max(a);
-ERROR:  influxdb_fdw : error parsing query: found HAVING, expected ; at line 1, char 46
+ min | max 
+-----+-----
+(0 rows)
+
+--Testcase 6:
 SELECT min(a), max(a) FROM test_having HAVING min(a) < max(a);
-ERROR:  influxdb_fdw : error parsing query: found HAVING, expected ; at line 1, char 46
+ min | max 
+-----+-----
+   0 |   9
+(1 row)
+
 -- errors: ungrouped column references
+--Testcase 7:
 SELECT a FROM test_having HAVING min(a) < max(a);
 ERROR:  column "test_having.a" must appear in the GROUP BY clause or be used in an aggregate function
 LINE 1: SELECT a FROM test_having HAVING min(a) < max(a);
                ^
+--Testcase 8:
 SELECT 1 AS one FROM test_having HAVING a > 1;
 ERROR:  column "test_having.a" must appear in the GROUP BY clause or be used in an aggregate function
 LINE 1: SELECT 1 AS one FROM test_having HAVING a > 1;
                                                 ^
 -- the really degenerate case: need not scan table at all
+--Testcase 9:
 SELECT 1 AS one FROM test_having HAVING 1 > 2;
  one 
 -----
 (0 rows)
 
+--Testcase 10:
 SELECT 1 AS one FROM test_having HAVING 1 < 2;
  one 
 -----
@@ -55,18 +92,18 @@ SELECT 1 AS one FROM test_having HAVING 1 < 2;
 (1 row)
 
 -- and just to prove that we aren't scanning the table:
+--Testcase 11:
 SELECT 1 AS one FROM test_having WHERE 1/a = 1 HAVING 1 < 2;
  one 
 -----
    1
 (1 row)
 
+--Testcase 16:
+DROP FOREIGN TABLE test_having;
+--Testcase 17:
 DROP USER MAPPING FOR CURRENT_USER SERVER influxdb_svr;
-DROP SERVER influxdb_svr;
-ERROR:  cannot drop server influxdb_svr because other objects depend on it
-DETAIL:  foreign table test_having depends on server influxdb_svr
-HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+--Testcase 18:
+DROP SERVER influxdb_svr CASCADE;
+--Testcase 19:
 DROP EXTENSION influxdb_fdw CASCADE;
-NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to server influxdb_svr
-drop cascades to foreign table test_having

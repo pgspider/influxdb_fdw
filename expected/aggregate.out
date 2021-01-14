@@ -3,14 +3,19 @@
 SET datestyle=ISO;
 -- timestamp with time zone differs based on this
 SET timezone='UTC';
+\set ECHO none
+--Testcase 14:
 CREATE EXTENSION influxdb_fdw;
+--Testcase 15:
 CREATE SERVER server1 FOREIGN DATA WRAPPER influxdb_fdw OPTIONS
-(dbname 'mydb', host 'http://localhost', port '8086') ;
-CREATE USER MAPPING FOR CURRENT_USER SERVER server1 OPTIONS(user 'user', password 'pass');
+(dbname 'mydb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
+--Testcase 16:
+CREATE USER MAPPING FOR CURRENT_USER SERVER server1 OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
 -- import time column as timestamp and text type
 IMPORT FOREIGN SCHEMA public FROM SERVER server1 INTO public OPTIONS(import_time_text 'true');
 --ALTER EXTENSION influxdb_fdw ADD FUNCTION postgres_fdw_abs(int);
 --ALTER SERVER server1 OPTIONS (ADD extensions 'influxdb_fdw');
+--Testcase 1:
 SELECT * FROM t4;
           time          |      time_text       | tag1 | tag2 | value1 | value2 
 ------------------------+----------------------+------+------+--------+--------
@@ -22,6 +27,7 @@ SELECT * FROM t4;
  1970-01-01 00:00:05+00 | 1970-01-01T00:00:05Z | b    | z    |     30 |    200
 (6 rows)
 
+--Testcase 2:
 EXPLAIN (verbose)  
 SELECT sum("value1"),influx_time(time,interval '1s', interval '0.00001s'),tag1 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00' 
 GROUP BY influx_time(time,interval '1s', interval '0.00001s'), tag1;
@@ -32,6 +38,7 @@ GROUP BY influx_time(time,interval '1s', interval '0.00001s'), tag1;
    InfluxDB query: SELECT sum("value1") FROM "t4" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:05')) GROUP BY (time(0d0h0m1s0u, 0d0h0m0s10u)), "tag1"
 (3 rows)
 
+--Testcase 3:
 SELECT sum("value1"),influx_time(time,interval '1s', interval '0.00001s'),tag1 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00' 
 GROUP BY influx_time(time,interval '1s', interval '0.00001s'), tag1;
  sum |         influx_time          | tag1 
@@ -50,6 +57,7 @@ GROUP BY influx_time(time,interval '1s', interval '0.00001s'), tag1;
   30 | 1970-01-01 00:00:04.00001+00 | b
 (12 rows)
 
+--Testcase 4:
 EXPLAIN (verbose) 
 SELECT tag1,sum("value1"),tag2 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00' 
  GROUP BY tag2, tag1;
@@ -60,6 +68,7 @@ SELECT tag1,sum("value1"),tag2 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' 
    InfluxDB query: SELECT sum("value1") FROM "t4" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:05')) GROUP BY "tag2", "tag1"
 (3 rows)
 
+--Testcase 5:
 SELECT tag1,sum("value1"),tag2 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00' 
  GROUP BY tag2, tag1;
  tag1 | sum | tag2 
@@ -70,6 +79,7 @@ SELECT tag1,sum("value1"),tag2 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' 
  b    |  50 | z
 (4 rows)
 
+--Testcase 6:
 SELECT tag1,sum("value1"), count(value1), tag2 FROM "t4" group by tag1, tag2;
  tag1 | sum | count | tag2 
 ------+-----+-------+------
@@ -79,6 +89,7 @@ SELECT tag1,sum("value1"), count(value1), tag2 FROM "t4" group by tag1, tag2;
  b    |  50 |     2 | z
 (4 rows)
 
+--Testcase 7:
 EXPLAIN (verbose)  SELECT tag1,sum("value1"), count(value1), tag2 FROM "t4" group by tag1, tag2;
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
@@ -87,6 +98,7 @@ EXPLAIN (verbose)  SELECT tag1,sum("value1"), count(value1), tag2 FROM "t4" grou
    InfluxDB query: SELECT sum("value1"), count("value1") FROM "t4" GROUP BY "tag1", "tag2"
 (3 rows)
 
+--Testcase 8:
 SELECT influx_time(time,interval '5s',interval '0s'),tag1,last(time, value1) FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00' 
  GROUP BY influx_time(time,interval '5s', interval '0s'), tag1;
       influx_time       | tag1 | last 
@@ -97,6 +109,7 @@ SELECT influx_time(time,interval '5s',interval '0s'),tag1,last(time, value1) FRO
  1970-01-01 00:00:05+00 | b    |   30
 (4 rows)
 
+--Testcase 9:
 EXPLAIN (VERBOSE)
 SELECT influx_time(time,interval '5s',interval '0s'),tag1,last(time, value1) FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00' 
 GROUP BY influx_time(time,interval '5s', interval '0s'), tag1;
@@ -108,6 +121,7 @@ GROUP BY influx_time(time,interval '5s', interval '0s'), tag1;
 (3 rows)
 
 -- no offset 
+--Testcase 10:
 SELECT influx_time(time,interval '5s'),tag1,last(time, value1) FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00' 
 GROUP BY influx_time(time,interval '5s'), tag1;
       influx_time       | tag1 | last 
@@ -118,6 +132,7 @@ GROUP BY influx_time(time,interval '5s'), tag1;
  1970-01-01 00:00:05+00 | b    |   30
 (4 rows)
 
+--Testcase 11:
 EXPLAIN (verbose) 
 SELECT last(time, value1),last(time, value2) FROM t4 GROUP BY tag1;
                                     QUERY PLAN                                     
@@ -127,6 +142,7 @@ SELECT last(time, value1),last(time, value2) FROM t4 GROUP BY tag1;
    InfluxDB query: SELECT last("value1"), last("value2") FROM "t4" GROUP BY "tag1"
 (3 rows)
 
+--Testcase 12:
 SELECT last(time, value1),last(time, value2) FROM t4 GROUP BY tag1;
  last | last 
 ------+------
@@ -137,13 +153,29 @@ SELECT last(time, value1),last(time, value2) FROM t4 GROUP BY tag1;
 -- InfluxDB does not return error for the following query
 --SELECT sum(value1) FROM t4 GROUP BY value1;
 -- not allowed
+--Testcase 13:
 SELECT sum(value1) FROM t4 GROUP BY time;
-ERROR:  influxdb_fdw : time() is a function and expects at least one argument
+ sum 
+-----
+  30
+  20
+  10
+   1
+   2
+   3
+(6 rows)
+
 --last returns NULL for tag
 --SELECT last(time, value1),last(time, value2),last(time, tag1) FROM t4 GROUP BY tag1;
+--Testcase 17:
 DROP FOREIGN TABLE t3;
+--Testcase 18:
 DROP FOREIGN TABLE t4;
+--Testcase 19:
 DROP FOREIGN TABLE cpu;
+--Testcase 20:
 DROP USER MAPPING FOR CURRENT_USER SERVER server1;
+--Testcase 21:
 DROP SERVER server1;
-DROP EXTENSION influxdb_fdw ;
+--Testcase 22:
+DROP EXTENSION influxdb_fdw;

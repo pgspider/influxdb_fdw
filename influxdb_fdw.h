@@ -2,7 +2,7 @@
  *
  * InfluxDB Foreign Data Wrapper for PostgreSQL
  *
- * Portions Copyright (c) 2018, TOSHIBA CORPORATION
+ * Portions Copyright (c) 2020, TOSHIBA CORPORATION
  *
  * IDENTIFICATION
  *        influxdb_fdw.h
@@ -22,6 +22,7 @@
 #include "nodes/pathnodes.h"
 #include "utils/float.h"
 #include "optimizer/optimizer.h"
+#include "fmgr.h"
 #else
 #include "nodes/relation.h"
 #include "optimizer/var.h"
@@ -37,6 +38,31 @@
 						  strcmp(X,INFLUXDB_TIME_TEXT_COLUMN) == 0)
 #define CR_NO_ERROR 0
 
+/* Define some typeArray for low version */
+#ifndef BOOLARRAYOID
+	#define BOOLARRAYOID 1000
+#endif
+#ifndef INT8ARRAYOID
+	#define INT8ARRAYOID 1016
+#endif
+#ifndef FLOAT8ARRAYOID
+	#define FLOAT8ARRAYOID 1022
+#endif
+
+#if (PG_VERSION_NUM < 120000)
+#define table_close(rel, lock)	heap_close(rel, lock)
+#define table_open(rel, lock)	heap_open(rel, lock)
+#endif
+
+/*
+ * Definitions to check mixing aggregate function
+ * and non-aggregate function in target list
+ */
+#define INFLUXDB_TARGETS_MARK_COLUMN			(1u << 0)
+#define INFLUXDB_TARGETS_MARK_AGGREF			(1u << 1)
+#define INFLUXDB_TARGETS_MIXING_AGGREF_UNSAFE	(INFLUXDB_TARGETS_MARK_COLUMN | INFLUXDB_TARGETS_MARK_AGGREF)
+#define INFLUXDB_TARGETS_MIXING_AGGREF_SAFE		(0u)
+
 /*
  * Options structure to store the InfluxDB
  * server information
@@ -49,6 +75,7 @@ typedef struct influxdb_opt
 	int			svr_port;		/* InfluxDB port number */
 	char	   *svr_username;	/* MySQL user name */
 	char	   *svr_password;	/* MySQL password */
+	List	   *tags_list;		/* Contain tag keys of a foreign table */
 }			influxdb_opt;
 
 
@@ -90,6 +117,9 @@ typedef struct InfluxDBFdwExecState
 	/* working memory context */
 	MemoryContext temp_cxt;		/* context for per-tuple temporary data */
 	AttrNumber *junk_idx;
+
+	/* Function pushdown surppot in target list */
+	bool		is_tlist_func_pushdown;
 }			InfluxDBFdwExecState;
 
 
@@ -144,12 +174,19 @@ typedef struct InfluxDBFdwRelationInfo
 
 	/* Grouping information */
 	List	   *grouped_tlist;
+
+	/* Function pushdown surppot in target list */
+	bool		is_tlist_func_pushdown;
 }			InfluxDBFdwRelationInfo;
 
 
 extern bool influxdb_is_foreign_expr(PlannerInfo *root,
 									 RelOptInfo *baserel,
-									 Expr *expr);
+									 Expr *expr,
+									 bool for_tlist);
+extern bool influxdb_is_foreign_function_tlist(PlannerInfo *root,
+											   RelOptInfo *baserel,
+											   List *tlist);
 
 
 /* option.c headers */
@@ -166,6 +203,7 @@ extern void influxdb_deparse_delete(StringInfo buf, PlannerInfo *root, Index rti
 extern void influxdb_append_where_clause(StringInfo buf, PlannerInfo *root, RelOptInfo *baserel, List *exprs,
 										 bool is_first, List **params);
 extern void influxdb_deparse_analyze(StringInfo buf, char *dbname, char *relname);
+extern void influxdb_deparse_string_regex(StringInfo buf, const char *val);
 extern void influxdb_deparse_string_literal(StringInfo buf, const char *val);
 extern List *influxdb_build_tlist_to_deparse(RelOptInfo *foreignrel);
 extern int	influxdb_set_transmission_modes(void);
@@ -176,5 +214,7 @@ extern Datum influxdb_convert_to_pg(Oid pgtyp, int pgtypmod, char **row, int att
 extern void influxdb_bind_sql_var(Oid type, int attnum, Datum value, bool *isnull,
 								  InfluxDBType * param_influxdb_types, InfluxDBValue * param_influxdb_values);
 extern char *influxdb_get_function_name(Oid funcid);
-
+extern bool influxdb_is_mixing_aggref(List *tlist);
+extern bool influxdb_is_tag_key(const char *colname, Oid reloid);
+extern char *influxdb_get_column_name(Oid relid, int attnum);
 #endif							/* InfluxDB_FDW_H */

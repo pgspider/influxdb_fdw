@@ -1,0 +1,6 @@
+# DML
+# CONTEXT-DATABASE: coredb
+
+stud_emp name="jeff",age=23i,location="(8,7.7)",salary=600i,manager="sharon",gpa=3.50000000000000000e+00,percent=0i 4360000000000000
+stud_emp name="cim",age=30i,location="(10.5,4.7)",salary=400i,manager="",gpa=3.39999999999999990e+00,percent=0i 4370000000000000
+stud_emp name="linda",age=19i,location="(0.9,6.1)",salary=100i,manager="",gpa=2.89999999999999990e+00,percent=0i 4380000000000000

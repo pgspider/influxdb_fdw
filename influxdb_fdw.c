@@ -2,7 +2,7 @@
  *
  * InfluxDB Foreign Data Wrapper for PostgreSQL
  *
- * Portions Copyright (c) 2018, TOSHIBA CORPORATION
+ * Portions Copyright (c) 2020, TOSHIBA CORPORATION
  *
  * IDENTIFICATION
  *        influxdb_fdw.c
@@ -385,7 +385,7 @@ influxdbGetForeignRelSize(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntab
 	{
 		RestrictInfo *ri = (RestrictInfo *) lfirst(lc);
 
-		if (influxdb_is_foreign_expr(root, baserel, ri->clause))
+		if (influxdb_is_foreign_expr(root, baserel, ri->clause, false))
 			fpinfo->remote_conds = lappend(fpinfo->remote_conds, ri);
 		else
 			fpinfo->local_conds = lappend(fpinfo->local_conds, ri);
@@ -526,7 +526,7 @@ influxdbGetForeignPlan(
 {
 	InfluxDBFdwRelationInfo *fpinfo = (InfluxDBFdwRelationInfo *) baserel->fdw_private;
 	Index		scan_relid = baserel->relid;
-	List	   *fdw_private;
+	List	   *fdw_private = NULL;
 	List	   *local_exprs = NULL;
 	List	   *remote_exprs = NULL;
 	List	   *params_list = NULL;
@@ -541,6 +541,9 @@ influxdbGetForeignPlan(
 
 
 	elog(DEBUG1, "influxdb_fdw : %s", __func__);
+
+	/* Decide to execute function pushdown support in the target list. */
+	fpinfo->is_tlist_func_pushdown = influxdb_is_foreign_function_tlist(root, baserel, tlist);
 
 	/*
 	 * Build the query string to be sent for execution, and identify
@@ -569,8 +572,9 @@ influxdbGetForeignPlan(
 	 * local_exprs list, since appendWhereClause expects a list of
 	 * RestrictInfos.
 	 */
-	if (baserel->reloptkind == RELOPT_BASEREL ||
-		baserel->reloptkind == RELOPT_OTHER_MEMBER_REL)
+	if ((baserel->reloptkind == RELOPT_BASEREL ||
+		 baserel->reloptkind == RELOPT_OTHER_MEMBER_REL) &&
+		fpinfo->is_tlist_func_pushdown == false)
 	{
 		foreach(lc, scan_clauses)
 		{
@@ -589,7 +593,7 @@ influxdbGetForeignPlan(
 			}
 			else if (list_member_ptr(fpinfo->local_conds, rinfo))
 				local_exprs = lappend(local_exprs, rinfo->clause);
-			else if (influxdb_is_foreign_expr(root, baserel, rinfo->clause))
+			else if (influxdb_is_foreign_expr(root, baserel, rinfo->clause, false))
 			{
 				remote_conds = lappend(remote_conds, rinfo);
 				remote_exprs = lappend(remote_exprs, rinfo->clause);
@@ -616,7 +620,10 @@ influxdbGetForeignPlan(
 		 * parameterization right now, so there should be no scan_clauses for
 		 * a joinrel or an upper rel either.
 		 */
-		Assert(!scan_clauses);
+		if (fpinfo->is_tlist_func_pushdown == false)
+		{
+			Assert(!scan_clauses);
+		}
 
 		/*
 		 * Instead we get the conditions to apply from the fdw_private
@@ -637,7 +644,22 @@ influxdbGetForeignPlan(
 		 */
 
 		/* Build the list of columns to be fetched from the foreign server. */
-		fdw_scan_tlist = influxdb_build_tlist_to_deparse(baserel);
+		if (fpinfo->is_tlist_func_pushdown == true)
+		{
+			fdw_scan_tlist = copyObject(tlist);
+			foreach(lc, fpinfo->local_conds)
+			{
+				RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
+
+				fdw_scan_tlist = add_to_flat_tlist(fdw_scan_tlist,
+												   pull_var_clause((Node *) rinfo->clause,
+																   PVC_RECURSE_PLACEHOLDERS));
+			}
+		}
+		else
+		{
+			fdw_scan_tlist = influxdb_build_tlist_to_deparse(baserel);
+		}
 
 		/*
 		 * Ensure that the outer plan produces a tuple whose descriptor
@@ -699,8 +721,11 @@ influxdbGetForeignPlan(
 	 * Build the fdw_private list that will be available to the executor.
 	 * Items in the list must match enum FdwScanPrivateIndex, above.
 	 */
-	fdw_private = list_make4(makeString(sql.data), retrieved_attrs, makeInteger(for_update),
-							 fdw_scan_tlist);
+	fdw_private = lappend(fdw_private, makeString(sql.data));
+	fdw_private = lappend(fdw_private, retrieved_attrs);
+	fdw_private = lappend(fdw_private, makeInteger(for_update));
+	fdw_private = lappend(fdw_private, fdw_scan_tlist);
+	fdw_private = lappend(fdw_private, makeInteger(fpinfo->is_tlist_func_pushdown));
 
 	/*
 	 * Create the ForeignScan node from target list, local filtering
@@ -741,6 +766,7 @@ influxdbBeginForeignScan(ForeignScanState *node, int eflags)
 	festate->retrieved_attrs = list_nth(fsplan->fdw_private, 1);
 	festate->for_update = intVal(list_nth(fsplan->fdw_private, 2)) ? true : false;
 	festate->tlist = (List *) list_nth(fsplan->fdw_private, 3);
+	festate->is_tlist_func_pushdown = intVal(list_nth(fsplan->fdw_private, 4)) ? true : false;
 
 	festate->cursor_exists = false;
 
@@ -762,36 +788,6 @@ influxdbBeginForeignScan(ForeignScanState *node, int eflags)
 							 &festate->param_types,
 							 &festate->param_influxdb_types,
 							 &festate->param_influxdb_values);
-}
-
-static char *
-get_column_name(Oid relid, int attnum)
-{
-	List	   *options = NULL;
-	ListCell   *lc_opt;
-	char	   *colname = NULL;
-
-	options = GetForeignColumnOptions(relid, attnum);
-
-	foreach(lc_opt, options)
-	{
-		DefElem    *def = (DefElem *) lfirst(lc_opt);
-
-		if (strcmp(def->defname, "column_name") == 0)
-		{
-			colname = defGetString(def);
-			break;
-		}
-	}
-
-	if (colname == NULL)
-		colname = get_attname(relid, attnum
-#if (PG_VERSION_NUM >= 110000)
-							  ,
-							  false
-#endif
-			);
-	return colname;
 }
 
 static void
@@ -832,24 +828,57 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 
 			Expr	   *target = ((TargetEntry *) lfirst(targetc))->expr;
 
-			if (IsA(target, Var))
+			if (festate->is_tlist_func_pushdown && IsA(target, Var))
+			{
+				char	   *name = influxdb_get_column_name(relid, ((Var *) target)->varattno);
+
+				if (INFLUXDB_IS_TIME_COLUMN(name))
+				{
+					result_idx = 0;
+				}
+				else
+				{
+					attid++;
+					result_idx = attid;
+				}
+			}
+			else if (IsA(target, Var))
 			{
 				/* GROUP BY target variable */
 				int			i;
-				char	   *name = get_column_name(relid, ((Var *) target)->varattno);
+				char	   *name = influxdb_get_column_name(relid, ((Var *) target)->varattno);
 				int			nfield = result->ncol - result->ntag;
 
 				/*
-				 * Values of GROUP BY tag are stored in the order of
-				 * result->tagkeys at the last of result row. We will find
-				 * that index
+				 * If target is tag, we get its value from GROUP BY tag values,
+				 * otherwise, get target value from result field.
 				 */
-				for (i = 0; i < result->ntag; i++)
+				if (influxdb_is_tag_key(name, relid))
 				{
-					if (strcmp(name, result->tagkeys[i]) == 0)
+					/*
+					 * Values of GROUP BY tag are stored in the order of
+					 * result->tagkeys at the last of result row. We will find
+					 * that index
+					 */
+					for (i = 0; i < result->ntag; i++)
 					{
-						result_idx = nfield + i;
-						break;
+						if (strcmp(name, result->tagkeys[i]) == 0)
+						{
+							result_idx = nfield + i;
+							break;
+						}
+					}
+				}
+				else
+				{
+					if (INFLUXDB_IS_TIME_COLUMN(name))
+					{
+						result_idx = 0;
+					}
+					else
+					{
+						attid++;
+						result_idx = attid;
 					}
 				}
 			}
@@ -859,10 +888,20 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 				/* Time column corresponding to influx_time */
 				result_idx = 0;
 			}
-			else if (IsA(target, Aggref) || IsA(target, OpExpr))
+			else if (IsA(target, Aggref) || IsA(target, OpExpr) || IsA(target, FuncExpr))
 			{
 				attid++;
 				result_idx = attid;
+			}
+			else if (IsA(target, Const))
+			{
+				/* In the case of selecting function pushdown and const value */
+#if (PG_VERSION_NUM >= 130000)
+				targetc = lnext(festate->tlist, targetc);
+#else
+				targetc = lnext(targetc);
+#endif
+				continue;
 			}
 			else
 			{
@@ -871,12 +910,16 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 				 */
 				elog(ERROR, "not supported");
 			}
+#if (PG_VERSION_NUM >= 130000)
+			targetc = lnext(festate->tlist, targetc);
+#else
 			targetc = lnext(targetc);
+#endif
 
 		}
 		else
 		{
-			colname = get_column_name(relid, attnum + 1);
+			colname = influxdb_get_column_name(relid, attnum + 1);
 			if (INFLUXDB_IS_TIME_COLUMN(colname))
 			{
 				result_idx = 0;
@@ -954,12 +997,11 @@ influxdbIterateForeignScan(ForeignScanState *node)
 
 	if (festate->rowidx == 0)
 	{
+		MemoryContext oldcontext = NULL;
 		int			i;
 
 		PG_TRY();
 		{
-			MemoryContext oldcontext;
-
 			ret = InfluxDBQuery(festate->query, options->svr_address, options->svr_port,
 								options->svr_username, options->svr_password,
 								options->svr_database,
@@ -1004,6 +1046,9 @@ influxdbIterateForeignScan(ForeignScanState *node)
 			{
 				InfluxDBFreeResult((InfluxDBResult *) result);
 			}
+
+			if (oldcontext)
+				MemoryContextSwitchTo(oldcontext);
 
 			PG_RE_THROW();
 		}
@@ -1201,6 +1246,24 @@ influxdbImportForeignSchema(ImportForeignSchemaStmt *stmt,
 			appendStringInfo(&buf, "\n) SERVER %s\nOPTIONS (table ",
 							 quote_identifier(stmt->server_name));
 			influxdb_deparse_string_literal(&buf, info[table_idx].measurement);
+			if (info[table_idx].tag_len > 0)
+			{
+				bool			is_first = true;
+				StringInfoData	tags_list;
+
+				initStringInfo(&tags_list);
+
+				appendStringInfoString(&buf, ", tags ");
+				for (col_idx = 0; col_idx < info[table_idx].tag_len; col_idx++)
+				{
+					if (!is_first)
+						appendStringInfoChar(&tags_list, ',');
+					appendStringInfo(&tags_list, "%s",info[table_idx].tag[col_idx]);
+					is_first = false;
+				}
+				influxdb_deparse_string_literal(&buf, tags_list.data);
+			}
+
 			appendStringInfoString(&buf, ");");
 			commands = lappend(commands, pstrdup(buf.data));
 
@@ -1241,6 +1304,13 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel)
 	if (query->groupingSets)
 		return false;
 
+	/*
+	 * Does not pushdown HAVING clause if there is any
+	 * qualifications applied to groups.
+	 */
+	if (root->hasHavingQual && query->havingQual)
+		return false;
+
 	/* Get the fpinfo of the underlying scan relation. */
 	ofpinfo = (InfluxDBFdwRelationInfo *) fpinfo->outerrel->fdw_private;
 
@@ -1279,13 +1349,30 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel)
 		/* Check whether this expression is part of GROUP BY clause */
 		if (sgref && get_sortgroupref_clause_noerr(sgref, query->groupClause))
 		{
-
-
 			/*
 			 * If any of the GROUP BY expression is not shippable we can not
 			 * push down aggregation to the foreign server.
 			 */
-			if (!influxdb_is_foreign_expr(root, grouped_rel, expr))
+			if (!influxdb_is_foreign_expr(root, grouped_rel, expr, true))
+				return false;
+
+			/*
+			 * If any of grouping target expression is not tag key, we can not
+			 * push down it to the foreign server.
+			 */
+			if (IsA(expr, Var))
+			{
+				char *colname = influxdb_get_column_name(ofpinfo->table->relid, ((Var *) expr)->varattno);
+
+				if (!influxdb_is_tag_key(colname, ofpinfo->table->relid))
+					return false;
+			}
+
+			/*
+			 * InfluxDB only support GROUP BY tags and GROUP BY time intervals,
+			 * we can not push down any expression that other than Var and FuncExpr nodes.
+			 */
+			if (!(IsA(expr, Var) || IsA(expr, FuncExpr)))
 				return false;
 
 			/* Pushable, add to tlist */
@@ -1294,7 +1381,7 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel)
 		else
 		{
 			/* Check entire expression whether it is pushable or not */
-			if (influxdb_is_foreign_expr(root, grouped_rel, expr))
+			if (influxdb_is_foreign_expr(root, grouped_rel, expr, true))
 			{
 				/* Pushable, add to tlist */
 				tlist = add_to_flat_tlist(tlist, list_make1(expr));
@@ -1313,7 +1400,7 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel)
 				aggvars = pull_var_clause((Node *) expr,
 										  PVC_INCLUDE_AGGREGATES);
 
-				if (!influxdb_is_foreign_expr(root, grouped_rel, (Expr *) aggvars))
+				if (!influxdb_is_foreign_expr(root, grouped_rel, (Expr *) aggvars, true))
 					return false;
 
 				/*
@@ -1338,48 +1425,6 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel)
 		}
 
 		i++;
-	}
-
-	/*
-	 * Classify the pushable and non-pushable having clauses and save them in
-	 * remote_conds and local_conds of the grouped rel's fpinfo.
-	 */
-	if (root->hasHavingQual && query->havingQual)
-	{
-		ListCell   *lc;
-
-		foreach(lc, (List *) query->havingQual)
-		{
-			Expr	   *expr = (Expr *) lfirst(lc);
-
-#if (PG_VERSION_NUM >= 100000)
-			RestrictInfo *rinfo;
-
-			/*
-			 * Currently, the core code doesn't wrap havingQuals in
-			 * RestrictInfos, so we must make our own.
-			 */
-			Assert(!IsA(expr, RestrictInfo));
-			rinfo = make_restrictinfo(expr,
-									  true,
-									  false,
-									  false,
-									  root->qual_security_level,
-									  grouped_rel->relids,
-									  NULL,
-									  NULL);
-
-			if (influxdb_is_foreign_expr(root, grouped_rel, expr))
-				fpinfo->remote_conds = lappend(fpinfo->remote_conds, rinfo);
-			else
-				fpinfo->local_conds = lappend(fpinfo->local_conds, rinfo);
-#else
-			if (!influxdb_is_foreign_expr(root, grouped_rel, expr))
-				fpinfo->local_conds = lappend(fpinfo->local_conds, expr);
-			else
-				fpinfo->remote_conds = lappend(fpinfo->remote_conds, expr);
-#endif
-		}
 	}
 
 	/*
@@ -1412,7 +1457,7 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel)
 			 */
 			if (IsA(expr, Aggref))
 			{
-				if (!influxdb_is_foreign_expr(root, grouped_rel, expr))
+				if (!influxdb_is_foreign_expr(root, grouped_rel, expr, true))
 					return false;
 
 				tlist = add_to_flat_tlist(tlist, list_make1(expr));
