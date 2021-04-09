@@ -1,0 +1,934 @@
+SET datestyle=ISO;
+SET timezone='Japan';
+\set ECHO none
+--Testcase 1:
+CREATE EXTENSION influxdb_fdw;
+--Testcase 2:
+CREATE SERVER server1 FOREIGN DATA WRAPPER influxdb_fdw OPTIONS
+(dbname 'mydb2', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
+--Testcase 3:
+CREATE USER MAPPING FOR CURRENT_USER SERVER server1 OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
+--IMPORT FOREIGN SCHEMA public FROM SERVER server1 INTO public OPTIONS(import_time_text 'false');
+--Testcase 4:
+CREATE FOREIGN TABLE s3(time timestamp with time zone, tag1 text, value1 float8, value2 bigint, value3 float8, value4 bigint) SERVER server1 OPTIONS(table 's3', tags 'tag1');
+-- s3 (value1 as float8, value2 as bigint)
+--Testcase 5:
+\d s3;
+                            Foreign table "public.s3"
+ Column |           Type           | Collation | Nullable | Default | FDW options 
+--------+--------------------------+-----------+----------+---------+-------------
+ time   | timestamp with time zone |           |          |         | 
+ tag1   | text                     |           |          |         | 
+ value1 | double precision         |           |          |         | 
+ value2 | bigint                   |           |          |         | 
+ value3 | double precision         |           |          |         | 
+ value4 | bigint                   |           |          |         | 
+Server: server1
+FDW options: ("table" 's3', tags 'tag1')
+
+--Testcase 6:
+SELECT * FROM s3;
+          time          | tag1 | value1 | value2 | value3 | value4 
+------------------------+------+--------+--------+--------+--------
+ 1970-01-01 09:00:00+09 | a    |    0.1 |    100 |   -0.1 |   -100
+ 1970-01-01 09:00:01+09 | a    |    0.2 |    100 |   -0.2 |   -100
+ 1970-01-01 09:00:02+09 | a    |    0.3 |    100 |   -0.3 |   -100
+ 1970-01-01 09:00:03+09 | b    |    1.1 |    200 |   -1.1 |   -200
+ 1970-01-01 09:00:04+09 | b    |    2.2 |    200 |   -2.2 |   -200
+ 1970-01-01 09:00:05+09 | b    |    3.3 |    200 |   -3.3 |   -200
+(6 rows)
+
+-- select float8() (not pushdown, remove float8, explain)
+--Testcase 7:
+EXPLAIN VERBOSE
+SELECT float8(value1), float8(value2), float8(value3), float8(value4) FROM s3;
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1469.31 rows=1462 width=32)
+   Output: value1, float8(value2), value3, float8(value4)
+   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
+(3 rows)
+
+-- select float8() (not pushdown, remove float8, result)
+--Testcase 8:
+SELECT float8(value1), float8(value2), float8(value3), float8(value4) FROM s3;
+ float8 | float8 | float8 | float8 
+--------+--------+--------+--------
+    0.1 |    100 |   -0.1 |   -100
+    0.2 |    100 |   -0.2 |   -100
+    0.3 |    100 |   -0.3 |   -100
+    1.1 |    200 |   -1.1 |   -200
+    2.2 |    200 |   -2.2 |   -200
+    3.3 |    200 |   -3.3 |   -200
+(6 rows)
+
+-- select sqrt (builtin function, explain)
+--Testcase 9:
+EXPLAIN VERBOSE
+SELECT sqrt(value1), sqrt(value2) FROM s3;
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2063.36 rows=2048 width=16)
+   Output: sqrt(value1), sqrt((value2)::double precision)
+   InfluxDB query: SELECT "value1", "value2" FROM "s3"
+(3 rows)
+
+-- select sqrt (buitin function, result)
+--Testcase 10:
+SELECT sqrt(value1), sqrt(value2) FROM s3;
+        sqrt         |        sqrt        
+---------------------+--------------------
+ 0.31622776601683794 |                 10
+  0.4472135954999579 |                 10
+  0.5477225575051661 |                 10
+  1.0488088481701516 | 14.142135623730951
+  1.4832396974191326 | 14.142135623730951
+   1.816590212458495 | 14.142135623730951
+(6 rows)
+
+-- select sqrt (builtin function,, not pushdown constraints, explain)
+--Testcase 11:
+EXPLAIN VERBOSE
+SELECT sqrt(value1), sqrt(value2) FROM s3 WHERE to_hex(value2) != '64';
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2053.28 rows=2038 width=16)
+   Output: sqrt(value1), sqrt((value2)::double precision)
+   Filter: (to_hex(s3.value2) <> '64'::text)
+   InfluxDB query: SELECT "value1", "value2" FROM "s3"
+(4 rows)
+
+-- select sqrt (builtin function, not pushdown constraints, result)
+--Testcase 12:
+SELECT sqrt(value1), sqrt(value2) FROM s3 WHERE to_hex(value2) != '64';
+        sqrt        |        sqrt        
+--------------------+--------------------
+ 1.0488088481701516 | 14.142135623730951
+ 1.4832396974191326 | 14.142135623730951
+  1.816590212458495 | 14.142135623730951
+(3 rows)
+
+-- select sqrt (builtin function, pushdown constraints, explain)
+--Testcase 13:
+EXPLAIN VERBOSE
+SELECT sqrt(value1), sqrt(value2) FROM s3 WHERE value2 != 200;
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2053.28 rows=2038 width=16)
+   Output: sqrt(value1), sqrt((value2)::double precision)
+   InfluxDB query: SELECT "value1", "value2" FROM "s3" WHERE (("value2" <> 200))
+(3 rows)
+
+-- select sqrt (builtin function, pushdown constraints, result)
+--Testcase 14:
+SELECT sqrt(value1), sqrt(value2) FROM s3 WHERE value2 != 200;
+        sqrt         | sqrt 
+---------------------+------
+ 0.31622776601683794 |   10
+  0.4472135954999579 |   10
+  0.5477225575051661 |   10
+(3 rows)
+
+-- select abs (builtin function, explain)
+--Testcase 15:
+EXPLAIN VERBOSE
+SELECT abs(value1), abs(value2), abs(value3), abs(value4) FROM s3;
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1476.62 rows=1462 width=32)
+   Output: abs(value1), abs(value2), abs(value3), abs(value4)
+   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
+(3 rows)
+
+-- ABS() returns negative values if integer (https://github.com/influxdata/influxdb/issues/10261)
+-- select abs (buitin function, result)
+--Testcase 16:
+SELECT abs(value1), abs(value2), abs(value3), abs(value4) FROM s3;
+ abs | abs | abs | abs 
+-----+-----+-----+-----
+ 0.1 | 100 | 0.1 | 100
+ 0.2 | 100 | 0.2 | 100
+ 0.3 | 100 | 0.3 | 100
+ 1.1 | 200 | 1.1 | 200
+ 2.2 | 200 | 2.2 | 200
+ 3.3 | 200 | 3.3 | 200
+(6 rows)
+
+-- select abs (builtin function, not pushdown constraints, explain)
+--Testcase 17:
+EXPLAIN VERBOSE
+SELECT abs(value1), abs(value2), abs(value3), abs(value4) FROM s3 WHERE to_hex(value2) != '64';
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1469.55 rows=1455 width=32)
+   Output: abs(value1), abs(value2), abs(value3), abs(value4)
+   Filter: (to_hex(s3.value2) <> '64'::text)
+   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
+(4 rows)
+
+-- select abs (builtin function, not pushdown constraints, result)
+--Testcase 18:
+SELECT abs(value1), abs(value2), abs(value3), abs(value4) FROM s3 WHERE to_hex(value2) != '64';
+ abs | abs | abs | abs 
+-----+-----+-----+-----
+ 1.1 | 200 | 1.1 | 200
+ 2.2 | 200 | 2.2 | 200
+ 3.3 | 200 | 3.3 | 200
+(3 rows)
+
+-- select abs (builtin function, pushdown constraints, explain)
+--Testcase 19:
+EXPLAIN VERBOSE
+SELECT abs(value1), abs(value2), abs(value3), abs(value4) FROM s3 WHERE value2 != 200;
+                                             QUERY PLAN                                              
+-----------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1469.55 rows=1455 width=32)
+   Output: abs(value1), abs(value2), abs(value3), abs(value4)
+   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3" WHERE (("value2" <> 200))
+(3 rows)
+
+-- select abs (builtin function, pushdown constraints, result)
+--Testcase 20:
+SELECT abs(value1), abs(value2), abs(value3), abs(value4) FROM s3 WHERE value2 != 200;
+ abs | abs | abs | abs 
+-----+-----+-----+-----
+ 0.1 | 100 | 0.1 | 100
+ 0.2 | 100 | 0.2 | 100
+ 0.3 | 100 | 0.3 | 100
+(3 rows)
+
+-- select log (builtin function, need to swap arguments, numeric cast, explain)
+-- log_<base>(v) : postgresql (base, v), influxdb (v, base)
+--Testcase 21:
+EXPLAIN VERBOSE
+SELECT log(value1::numeric, value2::numeric) FROM s3 WHERE value1 != 1;
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2053.28 rows=2038 width=32)
+   Output: log((value1)::numeric, (value2)::numeric)
+   InfluxDB query: SELECT "value1", "value2" FROM "s3" WHERE (("value1" <> 1))
+(3 rows)
+
+-- select log (builtin function, need to swap arguments, numeric cast, result)
+--Testcase 22:
+SELECT log(value1::numeric, value2::numeric) FROM s3 WHERE value1 != 1;
+         log         
+---------------------
+ -2.0000000000000000
+ -2.8613531161467861
+ -3.8249785787863969
+  55.590256753535330
+  6.7198527566540755
+  4.4377398922117404
+(6 rows)
+
+-- select log (stub function, need to swap arguments, float8, explain)
+--Testcase 23:
+EXPLAIN VERBOSE
+SELECT log(value1, 0.1) FROM s3 WHERE value1 != 1;
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..3183.75 rows=2547 width=8)
+   Output: log(value1, '0.1'::double precision)
+   InfluxDB query: SELECT "value1" FROM "s3" WHERE (("value1" <> 1))
+(3 rows)
+
+-- select log (stub function, need to swap arguments, float8, result)
+--Testcase 24:
+SELECT log(value1, 0.1) FROM s3 WHERE value1 != 1;
+ERROR:  stub log(float8, float8) is called
+CONTEXT:  PL/pgSQL function log(double precision,double precision) line 3 at RAISE
+-- select log (stub function, need to swap arguments, bigint, explain)
+--Testcase 25:
+EXPLAIN VERBOSE
+SELECT log(value2, 3) FROM s3 WHERE value1 != 1;
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..3183.75 rows=2547 width=8)
+   Output: log(value2, '3'::bigint)
+   InfluxDB query: SELECT "value2" FROM "s3" WHERE (("value1" <> 1))
+(3 rows)
+
+-- select log (stub function, need to swap arguments, bigint, result)
+--Testcase 26:
+SELECT log(value2, 3) FROM s3 WHERE value1 != 1;
+ERROR:  stub log(bigint, bigint) is called
+CONTEXT:  PL/pgSQL function log(bigint,bigint) line 3 at RAISE
+-- select log (stub function, need to swap arguments, mix type, explain)
+--Testcase 27:
+EXPLAIN VERBOSE
+SELECT log(value1, value2) FROM s3 WHERE value1 != 1;
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2552.60 rows=2038 width=8)
+   Output: log(value1, (value2)::double precision)
+   InfluxDB query: SELECT "value1", "value2" FROM "s3" WHERE (("value1" <> 1))
+(3 rows)
+
+-- select log (stub function, need to swap arguments, mix type, result)
+--Testcase 28:
+SELECT log(value1, value2) FROM s3 WHERE value1 != 1;
+ERROR:  stub log(float8, float8) is called
+CONTEXT:  PL/pgSQL function log(double precision,double precision) line 3 at RAISE
+-- select log2 (stub function, explain)
+--Testcase 29:
+EXPLAIN VERBOSE
+SELECT log2(value1),log2(value2) FROM s3;
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..3072.00 rows=2048 width=16)
+   Output: log2(value1), log2(value2)
+   InfluxDB query: SELECT "value1", "value2" FROM "s3"
+(3 rows)
+
+-- select log2 (stub function, result)
+--Testcase 30:
+SELECT log2(value1),log2(value2) FROM s3;
+ERROR:  stub log2(float8) is called
+CONTEXT:  PL/pgSQL function log2(double precision) line 3 at RAISE
+-- select spread (stub agg function, explain)
+--Testcase 31:
+EXPLAIN VERBOSE
+SELECT spread(value1),spread(value2),spread(value3),spread(value4) FROM s3;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=32)
+   Output: (spread(value1)), (spread(value2)), (spread(value3)), (spread(value4))
+   InfluxDB query: SELECT spread("value1"), spread("value2"), spread("value3"), spread("value4") FROM "s3"
+(3 rows)
+
+-- select spread (stub agg function, result)
+--Testcase 32:
+SELECT spread(value1),spread(value2),spread(value3),spread(value4) FROM s3;
+       spread       | spread |       spread       | spread 
+--------------------+--------+--------------------+--------
+ 3.1999999999999997 |    100 | 3.1999999999999997 |    100
+(1 row)
+
+-- select spread (stub agg function, raise exception if not expected type)
+--Testcase 33:
+SELECT spread(value1::numeric),spread(value2::numeric),spread(value3::numeric),spread(value4::numeric) FROM s3;
+ERROR:  stub spread_sfunc(double precision, float8) is called
+CONTEXT:  PL/pgSQL function spread_sfunc(double precision,double precision) line 3 at RAISE
+-- select abs as nest function with agg (pushdown, explain)
+--Testcase 34:
+EXPLAIN VERBOSE
+SELECT sum(value3),abs(sum(value3)) FROM s3;
+                              QUERY PLAN                              
+----------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=16)
+   Output: (sum(value3)), (abs(sum(value3)))
+   InfluxDB query: SELECT sum("value3"), abs(sum("value3")) FROM "s3"
+(3 rows)
+
+-- select abs as nest function with agg (pushdown, result)
+--Testcase 35:
+SELECT sum(value3),abs(sum(value3)) FROM s3;
+        sum         |        abs        
+--------------------+-------------------
+ -7.199999999999999 | 7.199999999999999
+(1 row)
+
+-- select abs as nest with log2 (pushdown, explain)
+--Testcase 36:
+EXPLAIN VERBOSE
+SELECT abs(log2(value1)),abs(log2(1/value1)) FROM s3;
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..3859.20 rows=2560 width=16)
+   Output: abs(log2(value1)), abs(log2(('1'::double precision / value1)))
+   InfluxDB query: SELECT "value1" FROM "s3"
+(3 rows)
+
+-- select abs as nest with log2 (pushdown, result)
+--Testcase 37:
+SELECT abs(log2(value1)),abs(log2(1/value1)) FROM s3;
+ERROR:  stub log2(float8) is called
+CONTEXT:  PL/pgSQL function log2(double precision) line 3 at RAISE
+-- select abs with non pushdown func and explicit constant (explain)
+--Testcase 38:
+EXPLAIN VERBOSE
+SELECT abs(value3), pi(), 4.1 FROM s3;
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2566.40 rows=2560 width=48)
+   Output: abs(value3), '3.141592653589793'::double precision, 4.1
+   InfluxDB query: SELECT "value3" FROM "s3"
+(3 rows)
+
+-- select abs with non pushdown func and explicit constant (result)
+--Testcase 39:
+SELECT abs(value3), pi(), 4.1 FROM s3;
+ abs |        pi         | ?column? 
+-----+-------------------+----------
+ 0.1 | 3.141592653589793 |      4.1
+ 0.2 | 3.141592653589793 |      4.1
+ 0.3 | 3.141592653589793 |      4.1
+ 1.1 | 3.141592653589793 |      4.1
+ 2.2 | 3.141592653589793 |      4.1
+ 3.3 | 3.141592653589793 |      4.1
+(6 rows)
+
+-- select sqrt as nest function with agg and explicit constant (pushdown, explain)
+--Testcase 40:
+EXPLAIN VERBOSE
+SELECT sqrt(count(value1)), pi(), 4.1 FROM s3;
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=48)
+   Output: (sqrt((count(value1))::double precision)), '3.141592653589793'::double precision, 4.1
+   InfluxDB query: SELECT sqrt(count("value1")) FROM "s3"
+(3 rows)
+
+-- select sqrt as nest function with agg and explicit constant (pushdown, result)
+--Testcase 41:
+SELECT sqrt(count(value1)), pi(), 4.1 FROM s3;
+       sqrt        |        pi         | ?column? 
+-------------------+-------------------+----------
+ 2.449489742783178 | 3.141592653589793 |      4.1
+(1 row)
+
+-- select sqrt as nest function with agg and explicit constant and tag (error, explain)
+--Testcase 42:
+EXPLAIN VERBOSE
+SELECT sqrt(count(value1)), pi(), 4.1, tag1 FROM s3;
+ERROR:  column "s3.tag1" must appear in the GROUP BY clause or be used in an aggregate function
+LINE 2: SELECT sqrt(count(value1)), pi(), 4.1, tag1 FROM s3;
+                                               ^
+-- select spread (stub agg function and group by influx_time() and tag) (explain)
+--Testcase 43:
+EXPLAIN VERBOSE
+SELECT spread("value1"),influx_time(time, interval '1s'),tag1 FROM s3 WHERE time >= to_timestamp(0) and time <= to_timestamp(4) GROUP BY influx_time(time, interval '1s'), tag1;
+                                                                              QUERY PLAN                                                                               
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=48)
+   Output: (spread(value1)), (influx_time("time", '@ 1 sec'::interval)), tag1
+   InfluxDB query: SELECT spread("value1") FROM "s3" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:04')) GROUP BY (time(0d0h0m1s0u)), "tag1"
+(3 rows)
+
+-- select spread (stub agg function and group by influx_time() and tag) (result)
+--Testcase 44:
+SELECT spread("value1"),influx_time(time, interval '1s'),tag1 FROM s3 WHERE time >= to_timestamp(0) and time <= to_timestamp(4) GROUP BY influx_time(time, interval '1s'), tag1;
+ spread |      influx_time       | tag1 
+--------+------------------------+------
+      0 | 1970-01-01 09:00:00+09 | a
+      0 | 1970-01-01 09:00:01+09 | a
+      0 | 1970-01-01 09:00:02+09 | a
+        | 1970-01-01 09:00:03+09 | a
+        | 1970-01-01 09:00:04+09 | a
+        | 1970-01-01 09:00:00+09 | b
+        | 1970-01-01 09:00:01+09 | b
+        | 1970-01-01 09:00:02+09 | b
+      0 | 1970-01-01 09:00:03+09 | b
+      0 | 1970-01-01 09:00:04+09 | b
+(10 rows)
+
+-- select spread (stub agg function and group by tag only) (result)
+--Testcase 45:
+SELECT tag1,spread("value1") FROM s3 WHERE time >= to_timestamp(0) and time <= to_timestamp(4) GROUP BY tag1;
+ tag1 |       spread        
+------+---------------------
+ a    | 0.19999999999999998
+ b    |                 1.1
+(2 rows)
+
+-- select spread (stub agg function and other aggs) (result)
+--Testcase 46:
+SELECT sum("value1"),spread("value1"),count("value1") FROM s3;
+        sum        |       spread       | count 
+-------------------+--------------------+-------
+ 7.199999999999999 | 3.1999999999999997 |     6
+(1 row)
+
+-- select abs with order by (explain)
+--Testcase 47:
+EXPLAIN VERBOSE
+SELECT value1, abs(1-value1) FROM s3 order by abs(1-value1);
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ Sort  (cost=2717.72..2724.12 rows=2560 width=16)
+   Output: value1, (abs(('1'::double precision - value1)))
+   Sort Key: (abs(('1'::double precision - s3.value1)))
+   ->  Foreign Scan on public.s3  (cost=10.00..2572.80 rows=2560 width=16)
+         Output: value1, abs(('1'::double precision - value1))
+         InfluxDB query: SELECT "value1" FROM "s3"
+(6 rows)
+
+-- select abs with order by (result)
+--Testcase 48:
+SELECT value1, abs(1-value1) FROM s3 order by abs(1-value1);
+ value1 |         abs         
+--------+---------------------
+    1.1 | 0.10000000000000009
+    0.3 |                 0.7
+    0.2 |                 0.8
+    0.1 |                 0.9
+    2.2 |  1.2000000000000002
+    3.3 |                 2.3
+(6 rows)
+
+-- select abs with order by index (result)
+--Testcase 49:
+SELECT value1, abs(1-value1) FROM s3 order by 2,1;
+ value1 |         abs         
+--------+---------------------
+    1.1 | 0.10000000000000009
+    0.3 |                 0.7
+    0.2 |                 0.8
+    0.1 |                 0.9
+    2.2 |  1.2000000000000002
+    3.3 |                 2.3
+(6 rows)
+
+-- select abs with order by index (result)
+--Testcase 50:
+SELECT value1, abs(1-value1) FROM s3 order by 1,2;
+ value1 |         abs         
+--------+---------------------
+    0.1 |                 0.9
+    0.2 |                 0.8
+    0.3 |                 0.7
+    1.1 | 0.10000000000000009
+    2.2 |  1.2000000000000002
+    3.3 |                 2.3
+(6 rows)
+
+-- select abs and as
+--Testcase 51:
+SELECT abs(value3) as abs1 FROM s3;
+ abs1 
+------
+  0.1
+  0.2
+  0.3
+  1.1
+  2.2
+  3.3
+(6 rows)
+
+-- select spread over join query (explain)
+--Testcase 52:
+EXPLAIN VERBOSE
+SELECT spread(t1.value1), spread(t2.value1) FROM s3 t1 INNER JOIN s3 t2 ON (t1.value1 = t2.value1) where t1.value1 = 0.1;
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+ Aggregate  (cost=112.64..112.66 rows=1 width=16)
+   Output: spread(t1.value1), spread(t2.value1)
+   ->  Nested Loop  (cost=20.00..28.14 rows=169 width=16)
+         Output: t1.value1, t2.value1
+         ->  Foreign Scan on public.s3 t1  (cost=10.00..13.00 rows=13 width=8)
+               Output: t1."time", t1.tag1, t1.value1, t1.value2, t1.value3, t1.value4
+               InfluxDB query: SELECT "value1" FROM "s3" WHERE (("value1" = 0.1))
+         ->  Materialize  (cost=10.00..13.06 rows=13 width=8)
+               Output: t2.value1
+               ->  Foreign Scan on public.s3 t2  (cost=10.00..13.00 rows=13 width=8)
+                     Output: t2.value1
+                     InfluxDB query: SELECT "value1" FROM "s3" WHERE (("value1" = 0.1))
+(12 rows)
+
+-- select spread over join query (result, stub call error)
+--Testcase 53:
+SELECT spread(t1.value1), spread(t2.value1) FROM s3 t1 INNER JOIN s3 t2 ON (t1.value1 = t2.value1) where t1.value1 = 0.1;
+ERROR:  stub spread_sfunc(double precision, float8) is called
+CONTEXT:  PL/pgSQL function spread_sfunc(double precision,double precision) line 3 at RAISE
+-- select spread with having (explain)
+--Testcase 54:
+EXPLAIN VERBOSE
+SELECT spread(value1) FROM s3 HAVING spread(value1) > 100;
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Aggregate  (cost=3840.00..3840.01 rows=1 width=8)
+   Output: spread(value1)
+   Filter: (spread(s3.value1) > '100'::double precision)
+   ->  Foreign Scan on public.s3  (cost=10.00..2560.00 rows=2560 width=8)
+         Output: "time", tag1, value1, value2, value3, value4
+         InfluxDB query: SELECT "value1" FROM "s3"
+(6 rows)
+
+-- select spread with having (explain, cannot pushdown, stub call error)
+--Testcase 55:
+SELECT spread(value1) FROM s3 HAVING spread(value1) > 100;
+ERROR:  stub spread_sfunc(double precision, float8) is called
+CONTEXT:  PL/pgSQL function spread_sfunc(double precision,double precision) line 3 at RAISE
+-- select abs with arithmetic and tag in the middle (explain)
+--Testcase 56:
+EXPLAIN VERBOSE
+SELECT abs(value1) + 1, value2, tag1, sqrt(value2) FROM s3;
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1148.37 rows=1137 width=56)
+   Output: (abs(value1) + '1'::double precision), value2, tag1, sqrt((value2)::double precision)
+   InfluxDB query: SELECT "tag1", "value1", "value2" FROM "s3"
+(3 rows)
+
+-- select abs with arithmetic and tag in the middle (result)
+--Testcase 57:
+SELECT abs(value1) + 1, value2, tag1, sqrt(value2) FROM s3;
+ ?column? | value2 | tag1 |        sqrt        
+----------+--------+------+--------------------
+      1.1 |    100 | a    |                 10
+      1.2 |    100 | a    |                 10
+      1.3 |    100 | a    |                 10
+      2.1 |    200 | b    | 14.142135623730951
+      3.2 |    200 | b    | 14.142135623730951
+      4.3 |    200 | b    | 14.142135623730951
+(6 rows)
+
+-- select with order by limit (explain)
+--Testcase 58:
+EXPLAIN VERBOSE
+SELECT abs(value1), abs(value3), sqrt(value2) FROM s3 ORDER BY abs(value3) LIMIT 1;
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Limit  (cost=1731.59..1731.59 rows=1 width=24)
+   Output: (abs(value1)), (abs(value3)), (sqrt((value2)::double precision))
+   ->  Sort  (cost=1731.59..1735.86 rows=1706 width=24)
+         Output: (abs(value1)), (abs(value3)), (sqrt((value2)::double precision))
+         Sort Key: (abs(s3.value3))
+         ->  Foreign Scan on public.s3  (cost=10.00..1723.06 rows=1706 width=24)
+               Output: abs(value1), abs(value3), sqrt((value2)::double precision)
+               InfluxDB query: SELECT "value1", "value2", "value3" FROM "s3"
+(8 rows)
+
+-- select with order by limit (explain)
+--Testcase 59:
+SELECT abs(value1), abs(value3), sqrt(value2) FROM s3 ORDER BY abs(value3) LIMIT 1;
+ abs | abs | sqrt 
+-----+-----+------
+ 0.1 | 0.1 |   10
+(1 row)
+
+-- select mixing with non pushdown func (all not pushdown, explain)
+--Testcase 60:
+EXPLAIN VERBOSE
+SELECT abs(value1), sqrt(value2), upper(tag1) FROM s3;
+                              QUERY PLAN                              
+----------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1148.37 rows=1137 width=48)
+   Output: abs(value1), sqrt((value2)::double precision), upper(tag1)
+   InfluxDB query: SELECT "tag1", "value1", "value2" FROM "s3"
+(3 rows)
+
+-- select mixing with non pushdown func (result)
+--Testcase 61:
+SELECT abs(value1), sqrt(value2), upper(tag1) FROM s3;
+ abs |        sqrt        | upper 
+-----+--------------------+-------
+ 0.1 |                 10 | A
+ 0.2 |                 10 | A
+ 0.3 |                 10 | A
+ 1.1 | 14.142135623730951 | B
+ 2.2 | 14.142135623730951 | B
+ 3.3 | 14.142135623730951 | B
+(6 rows)
+
+--Testcase 66:
+-- nested function in where clause (explain)
+EXPLAIN VERBOSE
+SELECT sqrt(abs(value3)),min(value1) FROM s3 GROUP BY value3 HAVING sqrt(abs(value3)) > 0 ORDER BY 1,2;
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Sort  (cost=696.88..697.37 rows=197 width=24)
+   Output: (sqrt(abs(value3))), (min(value1)), value3
+   Sort Key: (sqrt(abs(s3.value3))), (min(s3.value1))
+   ->  HashAggregate  (cost=686.41..689.37 rows=197 width=24)
+         Output: sqrt(abs(value3)), min(value1), value3
+         Group Key: s3.value3
+         ->  Foreign Scan on public.s3  (cost=10.00..683.00 rows=683 width=16)
+               Output: "time", tag1, value1, value2, value3, value4
+               Filter: (sqrt(abs(s3.value3)) > '0'::double precision)
+               InfluxDB query: SELECT "value1", "value3" FROM "s3"
+(10 rows)
+
+--Testcase 67:
+-- nested function in where clause (result)
+SELECT sqrt(abs(value3)),min(value1) FROM s3 GROUP BY value3 HAVING sqrt(abs(value3)) > 0 ORDER BY 1,2;
+        sqrt         | min 
+---------------------+-----
+ 0.31622776601683794 | 0.1
+  0.4472135954999579 | 0.2
+  0.5477225575051661 | 0.3
+  1.0488088481701516 | 1.1
+  1.4832396974191326 | 2.2
+   1.816590212458495 | 3.3
+(6 rows)
+
+--Testcase 72:
+EXPLAIN VERBOSE
+SELECT first(time, value1), first(time, value2), first(time, value3), first(time, value4) FROM s3;
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=32)
+   Output: (first("time", value1)), (first("time", value2)), (first("time", value3)), (first("time", value4))
+   InfluxDB query: SELECT first("value1"), first("value2"), first("value3"), first("value4") FROM "s3"
+(3 rows)
+
+--Testcase 73:
+SELECT first(time, value1), first(time, value2), first(time, value3), first(time, value4) FROM s3;
+ first | first | first | first 
+-------+-------+-------+-------
+   0.1 |   100 |  -0.1 |  -100
+(1 row)
+
+--Testcase 74:
+EXPLAIN VERBOSE
+SELECT last(time, value1), last(time, value2), last(time, value3), last(time, value4) FROM s3;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=32)
+   Output: (last("time", value1)), (last("time", value2)), (last("time", value3)), (last("time", value4))
+   InfluxDB query: SELECT last("value1"), last("value2"), last("value3"), last("value4") FROM "s3"
+(3 rows)
+
+--Testcase 75:
+SELECT last(time, value1), last(time, value2), last(time, value3), last(time, value4) FROM s3;
+ last | last | last | last 
+------+------+------+------
+  3.3 |  200 | -3.3 | -200
+(1 row)
+
+--Testcase 76:
+EXPLAIN VERBOSE
+SELECT sample(value2, 3) FROM s3 WHERE value2 < 200;
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=8)
+   Output: (sample(value2, 3))
+   InfluxDB query: SELECT sample("value2", 3) FROM "s3" WHERE (("value2" < 200))
+(3 rows)
+
+--Testcase 77:
+SELECT sample(value2, 3) FROM s3 WHERE value2 < 200;
+ sample 
+--------
+    100
+    100
+    100
+(3 rows)
+
+--Testcase 78:
+EXPLAIN VERBOSE
+SELECT sample(value2, 1) FROM s3 WHERE time >= to_timestamp(0) AND time <= to_timestamp(5) GROUP BY influx_time(time, interval '3s');
+                                                                            QUERY PLAN                                                                            
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=16)
+   Output: (sample(value2, 1)), (influx_time("time", '@ 3 secs'::interval))
+   InfluxDB query: SELECT sample("value2", 1) FROM "s3" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:05')) GROUP BY (time(0d0h0m3s0u))
+(3 rows)
+
+--Testcase 79:
+SELECT sample(value2, 1) FROM s3 WHERE time >= to_timestamp(0) AND time <= to_timestamp(5) GROUP BY influx_time(time, interval '3s');
+ sample 
+--------
+    100
+    200
+(2 rows)
+
+--Testcase 80:
+EXPLAIN VERBOSE
+SELECT cumulative_sum(value1),cumulative_sum(value2),cumulative_sum(value3),cumulative_sum(value4) FROM s3;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2924.00 rows=1462 width=32)
+   Output: cumulative_sum(value1), cumulative_sum(value2), cumulative_sum(value3), cumulative_sum(value4)
+   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
+(3 rows)
+
+--Testcase 81:
+SELECT cumulative_sum(value1),cumulative_sum(value2),cumulative_sum(value3),cumulative_sum(value4) FROM s3;
+ERROR:  stub cumulative_sum(float8) is called
+CONTEXT:  PL/pgSQL function cumulative_sum(double precision) line 3 at RAISE
+--Testcase 82:
+EXPLAIN VERBOSE
+SELECT derivative(value1),derivative(value2),derivative(value3),derivative(value4) FROM s3;
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2924.00 rows=1462 width=32)
+   Output: derivative(value1), derivative(value2), derivative(value3), derivative(value4)
+   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
+(3 rows)
+
+--Testcase 83:
+SELECT derivative(value1),derivative(value2),derivative(value3),derivative(value4) FROM s3;
+ERROR:  stub derivative(anyelement) is called
+CONTEXT:  PL/pgSQL function derivative(anyelement) line 3 at RAISE
+--Testcase 84:
+EXPLAIN VERBOSE
+SELECT derivative(value1, interval '0.5s'),derivative(value2, interval '0.2s'),derivative(value3, interval '0.1s'),derivative(value4, interval '2s') FROM s3;
+                                                                                       QUERY PLAN                                                                                       
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2924.00 rows=1462 width=32)
+   Output: derivative(value1, '@ 0.5 secs'::interval), derivative(value2, '@ 0.2 secs'::interval), derivative(value3, '@ 0.1 secs'::interval), derivative(value4, '@ 2 secs'::interval)
+   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
+(3 rows)
+
+--Testcase 85:
+--cf.) SELECT derivative(value1, 500ms),derivative(value2, 200ms),derivative(value3, 100ms),derivative(value4, 2s) FROM s3;
+SELECT derivative(value1, interval '0.5s'),derivative(value2, interval '0.2s'),derivative(value3, interval '0.1s'),derivative(value4, interval '2s') FROM s3;
+ERROR:  stub derivative(anyelement, interval) is called
+CONTEXT:  PL/pgSQL function derivative(anyelement,interval) line 3 at RAISE
+--Testcase 86:
+EXPLAIN VERBOSE
+SELECT non_negative_derivative(value1),non_negative_derivative(value2),non_negative_derivative(value3),non_negative_derivative(value4) FROM s3;
+                                                                  QUERY PLAN                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2924.00 rows=1462 width=32)
+   Output: non_negative_derivative(value1), non_negative_derivative(value2), non_negative_derivative(value3), non_negative_derivative(value4)
+   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
+(3 rows)
+
+--Testcase 87:
+--cf.) SELECT non_negative_derivative(value1, 500ms),non_negative_derivative(value2, 200ms),non_negative_derivative(value3, 100ms),non_negative_derivative(value4, 2s) FROM s3;
+SELECT non_negative_derivative(value1),non_negative_derivative(value2),non_negative_derivative(value3),non_negative_derivative(value4) FROM s3;
+ERROR:  stub non_negative_derivative(anyelement) is called
+CONTEXT:  PL/pgSQL function non_negative_derivative(anyelement) line 3 at RAISE
+--Testcase 88:
+EXPLAIN VERBOSE
+SELECT non_negative_derivative(value1, interval '0.5s'),non_negative_derivative(value2, interval '0.2s'),non_negative_derivative(value3, interval '0.1s'),non_negative_derivative(value4, interval '2s') FROM s3;
+                                                                                                                 QUERY PLAN                                                                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2924.00 rows=1462 width=32)
+   Output: non_negative_derivative(value1, '@ 0.5 secs'::interval), non_negative_derivative(value2, '@ 0.2 secs'::interval), non_negative_derivative(value3, '@ 0.1 secs'::interval), non_negative_derivative(value4, '@ 2 secs'::interval)
+   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
+(3 rows)
+
+--Testcase 89:
+SELECT non_negative_derivative(value1, interval '0.5s'),non_negative_derivative(value2, interval '0.2s'),non_negative_derivative(value3, interval '0.1s'),non_negative_derivative(value4, interval '2s') FROM s3;
+ERROR:  stub non_negative_derivative(anyelement, interval) is called
+CONTEXT:  PL/pgSQL function non_negative_derivative(anyelement,interval) line 3 at RAISE
+--Testcase 90:
+EXPLAIN VERBOSE
+SELECT difference(value1),difference(value2),difference(value3),difference(value4) FROM s3;
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2924.00 rows=1462 width=32)
+   Output: difference(value1), difference(value2), difference(value3), difference(value4)
+   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
+(3 rows)
+
+--Testcase 91:
+SELECT difference(value1),difference(value2),difference(value3),difference(value4) FROM s3;
+ERROR:  stub difference(float8) is called
+CONTEXT:  PL/pgSQL function difference(double precision) line 3 at RAISE
+--Testcase 92:
+EXPLAIN VERBOSE
+SELECT non_negative_difference(value1),non_negative_difference(value2),non_negative_difference(value3),non_negative_difference(value4) FROM s3;
+                                                                  QUERY PLAN                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2924.00 rows=1462 width=32)
+   Output: non_negative_difference(value1), non_negative_difference(value2), non_negative_difference(value3), non_negative_difference(value4)
+   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
+(3 rows)
+
+--Testcase 93:
+SELECT non_negative_difference(value1),non_negative_difference(value2),non_negative_difference(value3),non_negative_difference(value4) FROM s3;
+ERROR:  stub non_negative_difference(float8) is called
+CONTEXT:  PL/pgSQL function non_negative_difference(double precision) line 3 at RAISE
+--Testcase 94:
+EXPLAIN VERBOSE
+SELECT elapsed(value1),elapsed(value2),elapsed(value3),elapsed(value4) FROM s3;
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2924.00 rows=1462 width=32)
+   Output: elapsed(value1), elapsed(value2), elapsed(value3), elapsed(value4)
+   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
+(3 rows)
+
+--Testcase 95:
+SELECT elapsed(value1),elapsed(value2),elapsed(value3),elapsed(value4) FROM s3;
+ERROR:  stub elapsed(anyelement) is called
+CONTEXT:  PL/pgSQL function elapsed(anyelement) line 3 at RAISE
+--Testcase 96:
+EXPLAIN VERBOSE
+SELECT elapsed(value1, interval '0.5s'),elapsed(value2, interval '0.2s'),elapsed(value3, interval '0.1s'),elapsed(value4, interval '2s') FROM s3;
+                                                                                 QUERY PLAN                                                                                 
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2924.00 rows=1462 width=32)
+   Output: elapsed(value1, '@ 0.5 secs'::interval), elapsed(value2, '@ 0.2 secs'::interval), elapsed(value3, '@ 0.1 secs'::interval), elapsed(value4, '@ 2 secs'::interval)
+   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
+(3 rows)
+
+--Testcase 97:
+--cf.) SELECT elapsed(value1, 500ms),elapsed(value2, 200ms),elapsed(value3, 100ms),elapsed(value4, 2s) FROM s3;
+SELECT elapsed(value1, interval '0.5s'),elapsed(value2, interval '0.2s'),elapsed(value3, interval '0.1s'),elapsed(value4, interval '2s') FROM s3;
+ERROR:  stub elapsed(anyelement, interval) is called
+CONTEXT:  PL/pgSQL function elapsed(anyelement,interval) line 3 at RAISE
+--Testcase 98:
+EXPLAIN VERBOSE
+SELECT moving_average(value1, 2),moving_average(value2, 2),moving_average(value3, 2),moving_average(value4, 2) FROM s3;
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2924.00 rows=1462 width=32)
+   Output: moving_average(value1, 2), moving_average(value2, 2), moving_average(value3, 2), moving_average(value4, 2)
+   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
+(3 rows)
+
+--Testcase 99:
+SELECT moving_average(value1, 2),moving_average(value2, 2),moving_average(value3, 2),moving_average(value4, 2) FROM s3;
+ERROR:  stub moving_average(float8, int) is called
+CONTEXT:  PL/pgSQL function moving_average(double precision,integer) line 3 at RAISE
+--Testcase 100:
+EXPLAIN VERBOSE
+SELECT exponential_moving_average(value1, 2),exponential_moving_average(value2, 2),exponential_moving_average(value3, 2),exponential_moving_average(value4, 2) FROM s3;
+                                                                              QUERY PLAN                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2924.00 rows=1462 width=32)
+   Output: exponential_moving_average(value1, 2), exponential_moving_average(value2, 2), exponential_moving_average(value3, 2), exponential_moving_average(value4, 2)
+   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
+(3 rows)
+
+--Testcase 101:
+SELECT exponential_moving_average(value1, 2),exponential_moving_average(value2, 2),exponential_moving_average(value3, 2),exponential_moving_average(value4, 2) FROM s3;
+ERROR:  stub exponential_moving_average(float8, int) is called
+CONTEXT:  PL/pgSQL function exponential_moving_average(double precision,integer) line 3 at RAISE
+--Testcase 102:
+EXPLAIN VERBOSE
+SELECT exponential_moving_average(value1, 2, 2),exponential_moving_average(value2, 2, 2),exponential_moving_average(value3, 2, 2),exponential_moving_average(value4, 2, 2) FROM s3;
+                                                                                    QUERY PLAN                                                                                    
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2924.00 rows=1462 width=32)
+   Output: exponential_moving_average(value1, 2, 2), exponential_moving_average(value2, 2, 2), exponential_moving_average(value3, 2, 2), exponential_moving_average(value4, 2, 2)
+   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
+(3 rows)
+
+--Testcase 103:
+SELECT exponential_moving_average(value1, 2, 2),exponential_moving_average(value2, 2, 2),exponential_moving_average(value3, 2, 2),exponential_moving_average(value4, 2, 2) FROM s3;
+ERROR:  stub exponential_moving_average(float8, int, int) is called
+CONTEXT:  PL/pgSQL function exponential_moving_average(double precision,integer,integer) line 3 at RAISE
+--Testcase 62:
+DROP FOREIGN TABLE s3;
+--Testcase 68:
+CREATE FOREIGN TABLE b3(time timestamp with time zone, tag1 text, value1 float8, value2 bigint, value3 bool) SERVER server1 OPTIONS(table 'b3', tags 'tag1');
+--Testcase 69:
+-- bool type var in where clause (explain)
+EXPLAIN VERBOSE
+SELECT sqrt(abs(value1)) FROM b3 WHERE value3 != true ORDER BY 1;
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Sort  (cost=1352.46..1355.66 rows=1280 width=8)
+   Output: (sqrt(abs(value1)))
+   Sort Key: (sqrt(abs(b3.value1)))
+   ->  Foreign Scan on public.b3  (cost=10.00..1286.40 rows=1280 width=8)
+         Output: sqrt(abs(value1))
+         Filter: (NOT b3.value3)
+         InfluxDB query: SELECT "value1", "value3" FROM "b3"
+(7 rows)
+
+--Testcase 70:
+-- bool type var in where clause (result)
+SELECT sqrt(abs(value1)) FROM b3 WHERE value3 != true ORDER BY 1;
+        sqrt        
+--------------------
+ 0.4472135954999579
+ 1.0488088481701516
+  1.816590212458495
+(3 rows)
+
+--Testcase 71:
+DROP FOREIGN TABLE b3;
+--Testcase 63:
+DROP USER MAPPING FOR CURRENT_USER SERVER server1;
+--Testcase 64:
+DROP SERVER server1;
+--Testcase 65:
+DROP EXTENSION influxdb_fdw CASCADE;

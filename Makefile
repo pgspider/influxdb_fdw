@@ -21,7 +21,6 @@ UNAME = uname
 OS := $(shell $(UNAME))
 ifeq ($(OS), Darwin)
 DLSUFFIX = .dylib
-PG_LDFLAGS = -framework CoreFoundation -framework Security
 else
 DLSUFFIX = .so
 endif
@@ -47,6 +46,15 @@ endif
 ifeq (,$(findstring $(MAJORVERSION), 9.6 10 11 12 13))
 $(error PostgreSQL 9.6, 10, 11, 12 or 13 is required to compile this extension)
 endif
+
+ifdef REGRESS_PREFIX
+REGRESS_PREFIX_SUB = $(REGRESS_PREFIX)
+else
+REGRESS_PREFIX_SUB = $(VERSION)
+endif
+
+REGRESS := $(addprefix $(REGRESS_PREFIX_SUB)/,$(REGRESS))
+$(shell mkdir -p results/$(REGRESS_PREFIX_SUB))
 
 query.a: query.go
 	go build -buildmode=c-archive query.go
