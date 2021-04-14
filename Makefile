@@ -54,7 +54,7 @@ REGRESS_PREFIX_SUB = $(VERSION)
 endif
 
 REGRESS := $(addprefix $(REGRESS_PREFIX_SUB)/,$(REGRESS))
-$(shell mkdir -p results/$(REGRESS_PREFIX_SUB))
+$(shell mkdir -p results/$(REGRESS_PREFIX_SUB)/extra)
 
 query.a: query.go
 	go build -buildmode=c-archive query.go
