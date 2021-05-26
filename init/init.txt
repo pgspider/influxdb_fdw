@@ -21,3 +21,6 @@ t4,tag1=a,tag2=x value1=3.0,value2=100 2
 t4,tag1=b,tag2=y value1=10.0,value2=200 3
 t4,tag1=b,tag2=z value1=20.0,value2=200 4
 t4,tag1=b,tag2=z value1=30.0,value2=200 5
+
+numbers,tag1=a a=1i,b="One" 0
+numbers,tag1=a a=2i,b="Two" 1

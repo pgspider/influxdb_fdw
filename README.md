@@ -62,13 +62,17 @@ SELECT * FROM t1;
 
 ## Features
 
-InfluxDB FDW supports pushed-down functions
-- WHERE clauses including timestamp, interval and `now()` functions are pushed down
-- Some of aggregation are pushed down such as `influx_time` and `last` functions. These functions does not work on PostgreSQL 9.
+- InfluxDB FDW supports pushed down some aggregate functions: count, stddev, sum, max, min.
+- InfluxDB FDW supports INSERT, DELETE statements.
+  - `time` and `time_text` column can used for INSERT, DELETE statements.
+  - `time` column can express timestamp with precision down to microseconds.
+  - `time_text` column can express timestamp with precision down to nanoseconds.
+- WHERE clauses including timestamp, interval and `now()` functions are pushed down.
+- LIMIT...OFFSET clauses are pushed down when there is LIMIT clause only or both LIMIT and OFFSET.<br>
 
 ## Limitations
-- INSERT, UPDATE and DELETE are not supported.
-
+- UPDATE is not supported.
+- WITH CHECK OPTION constraints is not supported.
 Following limitations originate from data model and query language of InfluxDB.
 - Result sets have different number of rows depending on specified target list.
 For example, `SELECT field1 FROM t1` and `SELECT field2 FROM t1` returns different number of rows if
@@ -76,13 +80,13 @@ the number of points with field1 and field2 are different in InfluxDB database.
 - Timestamp precision may be lost because timestamp resolution of PostgreSQL is microseconds while that of InfluxDB is nanoseconds.
 - Conditions like `WHERE time + interval '1 day' < now()` do not work. Please use `WHERE time < now() - interval '1 day'`.
 
-When a query to foreign tables fails, you can find why it fails by seeing a query executed in InfluxDB with `EXPLAIN (VERBOSE)`.
+When a query to foreign tables fails, you can find why it fails by seeing a query executed in InfluxDB with `EXPLAIN VERBOSE`.
 
 ## Contributing
 Opening issues and pull requests on GitHub are welcome.
 
 ## License
-Copyright (c) 2018 - 2020, TOSHIBA Corporation
+Copyright (c) 2018 - 2021, TOSHIBA Corporation
 
 Copyright (c) 2011 - 2016, EnterpriseDB Corporation
 

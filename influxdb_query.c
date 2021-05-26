@@ -59,8 +59,10 @@
 #include "storage/fd.h"
 #include "catalog/pg_type.h"
 
+extern char *influxdb_replace_function(char *in);
+
 /*
- * convert_influxdb_to_pg: Convert influxdb string data into PostgreSQL's compatible data types
+ * influxdb_convert_to_pg: Convert influxdb string data into PostgreSQL's compatible data types
  */
 Datum
 influxdb_convert_to_pg(Oid pgtyp, int pgtypmod, char **row, int attnum)
@@ -88,8 +90,100 @@ influxdb_convert_to_pg(Oid pgtyp, int pgtypmod, char **row, int attnum)
 }
 
 /*
- * bind_sql_var:
- * Bind the values provided as DatumBind the values and nulls to modify the target table (INSERT/UPDATE)
+ * influxdb_convert_record_to_datum: Convert influxdb string data into PostgreSQL's compatible data types
+ */
+Datum
+influxdb_convert_record_to_datum(Oid pgtyp, int pgtypmod, char **row, int attnum, int ntags, int nfield, char **column, char *opername, Oid relid, int ncol)
+{
+	Datum		value_datum = 0;
+	Datum		valueDatum = 0;
+	regproc		typeinput;
+	HeapTuple	tuple;
+	int			typemod;
+	int			i;
+	StringInfo	record = makeStringInfo();
+	bool		first = true;
+	char		*foreignColName = NULL;
+	int			nmatch = 0;
+
+	/* get the type's output function */
+	tuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(pgtyp));
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for type%u", pgtyp);
+
+	typeinput = ((Form_pg_type) GETSTRUCT(tuple))->typinput;
+	typemod = ((Form_pg_type) GETSTRUCT(tuple))->typtypmod;
+	ReleaseSysCache(tuple);
+
+	/* Append time column */
+	appendStringInfo(record, "(%s,", row[0]);
+
+	/* Append tags column as NULL */
+	for(i = 0; i < ntags; i++)
+		appendStringInfo(record, ",");
+
+	/* Append fields column */
+	i = 0;
+	do {
+		foreignColName = get_attname(relid, ++i
+#if (PG_VERSION_NUM >= 110000)
+							  ,
+							  true
+#endif
+			);
+
+		if (foreignColName != NULL &&
+			!INFLUXDB_IS_TIME_COLUMN(foreignColName) &&
+			!influxdb_is_tag_key(foreignColName, relid))
+		{
+			bool match = false;
+			int j;
+
+			for (j = attnum; j < ncol; j++)
+			{
+				/* 
+				 * InfluxDB returns column name of result in format: functionname_columnname (Example: last_value1).
+				 * We need to concatenate string to compare with the column returned from InfluxDB.
+				 */
+				char *influxdbColName = column[j];
+				char *influxdbFuncName = influxdb_replace_function(opername);
+				char *tmpName = psprintf("%s_%s", influxdbFuncName, foreignColName);
+
+				if (strcmp(tmpName, influxdbColName) == 0)
+				{
+					match = true;
+					nmatch++;
+					if(first)
+					{
+						appendStringInfo(record, "%s", row[j] != NULL?row[j]:"");
+						first = false;
+					}
+					else
+						appendStringInfo(record, ",%s", row[j] != NULL?row[j]:"");
+					break;
+				}
+			}
+			if (nmatch == nfield)
+				break;
+
+			/* Column of temp table does not match regex, fill as NULL */
+			if (match == false)
+				appendStringInfo(record, ",");
+		}
+	} while (foreignColName != NULL);
+
+	appendStringInfo(record, ")");
+	valueDatum = CStringGetDatum(record->data);
+
+	/* convert string value to appropriate type value */
+	value_datum = OidFunctionCall3(typeinput, valueDatum, ObjectIdGetDatum(InvalidOid), Int32GetDatum(typemod));
+
+	return value_datum;
+}
+
+/*
+ * influxdb_bind_sql_var
+ * Bind the values provided as DatumBind the values and nulls to modify the target table
  */
 void
 influxdb_bind_sql_var(Oid type, int idx, Datum value, bool *isnull,
@@ -171,10 +265,8 @@ influxdb_bind_sql_var(Oid type, int idx, Datum value, bool *isnull,
 				break;
 			}
 		case TEXTOID:
+		case BPCHAROID:
 		case VARCHAROID:
-		case TIMEOID:
-		case TIMESTAMPOID:
-		case TIMESTAMPTZOID:
 			{
 				/* Bind as string */
 				char	   *outputString = NULL;
@@ -187,7 +279,21 @@ influxdb_bind_sql_var(Oid type, int idx, Datum value, bool *isnull,
 				param_influxdb_types[idx] = INFLUXDB_STRING;
 				break;
 			}
+		case TIMEOID:
+		case TIMESTAMPOID:
+		case TIMESTAMPTZOID:
+			{
+				/* Bind as string, but types is time */
+				char	   *outputString = NULL;
+				Oid			outputFunctionId = InvalidOid;
+				bool		typeVarLength = false;
 
+				getTypeOutputInfo(type, &outputFunctionId, &typeVarLength);
+				outputString = OidOutputFunctionCall(outputFunctionId, value);
+				param_influxdb_values[idx].s = outputString;
+				param_influxdb_types[idx] = INFLUXDB_TIME;
+				break;
+			}
 		default:
 			{
 				ereport(ERROR, (errcode(ERRCODE_FDW_INVALID_DATA_TYPE),

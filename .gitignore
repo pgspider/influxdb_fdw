@@ -2,3 +2,4 @@
 *.so
 *.BAK
 _cgo_*
+_obj*
