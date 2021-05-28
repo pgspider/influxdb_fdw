@@ -2,6 +2,7 @@
 This PostgreSQL extension is a Foreign Data Wrapper (FDW) for InfluxDB.
 
 The current version can work with PostgreSQL 9.6, 10, 11, 12 and 13.
+Currently this FDW supports InfluxDB 1.x series only.
 
 Go version should be 1.10.4 or later.
 ## Installation
