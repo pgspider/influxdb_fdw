@@ -562,6 +562,31 @@ SELECT * FROM t5;
  2015-08-18 00:00:00 | 2015-08-18T00:00:00Z | 100
 (2 rows)
 
+--get version
+--Testcase 92:
+\df influxdb_fdw*
+                                 List of functions
+ Schema |          Name          | Result data type | Argument data types |  Type  
+--------+------------------------+------------------+---------------------+--------
+ public | influxdb_fdw_handler   | fdw_handler      |                     | normal
+ public | influxdb_fdw_validator | void             | text[], oid         | normal
+ public | influxdb_fdw_version   | integer          |                     | normal
+(3 rows)
+
+--Testcase 93:
+SELECT * FROM public.influxdb_fdw_version();
+ influxdb_fdw_version 
+----------------------
+                  301
+(1 row)
+
+--Testcase 94:
+SELECT influxdb_fdw_version();
+ influxdb_fdw_version 
+----------------------
+                  301
+(1 row)
+
 --Testcase 80:
 DROP FOREIGN TABLE t1;
 --Testcase 81:
