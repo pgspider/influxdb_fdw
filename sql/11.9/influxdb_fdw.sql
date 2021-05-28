@@ -213,6 +213,14 @@ CREATE FOREIGN TABLE t5(t timestamp OPTIONS (column_name 'time') , tag1 text OPT
 --Testcase 56:
 SELECT * FROM t5;
 
+--get version
+--Testcase 92:
+\df influxdb_fdw*
+--Testcase 93:
+SELECT * FROM public.influxdb_fdw_version();
+--Testcase 94:
+SELECT influxdb_fdw_version();
+
 --Testcase 80:
 DROP FOREIGN TABLE t1;
 --Testcase 81:

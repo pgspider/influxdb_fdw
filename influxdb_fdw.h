@@ -63,6 +63,8 @@
 #define INFLUXDB_TARGETS_MIXING_AGGREF_UNSAFE	(INFLUXDB_TARGETS_MARK_COLUMN | INFLUXDB_TARGETS_MARK_AGGREF)
 #define INFLUXDB_TARGETS_MIXING_AGGREF_SAFE		(0u)
 
+#define CODE_VERSION 301
+
 /*
  * Options structure to store the InfluxDB
  * server information

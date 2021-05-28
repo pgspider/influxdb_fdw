@@ -81,6 +81,7 @@ extern Datum influxdb_fdw_handler(PG_FUNCTION_ARGS);
 extern Datum influxdb_fdw_validator(PG_FUNCTION_ARGS);
 
 PG_FUNCTION_INFO_V1(influxdb_fdw_handler);
+PG_FUNCTION_INFO_V1(influxdb_fdw_version);
 
 static void influxdbGetForeignRelSize(PlannerInfo *root,
 									  RelOptInfo *baserel,
@@ -176,6 +177,12 @@ _PG_init(void)
 static void
 influxdb_fdw_exit(int code, Datum arg)
 {
+}
+
+Datum
+influxdb_fdw_version(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_INT32(CODE_VERSION);
 }
 
 Datum
