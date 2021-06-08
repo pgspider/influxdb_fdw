@@ -20,7 +20,7 @@ def make_check_test(String target, String version) {
         sh """
             rm -rf make_check_existed_test.out || true
             docker exec -u postgres postgresserver_multi_for_influxdb_existed_test /bin/bash -c '/tmp/influxdb_existed_test.sh ${env.GIT_BRANCH} ${target}${version}'
-            docker exec -w /home/postgres/${target}${version}/contrib/influxdb_fdw postgresserver_multi_for_influxdb_existed_test /bin/bash -c 'su -c "export http_proxy=http://133.199.251.110:8080 && export https_proxy=http://133.199.251.110:8080 && export PATH=$PATH:/usr/local/go/bin && go get github.com/influxdata/influxdb1-client/v2 && export LANGUAGE="en_US.UTF-8" && export LANG="en_US.UTF-8" && export LC_ALL="en_US.UTF-8" && make ${prefix} && export NO_PROXY=172.23.0.3 && make check ${prefix} | tee make_check.out" postgres'
+            docker exec -u postgres -w /home/postgres/${target}${version}/contrib/influxdb_fdw postgresserver_multi_for_influxdb_existed_test /bin/bash -c 'export http_proxy=http://133.199.251.110:8080 && export https_proxy=http://133.199.251.110:8080 && export PATH=$PATH:/usr/local/go/bin && go get github.com/influxdata/influxdb1-client/v2 && export LANGUAGE="en_US.UTF-8" && export LANG="en_US.UTF-8" && export LC_ALL="en_US.UTF-8" && make ${prefix} && export NO_PROXY=172.23.0.3 && make check ${prefix} | tee make_check.out'
             docker cp postgresserver_multi_for_influxdb_existed_test:/home/postgres/${target}${version}/contrib/influxdb_fdw/make_check.out make_check_existed_test.out
             docker cp postgresserver_multi_for_influxdb_existed_test:/home/postgres/${target}${version}/contrib/influxdb_fdw/results/ results_${target}${version}
         """
@@ -29,7 +29,7 @@ def make_check_test(String target, String version) {
         status = sh(returnStatus: true, script: "grep -q 'All [0-9]* tests passed' 'make_check_existed_test.out'")
         if (status != 0) {
             unstable(message: "Set UNSTABLE result")
-            sh 'docker cp postgresserver_multi_for_influxdb_existed_test:/home/postgres/${target}${version}/contrib/influxdb_fdw/regression.diffs regression.diffs'
+            sh "docker cp postgresserver_multi_for_influxdb_existed_test:/home/postgres/${target}${version}/contrib/influxdb_fdw/regression.diffs regression.diffs"
             sh 'cat regression.diffs || true'
             emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check on ${target}${version} FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
             updateGitlabCommitStatus name: 'make_check', state: 'failed'
@@ -109,34 +109,44 @@ pipeline {
         }
         stage('make_check_FDW_Test_With_Postgres_9_6_19') {
             steps {
-                make_check_test("postgresql", "9.6.19")
+                catchError() {
+                    make_check_test("postgresql", "9.6.19")
+                }
             }
         }
         stage('make_check_FDW_Test_With_Postgres_10_14') {
             steps {
-                make_check_test("postgresql", "10.14")
+                catchError() {
+                    make_check_test("postgresql", "10.14")
+                }
             }
         }
         stage('make_check_FDW_Test_With_Postgres_11_9') {
             steps {
-                make_check_test("postgresql", "11.9")
+                catchError() {
+                    make_check_test("postgresql", "11.9")
+                }
             }
         }
         stage('make_check_FDW_Test_With_Postgres_12_4') {
             steps {
-                make_check_test("postgresql", "12.4")
+                catchError() {
+                    make_check_test("postgresql", "12.4")
+                }
             }
         }
         stage('make_check_FDW_Test_With_Postgres_13_0') {
             steps {
-                make_check_test("postgresql", "13.0")
+                catchError() {
+                    make_check_test("postgresql", "13.0")
+                }
             }
         }
         stage('Build_PGSpider_For_FDW_Test') {
             steps {
                 catchError() {
                     sh """
-                        docker exec postgresserver_multi_for_influxdb_existed_test /bin/bash -c 'su -c "/tmp/initialize_pgspider_existed_test.sh" postgres'
+                        docker exec -u postgres postgresserver_multi_for_influxdb_existed_test /bin/bash -c '/tmp/initialize_pgspider_existed_test.sh'
                     """
                 }
             }
@@ -152,7 +162,9 @@ pipeline {
         }
         stage('make_check_FDW_Test_With_PGSpider') {
             steps {
-                make_check_test("PGSpider", "")
+                catchError() {
+                    make_check_test("PGSpider", "")
+                }
             }
         }
     }

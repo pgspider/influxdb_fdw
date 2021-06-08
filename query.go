@@ -1,13 +1,16 @@
 package main
+
 // #cgo CFLAGS: -fPIC
 /*
 #include <stdlib.h>
 
-typedef enum  InfluxDBType{
+typedef enum InfluxDBType{
 	INFLUXDB_INT64,
 	INFLUXDB_DOUBLE,
 	INFLUXDB_BOOLEAN,
-	INFLUXDB_STRING
+	INFLUXDB_STRING,
+	INFLUXDB_TIME,
+	INFLUXDB_NULL
 } InfluxDBType;
 
 typedef union InfluxDBValue{
@@ -19,7 +22,7 @@ typedef union InfluxDBValue{
 
 // Represents schema of one measurement(table)
 typedef struct TableInfo {
-	char *measurement;	// name
+	char *measurement;	//name
 	char **tag; 		//array of tag name
 	char **field;		//array of field name
 	char **field_type;	//array of field type
@@ -35,9 +38,21 @@ typedef struct InfluxDBResult {
 	InfluxDBRow *rows;
 	int ncol;
 	int nrow;
+	char **columns;
 	char **tagkeys;
 	int ntag;
 } InfluxDBResult;
+
+typedef enum InfluxDBColumnType{
+	INFLUXDB_TIME_KEY,
+	INFLUXDB_TAG_KEY,
+	INFLUXDB_FIELD_KEY
+} InfluxDBColumnType;
+
+typedef struct InfluxDBColumnInfo {
+	char *column_name;				//name of column
+	InfluxDBColumnType column_type;	//type of column
+} InfluxDBColumnInfo;
 */
 import "C"
 
@@ -45,13 +60,27 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"time"
 	"unsafe"
 
 	"github.com/influxdata/influxdb1-client/models"
-	"github.com/influxdata/influxdb1-client/v2"
+	client "github.com/influxdata/influxdb1-client/v2"
 )
 
-// convenience function to query the database using one statement and one series
+const timestamptzFormat = "2006-01-02 15:04:05.999999-07"
+
+var timeFormat = []string{
+	"2006-01-02T15:04:05.999999999Z07:00",
+	"2006-01-02T15:04:05.999999999Z",
+	"2006-01-02 15:04:05.999999999-07",
+	"2006-01-02 15:04:05.999999999",
+	"Mon Jan 02 15:04:05.999999999 2006 MST",
+	"Mon Jan 02 15:04:05.999999999 2006",
+	"15:04:05.999999999-07",
+	"15:04:05.999999999",
+}
+
+//convenience function to query the database using one statement and one series
 func queryDB(clnt client.Client, q client.Query) (res models.Row, err error) {
 	rows, err := queryDBRows(clnt, q)
 	if err != nil {
@@ -80,12 +109,12 @@ func queryDBRows(clnt client.Client, q client.Query) (res []models.Row, err erro
 	return res, nil
 }
 
-// Allocate array of pointer
+//Allocate array of pointer
 func allocCPointerArray(length int) unsafe.Pointer {
 	return C.calloc(1, C.size_t((int(unsafe.Sizeof(uintptr(0))) * length)))
 }
 
-// Allocate array of C String
+//Allocate array of C String
 func allocCStringArray(length int) **C.char {
 	len := int(unsafe.Sizeof(uintptr(0))) * length
 	return (**C.char)(C.calloc(1, (C.size_t(len))))
@@ -99,11 +128,25 @@ func cStringArrayToSlice(array **C.char, length int) [](*C.char) {
 	return (*[1 << 30](*C.char))(unsafe.Pointer(array))[:length:length]
 }
 
+//Parse time from timeString
+func parseTime(timeString string) (time.Time, error) {
+	for _, form := range timeFormat {
+		times, err := time.Parse(form, timeString)
+		if err == nil {
+			//Parse time value successful
+			return times, nil
+		}
+	}
+	//Parse time value unsuccessful
+	return time.Now(), fmt.Errorf("parsing time %q error", timeString)
+}
+
+//InfluxDBSchemaInfo returns information of table if success
 //export InfluxDBSchemaInfo
 func InfluxDBSchemaInfo(addr *C.char, port C.int, user *C.char, pass *C.char,
 	db *C.char) (retinfo *C.struct_TableInfo, length int, errret *C.char) {
 
-	// Create a new HTTPClient
+	//Create a new HTTPClient
 	c, err := client.NewHTTPClient(client.HTTPConfig{
 		Addr:     C.GoString(addr) + ":" + strconv.Itoa(int(port)),
 		Username: C.GoString(user),
@@ -165,7 +208,7 @@ func InfluxDBSchemaInfo(addr *C.char, port C.int, user *C.char, pass *C.char,
 			return nil, 0, C.CString(err.Error())
 		}
 
-		// fill member of tableInfo
+		//fill member of tableInfo
 
 		fieldLen := len(fieldresult.Values)
 		tableInfo[i].field_len = C.int(fieldLen)
@@ -196,6 +239,7 @@ func InfluxDBSchemaInfo(addr *C.char, port C.int, user *C.char, pass *C.char,
 	return info, len(result.Values), nil
 }
 
+//InfluxDBFreeSchemaInfo returns nothing
 //export InfluxDBFreeSchemaInfo
 func InfluxDBFreeSchemaInfo(tableInfo *C.struct_TableInfo, length int) {
 	if length <= 0 {
@@ -231,27 +275,28 @@ func InfluxDBFreeSchemaInfo(tableInfo *C.struct_TableInfo, length int) {
 	}
 }
 
-func bindParameter(ctypes *C.InfluxDBType, cparam *C.InfluxDBValue, cparamNum C.int, query *client.Query) error {
-	// Set query.Parameters to parameters
+func bindParameter(ctypes *C.InfluxDBType, cvalues *C.InfluxDBValue, cparamNum C.int, query *client.Query) error {
+	//Set query.Parameters to parameters
 	paramNum := int(cparamNum)
+
 	if cparamNum > 0 {
-		param := (*[1 << 30]C.union_InfluxDBValue)(unsafe.Pointer(cparam))[:paramNum:paramNum]
+		values := (*[1 << 30]C.union_InfluxDBValue)(unsafe.Pointer(cvalues))[:paramNum:paramNum]
 		types := (*[1 << 30]C.enum_InfluxDBType)(unsafe.Pointer(ctypes))[:paramNum:paramNum]
 		query.Parameters = make(map[string]interface{})
 
-		// Query contains paramNum placeholder
-		// Each placeholder is "$1", "$2",...,so set "1","2",... to map key
-		for i := range param {
+		//Query contains paramNum placeholder
+		//Each placeholder is "$1", "$2",...,so set "1","2",... to map key
+		for i := range values {
 			switch types[i] {
 			case C.INFLUXDB_INT64:
 				//Cannot access union member in Go, so use cast
-				query.Parameters[strconv.Itoa(i+1)] = *(*int64)(unsafe.Pointer(&param[i]))
+				query.Parameters[strconv.Itoa(i+1)] = *(*int64)(unsafe.Pointer(&values[i]))
 				break
 			case C.INFLUXDB_DOUBLE:
-				query.Parameters[strconv.Itoa(i+1)] = *(*float64)(unsafe.Pointer(&(param[i])))
+				query.Parameters[strconv.Itoa(i+1)] = *(*float64)(unsafe.Pointer(&(values[i])))
 				break
 			case C.INFLUXDB_BOOLEAN:
-				b := *(*int32)(unsafe.Pointer(&(param[i])))
+				b := *(*int32)(unsafe.Pointer(&(values[i])))
 				val := false
 				if b != 0 {
 					val = true
@@ -259,12 +304,24 @@ func bindParameter(ctypes *C.InfluxDBType, cparam *C.InfluxDBValue, cparamNum C.
 				query.Parameters[strconv.Itoa(i+1)] = val
 				break
 			case C.INFLUXDB_STRING:
-				query.Parameters[strconv.Itoa(i+1)] = C.GoString(*(**C.char)(unsafe.Pointer(&(param[i]))))
+				query.Parameters[strconv.Itoa(i+1)] = C.GoString(*(**C.char)(unsafe.Pointer(&(values[i]))))
+				break
+			case C.INFLUXDB_TIME:
+				//We need to parse time value from String to Time type and back
+				timeString := C.GoString(*(**C.char)(unsafe.Pointer(&(values[i]))))
+				times, err := parseTime(timeString)
+				if err != nil {
+					//Parse time value unsuccessful
+					return err
+				}
+				query.Parameters[strconv.Itoa(i+1)] = times.Format(time.RFC3339Nano)
+				break
+			case C.INFLUXDB_NULL:
+				query.Parameters[strconv.Itoa(i+1)] = ""
 				break
 			default:
 				return fmt.Errorf("unexpected type: %v", types[i])
 			}
-
 		}
 	}
 	return nil
@@ -274,9 +331,9 @@ func bindParameter(ctypes *C.InfluxDBType, cparam *C.InfluxDBValue, cparamNum C.
 //export InfluxDBQuery
 func InfluxDBQuery(cquery *C.char, addr *C.char, port C.int,
 	user *C.char, pass *C.char, db *C.char,
-	ctypes *C.InfluxDBType, cparam *C.InfluxDBValue, cparamNum C.int) (C.struct_InfluxDBResult, *C.char) {
+	ctypes *C.InfluxDBType, cvalues *C.InfluxDBValue, cparamNum C.int) (C.struct_InfluxDBResult, *C.char) {
 
-	// Create a new HTTPClient
+	//Create a new HTTPClient
 	cl, err := client.NewHTTPClient(client.HTTPConfig{
 		Addr:     C.GoString(addr) + ":" + strconv.Itoa(int(port)),
 		Username: C.GoString(user),
@@ -286,29 +343,30 @@ func InfluxDBQuery(cquery *C.char, addr *C.char, port C.int,
 		return C.InfluxDBResult{}, C.CString(err.Error())
 	}
 	defer cl.Close()
+
 	query := client.Query{
 		Command:  C.GoString(cquery),
 		Database: C.GoString(db),
 	}
-	err = bindParameter(ctypes, cparam, cparamNum, &query)
+	err = bindParameter(ctypes, cvalues, cparamNum, &query)
 	if err != nil {
 		return C.InfluxDBResult{}, C.CString(err.Error())
 	}
-	// Query and get result
+
+	//Query and get result
 	rows, err := queryDBRows(cl, query)
 	if err != nil {
 		return C.InfluxDBResult{}, C.CString(err.Error())
 	}
 
 	//Convert result to C.struct_InfluxDBResult
-
 	nrow := 0
 	for _, row := range rows {
 		nrow += len(row.Values)
 	}
 
+	//Returns empty result, not error
 	if nrow == 0 {
-		//returns empty reuslt, not error
 		return C.InfluxDBResult{}, nil
 	}
 
@@ -317,6 +375,7 @@ func InfluxDBQuery(cquery *C.char, addr *C.char, port C.int,
 	result := C.InfluxDBResult{
 		ncol:    C.int(fieldLen + tagLen),
 		nrow:    C.int(nrow),
+		columns: allocCStringArray(fieldLen),
 		rows:    (*C.struct_InfluxDBRow)(C.malloc(C.size_t(int(C.sizeof_struct_InfluxDBRow) * nrow))),
 		ntag:    C.int(tagLen),
 		tagkeys: allocCStringArray(tagLen),
@@ -328,6 +387,14 @@ func InfluxDBQuery(cquery *C.char, addr *C.char, port C.int,
 		tagkeys[i] = key
 		ctagkeys[i] = C.CString(key)
 		i++
+	}
+
+	// Get the list of column name
+	i = 0
+	ntuple := cStringArrayToSlice(result.columns, fieldLen)
+	for _, row := range rows[0].Columns {
+		ntuple[i] = C.CString(row)
+		i ++
 	}
 
 	resultRows := (*[1 << 30]C.struct_InfluxDBRow)(unsafe.Pointer(result.rows))[:nrow:nrow]
@@ -365,6 +432,7 @@ func InfluxDBQuery(cquery *C.char, addr *C.char, port C.int,
 	return result, nil
 }
 
+//InfluxDBFreeResult returns nothing
 //export InfluxDBFreeResult
 func InfluxDBFreeResult(result *C.struct_InfluxDBResult) {
 	if result == nil {
@@ -386,6 +454,123 @@ func InfluxDBFreeResult(result *C.struct_InfluxDBResult) {
 		C.free(unsafe.Pointer(r.tuple))
 	}
 	C.free(unsafe.Pointer(result.rows))
+}
+
+func makeColumnValue(ccolumns *C.struct_InfluxDBColumnInfo, ctypes *C.InfluxDBType,
+	cvalues *C.InfluxDBValue, cparamNum C.int) (map[string]string, map[string]interface{}, time.Time, error) {
+
+	//Initialize tags, fields and time value
+	paramNum := int(cparamNum)
+	fields := make(map[string]interface{})
+	tags := make(map[string]string)
+	timecol, _ := time.Parse(timestamptzFormat, time.Now().Format(timestamptzFormat))
+
+	if cparamNum > 0 {
+		columnInfo := (*[1 << 30]C.struct_InfluxDBColumnInfo)(unsafe.Pointer(ccolumns))[:paramNum:paramNum]
+		values := (*[1 << 30]C.union_InfluxDBValue)(unsafe.Pointer(cvalues))[:paramNum:paramNum]
+		types := (*[1 << 30]C.enum_InfluxDBType)(unsafe.Pointer(ctypes))[:paramNum:paramNum]
+
+		//Type of tags key and time column always is String, so other types always is fields key
+		for i := range values {
+			switch types[i] {
+			case C.INFLUXDB_INT64:
+				fields[C.GoString(*(**C.char)(unsafe.Pointer(&(columnInfo[i].column_name))))] = *(*int64)(unsafe.Pointer(&values[i]))
+				break
+			case C.INFLUXDB_DOUBLE:
+				fields[C.GoString(*(**C.char)(unsafe.Pointer(&(columnInfo[i].column_name))))] = *(*float64)(unsafe.Pointer(&(values[i])))
+				break
+			case C.INFLUXDB_BOOLEAN:
+				b := *(*int32)(unsafe.Pointer(&(values[i])))
+				val := false
+				if b != 0 {
+					val = true
+				}
+				fields[C.GoString(*(**C.char)(unsafe.Pointer(&(columnInfo[i].column_name))))] = val
+				break
+			case C.INFLUXDB_STRING:
+				switch columnInfo[i].column_type {
+				case C.INFLUXDB_TIME_KEY:
+					//We need to parse time value from String to Time type
+					timeString := C.GoString(*(**C.char)(unsafe.Pointer(&(values[i]))))
+					times, err := parseTime(timeString)
+					if err != nil {
+						//Parse time value unsuccessful
+						return tags, fields, timecol, err
+					}
+					timecol = times
+					break
+				case C.INFLUXDB_TAG_KEY:
+					tags[C.GoString(*(**C.char)(unsafe.Pointer(&(columnInfo[i].column_name))))] = C.GoString(*(**C.char)(unsafe.Pointer(&(values[i]))))
+					break
+				case C.INFLUXDB_FIELD_KEY:
+					fields[C.GoString(*(**C.char)(unsafe.Pointer(&(columnInfo[i].column_name))))] = C.GoString(*(**C.char)(unsafe.Pointer(&(values[i]))))
+					break
+				}
+				break
+			case C.INFLUXDB_TIME:
+				//We need to parse time value from String to Time type
+				timeString := C.GoString(*(**C.char)(unsafe.Pointer(&(values[i]))))
+				times, err := parseTime(timeString)
+				if err != nil {
+					//Parse time value unsuccessful
+					return tags, fields, timecol, err
+				}
+				timecol = times
+				break
+			case C.INFLUXDB_NULL:
+				//We do not need append null value when execute INSERT
+				break
+			default:
+				return tags, fields, timecol, fmt.Errorf("unexpected type: %v", types[i])
+			}
+		}
+	}
+	return tags, fields, timecol, nil
+}
+
+//InfluxDBInsert returns nil if success
+//export InfluxDBInsert
+func InfluxDBInsert(addr *C.char, port C.int, user *C.char, pass *C.char,
+	db *C.char, ccolumns *C.struct_InfluxDBColumnInfo, tablename *C.char,
+	ctypes *C.InfluxDBType, cvalues *C.InfluxDBValue, cparamNum C.int) *C.char {
+
+	//Create a new HTTPClient
+	cl, err := client.NewHTTPClient(client.HTTPConfig{
+		Addr:     C.GoString(addr) + ":" + strconv.Itoa(int(port)),
+		Username: C.GoString(user),
+		Password: C.GoString(pass),
+	})
+	if err != nil {
+		return C.CString(err.Error())
+	}
+	defer cl.Close()
+
+	//Create a new point batch
+	bp, _ := client.NewBatchPoints(client.BatchPointsConfig{
+		Database: C.GoString(db),
+	})
+
+	//Create tags, fields and time data
+	tags, fields, timecol, err := makeColumnValue(ccolumns, ctypes, cvalues, cparamNum)
+	if err != nil {
+		return C.CString(err.Error())
+	}
+
+	//Create a point and add to batch
+	pt, err := client.NewPoint(C.GoString(tablename), tags, fields, timecol)
+	if err != nil {
+		return C.CString(err.Error())
+	}
+
+	bp.AddPoint(pt)
+
+	//Write the batch
+	err = cl.Write(bp)
+	if err != nil {
+		return C.CString(err.Error())
+	}
+
+	return nil
 }
 
 func main() {
