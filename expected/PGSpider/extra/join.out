@@ -4037,12 +4037,10 @@ where t1.f1 = ss.f1;
                ->  Foreign Scan on public.int8_tbl i8
                      Output: i8.q1, i8.q2
                      InfluxDB query: SELECT "q1", "q2" FROM "int8_tbl" WHERE (("q2" = 123))
-   ->  Limit
-         Output: (i8.q1), t2.f1
-         ->  Foreign Scan on public.text_tbl t2
-               Output: i8.q1, t2.f1
-               InfluxDB query: SELECT "f1" FROM "text_tbl"
-(18 rows)
+   ->  Foreign Scan on public.text_tbl t2
+         Output: i8.q1, t2.f1
+         InfluxDB query: SELECT "f1" FROM "text_tbl" LIMIT 1
+(16 rows)
 
 --Testcase 142:
 select * from
@@ -4082,17 +4080,13 @@ where t1.f1 = ss2.f1;
                      ->  Foreign Scan on public.int8_tbl i8
                            Output: i8.q1, i8.q2
                            InfluxDB query: SELECT "q1", "q2" FROM "int8_tbl" WHERE (("q2" = 123))
-         ->  Limit
-               Output: (i8.q1), t2.f1
-               ->  Foreign Scan on public.text_tbl t2
-                     Output: i8.q1, t2.f1
-                     InfluxDB query: SELECT "f1" FROM "text_tbl"
-   ->  Limit
-         Output: ((i8.q1)), (t2.f1)
-         ->  Foreign Scan on public.text_tbl t3
-               Output: (i8.q1), t2.f1
-               InfluxDB query: SELECT * FROM "text_tbl"
-(25 rows)
+         ->  Foreign Scan on public.text_tbl t2
+               Output: i8.q1, t2.f1
+               InfluxDB query: SELECT "f1" FROM "text_tbl" LIMIT 1
+   ->  Foreign Scan on public.text_tbl t3
+         Output: (i8.q1), t2.f1
+         InfluxDB query: SELECT * FROM "text_tbl" LIMIT 1
+(21 rows)
 
 --Testcase 144:
 select * from
@@ -4145,12 +4139,10 @@ where tt1.f1 = ss1.c0;
    ->  Subquery Scan on ss1
          Output: ss1.c0
          Filter: (ss1.c0 = 'foo'::text)
-         ->  Limit
-               Output: (tt4.f1)
-               ->  Foreign Scan on public.text_tbl tt5
-                     Output: tt4.f1
-                     InfluxDB query: SELECT * FROM "text_tbl"
-(32 rows)
+         ->  Foreign Scan on public.text_tbl tt5
+               Output: tt4.f1
+               InfluxDB query: SELECT * FROM "text_tbl" LIMIT 1
+(30 rows)
 
 --Testcase 146:
 select 1 from
@@ -4211,12 +4203,10 @@ where ss1.c2 = 0;
                ->  Foreign Scan on public.int4_tbl i43
                      Output: i43.f1
                      InfluxDB query: SELECT "f1" FROM "int4_tbl" WHERE (("f1" = 0))
-   ->  Limit
-         Output: (i41.f1), (i8.q1), (i8.q2), (i42.f1), (i43.f1), ((42))
-         ->  Foreign Scan on public.text_tbl
-               Output: i41.f1, i8.q1, i8.q2, i42.f1, i43.f1, (42)
-               InfluxDB query: SELECT * FROM "text_tbl"
-(36 rows)
+   ->  Foreign Scan on public.text_tbl
+         Output: i41.f1, i8.q1, i8.q2, i42.f1, i43.f1, (42)
+         InfluxDB query: SELECT * FROM "text_tbl" LIMIT 1
+(34 rows)
 
 --Testcase 148:
 select ss2.* from

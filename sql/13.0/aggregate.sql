@@ -86,6 +86,6 @@ DROP FOREIGN TABLE cpu;
 --Testcase 20:
 DROP USER MAPPING FOR CURRENT_USER SERVER server1;
 --Testcase 21:
-DROP SERVER server1;
+DROP SERVER server1 CASCADE;
 --Testcase 22:
-DROP EXTENSION influxdb_fdw;
+DROP EXTENSION influxdb_fdw CASCADE;

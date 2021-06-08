@@ -226,9 +226,10 @@ influxdb_get_options(Oid foreignoid)
 /*
  * Parse a comma-separated string and return a list of tag keys of a foreign table.
  */
-static List *influxdbExtractTagsList(char *in_string)
+static List *
+influxdbExtractTagsList(char *in_string)
 {
-	List *tags_list = NIL;
+	List	   *tags_list = NIL;
 
 	/* SplitIdentifierString scribbles on its input, so pstrdup first */
 	if (!SplitIdentifierString(pstrdup(in_string), ',', &tags_list))
