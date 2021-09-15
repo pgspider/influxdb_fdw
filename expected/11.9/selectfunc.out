@@ -261,54 +261,78 @@ SELECT log(value1::numeric, value2::numeric) FROM s3 WHERE value1 != 1;
   4.4377398922117404
 (6 rows)
 
--- select log (stub function, need to swap arguments, float8, explain)
+-- select log (builtin function, need to swap arguments, float8, explain)
 --Testcase 23:
 EXPLAIN VERBOSE
-SELECT log(value1, 0.1) FROM s3 WHERE value1 != 1;
+SELECT log(value1::numeric, 0.1) FROM s3 WHERE value1 != 1;
                              QUERY PLAN                              
 ---------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..3183.75 rows=2547 width=8)
-   Output: log(value1, '0.1'::double precision)
+ Foreign Scan on public.s3  (cost=10.00..2559.74 rows=2547 width=32)
+   Output: log((value1)::numeric, 0.1)
    InfluxDB query: SELECT "value1" FROM "s3" WHERE (("value1" <> 1))
 (3 rows)
 
--- select log (stub function, need to swap arguments, float8, result)
+-- select log (builtin function, need to swap arguments, float8, result)
 --Testcase 24:
-SELECT log(value1, 0.1) FROM s3 WHERE value1 != 1;
-ERROR:  stub log(float8, float8) is called
-CONTEXT:  PL/pgSQL function log(double precision,double precision) line 3 at RAISE
--- select log (stub function, need to swap arguments, bigint, explain)
+SELECT log(value1::numeric, 0.1) FROM s3 WHERE value1 != 1;
+         log         
+---------------------
+  1.0000000000000000
+  1.4306765580733931
+  1.9124892893931984
+ -24.158857928096806
+ -2.9203673004336506
+ -1.9285884584617046
+(6 rows)
+
+-- select log (builtin function, need to swap arguments, bigint, explain)
 --Testcase 25:
 EXPLAIN VERBOSE
-SELECT log(value2, 3) FROM s3 WHERE value1 != 1;
+SELECT log(value2::numeric, 3::numeric) FROM s3 WHERE value1 != 1;
                              QUERY PLAN                              
 ---------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..3183.75 rows=2547 width=8)
-   Output: log(value2, '3'::bigint)
+ Foreign Scan on public.s3  (cost=10.00..2559.74 rows=2547 width=32)
+   Output: log((value2)::numeric, '3'::numeric)
    InfluxDB query: SELECT "value2" FROM "s3" WHERE (("value1" <> 1))
 (3 rows)
 
--- select log (stub function, need to swap arguments, bigint, result)
+-- select log (builtin function, need to swap arguments, bigint, result)
 --Testcase 26:
-SELECT log(value2, 3) FROM s3 WHERE value1 != 1;
-ERROR:  stub log(bigint, bigint) is called
-CONTEXT:  PL/pgSQL function log(bigint,bigint) line 3 at RAISE
--- select log (stub function, need to swap arguments, mix type, explain)
+SELECT log(value2::numeric, 3::numeric) FROM s3 WHERE value1 != 1;
+        log         
+--------------------
+ 0.2385606273598312
+ 0.2385606273598312
+ 0.2385606273598312
+ 0.2073511669203535
+ 0.2073511669203535
+ 0.2073511669203535
+(6 rows)
+
+-- select log (builtin function, need to swap arguments, mix type, explain)
 --Testcase 27:
 EXPLAIN VERBOSE
-SELECT log(value1, value2) FROM s3 WHERE value1 != 1;
+SELECT log(value1::numeric, value2::numeric) FROM s3 WHERE value1 != 1;
                                   QUERY PLAN                                   
 -------------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2552.60 rows=2038 width=8)
-   Output: log(value1, (value2)::double precision)
+ Foreign Scan on public.s3  (cost=10.00..2053.28 rows=2038 width=32)
+   Output: log((value1)::numeric, (value2)::numeric)
    InfluxDB query: SELECT "value1", "value2" FROM "s3" WHERE (("value1" <> 1))
 (3 rows)
 
--- select log (stub function, need to swap arguments, mix type, result)
+-- select log (builtin function, need to swap arguments, mix type, result)
 --Testcase 28:
-SELECT log(value1, value2) FROM s3 WHERE value1 != 1;
-ERROR:  stub log(float8, float8) is called
-CONTEXT:  PL/pgSQL function log(double precision,double precision) line 3 at RAISE
+SELECT log(value1::numeric, value2::numeric) FROM s3 WHERE value1 != 1;
+         log         
+---------------------
+ -2.0000000000000000
+ -2.8613531161467861
+ -3.8249785787863969
+  55.590256753535330
+  6.7198527566540755
+  4.4377398922117404
+(6 rows)
+
 -- select log(*) (stub agg function, explain)
 --Testcase 423:
 EXPLAIN VERBOSE
@@ -375,8 +399,8 @@ EXPLAIN VERBOSE
 SELECT log2(value1),log2(value2) FROM s3;
                              QUERY PLAN                              
 ---------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..3072.00 rows=2048 width=16)
-   Output: log2(value1), log2(value2)
+ Foreign Scan on public.s3  (cost=10.00..3077.12 rows=2048 width=16)
+   Output: log2(value1), log2((value2)::double precision)
    InfluxDB query: SELECT "value1", "value2" FROM "s3"
 (3 rows)
 
@@ -430,8 +454,8 @@ EXPLAIN VERBOSE
 SELECT log10(value1),log10(value2) FROM s3;
                              QUERY PLAN                              
 ---------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..3072.00 rows=2048 width=16)
-   Output: log10(value1), log10(value2)
+ Foreign Scan on public.s3  (cost=10.00..3077.12 rows=2048 width=16)
+   Output: log10(value1), log10((value2)::double precision)
    InfluxDB query: SELECT "value1", "value2" FROM "s3"
 (3 rows)
 
@@ -3569,11 +3593,11 @@ SELECT integral("value1", interval '1s'),influx_time(time, interval '1s'),tag1 F
 
 -- select integral (stub agg function and group by tag only) (result)
 --Testcase 148:
-SELECT tag1,integral("value1") FROM s3 WHERE time >= to_timestamp(0) and time <= to_timestamp(4) GROUP BY tag1;
+SELECT tag1,integral("value1") FROM s3 WHERE time >= to_timestamp(0) and time <= to_timestamp(4) GROUP BY tag1 ORDER BY tag1;
  tag1 | integral 
 ------+----------
- b    |     1.65
  a    |      0.4
+ b    |     1.65
 (2 rows)
 
 -- select integral (stub agg function and other aggs) (result)
@@ -3586,11 +3610,11 @@ SELECT sum("value1"),integral("value1"),count("value1") FROM s3;
 
 -- select integral (stub agg function and group by tag only) (result)
 --Testcase 150:
-SELECT tag1,integral("value1", interval '1s') FROM s3 WHERE time >= to_timestamp(0) and time <= to_timestamp(4) GROUP BY tag1;
+SELECT tag1,integral("value1", interval '1s') FROM s3 WHERE time >= to_timestamp(0) and time <= to_timestamp(4) GROUP BY tag1 ORDER BY tag1;
  tag1 | integral 
 ------+----------
- b    |     1.65
  a    |      0.4
+ b    |     1.65
 (2 rows)
 
 -- select integral (stub agg function and other aggs) (result)
@@ -5787,69 +5811,78 @@ CONTEXT:  PL/pgSQL function top(double precision,integer) line 3 at RAISE
 -- select acos (builtin function, explain)
 --Testcase 211:
 EXPLAIN VERBOSE
-SELECT acos(value1), acos(value2), acos(value3), acos(value4) FROM s3;
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2200.31 rows=1462 width=32)
-   Output: acos(value1), acos(value2), acos(value3), acos(value4)
-   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
+SELECT acos(value1), acos(value3) FROM s3;
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2058.24 rows=2048 width=16)
+   Output: acos(value1), acos(value3)
+   InfluxDB query: SELECT "value1", "value3" FROM "s3"
 (3 rows)
 
 -- select acos (builtin function, result)
 --Testcase 212:
-SELECT acos(value1), acos(value2), acos(value3), acos(value4) FROM s3;
-ERROR:  stub acos(bigint) is called
-CONTEXT:  PL/pgSQL function acos(bigint) line 3 at RAISE
+SELECT acos(value1), acos(value3) FROM s3;
+ERROR:  input is out of range
 -- select acos (builtin function, not pushdown constraints, explain)
 --Testcase 213:
 EXPLAIN VERBOSE
-SELECT acos(value1), acos(value2), acos(value3), acos(value4) FROM s3 WHERE to_hex(value2) = '64';
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..10.54 rows=7 width=32)
-   Output: acos(value1), acos(value2), acos(value3), acos(value4)
+SELECT acos(value1), acos(value3) FROM s3 WHERE to_hex(value2) = '64';
+                           QUERY PLAN                            
+-----------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..10.05 rows=10 width=16)
+   Output: acos(value1), acos(value3)
    Filter: (to_hex(s3.value2) = '64'::text)
-   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
+   InfluxDB query: SELECT "value1", "value2", "value3" FROM "s3"
 (4 rows)
 
 -- select acos (builtin function, not pushdown constraints, result)
 --Testcase 214:
-SELECT acos(value1), acos(value2), acos(value3), acos(value4) FROM s3 WHERE to_hex(value2) = '64';
-ERROR:  stub acos(bigint) is called
-CONTEXT:  PL/pgSQL function acos(bigint) line 3 at RAISE
+SELECT acos(value1), acos(value3) FROM s3 WHERE to_hex(value2) = '64';
+       acos       |       acos       
+------------------+------------------
+ 1.47062890563334 | 1.67096374795646
+ 1.36943840600457 | 1.77215424758523
+  1.2661036727795 | 1.87548898081029
+(3 rows)
+
 -- select acos (builtin function, pushdown constraints, explain)
 --Testcase 215:
 EXPLAIN VERBOSE
-SELECT acos(value1), acos(value2), acos(value3), acos(value4) FROM s3 WHERE value2 != 200;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: acos(value1), acos(value2), acos(value3), acos(value4)
-   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3" WHERE (("value2" <> 200))
+SELECT acos(value1), acos(value3) FROM s3 WHERE value2 != 200;
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2048.19 rows=2038 width=16)
+   Output: acos(value1), acos(value3)
+   InfluxDB query: SELECT "value1", "value3" FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
 -- select acos (builtin function, pushdown constraints, result)
 --Testcase 216:
-SELECT acos(value1), acos(value2), acos(value3), acos(value4) FROM s3 WHERE value2 != 200;
-ERROR:  stub acos(bigint) is called
-CONTEXT:  PL/pgSQL function acos(bigint) line 3 at RAISE
+SELECT acos(value1), acos(value3) FROM s3 WHERE value2 != 200;
+       acos       |       acos       
+------------------+------------------
+ 1.47062890563334 | 1.67096374795646
+ 1.36943840600457 | 1.77215424758523
+  1.2661036727795 | 1.87548898081029
+(3 rows)
+
 -- select acos as nest function with agg (pushdown, explain)
 --Testcase 217:
 EXPLAIN VERBOSE
-SELECT sum(value3),acos(sum(value3)) FROM s3;
-                              QUERY PLAN                               
------------------------------------------------------------------------
+SELECT sum(value3), acos(sum(value3)) FROM s3 WHERE value2 != 200;
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
  Foreign Scan  (cost=1.00..1.00 rows=1 width=16)
    Output: (sum(value3)), (acos(sum(value3)))
-   InfluxDB query: SELECT sum("value3"), acos(sum("value3")) FROM "s3"
+   InfluxDB query: SELECT sum("value3"), acos(sum("value3")) FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
 -- select acos as nest function with agg (pushdown, result)
 --Testcase 218:
-SELECT sum(value3),acos(sum(value3)) FROM s3;
- sum  | acos 
-------+------
- -7.2 |     
+SELECT sum(value3), acos(sum(value3)) FROM s3 WHERE value2 != 200;
+ sum  |       acos       
+------+------------------
+ -0.6 | 2.21429743558818
 (1 row)
 
 -- select acos as nest with log2 (pushdown, explain)
@@ -5871,48 +5904,78 @@ CONTEXT:  PL/pgSQL function log2(double precision) line 3 at RAISE
 -- select acos with non pushdown func and explicit constant (explain)
 --Testcase 221:
 EXPLAIN VERBOSE
-SELECT acos(value3), pi(), 4.1 FROM s3;
-                             QUERY PLAN                              
----------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2566.40 rows=2560 width=48)
+SELECT acos(value3), pi(), 4.1 FROM s3 WHERE value2 != 200;
+                              QUERY PLAN                               
+-----------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2553.37 rows=2547 width=48)
    Output: acos(value3), '3.14159265358979'::double precision, 4.1
-   InfluxDB query: SELECT "value3" FROM "s3"
+   InfluxDB query: SELECT "value3" FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
 -- select acos with non pushdown func and explicit constant (result)
 --Testcase 222:
-SELECT acos(value3), pi(), 4.1 FROM s3;
-ERROR:  input is out of range
+SELECT acos(value3), pi(), 4.1 FROM s3 WHERE value2 != 200;
+       acos       |        pi        | ?column? 
+------------------+------------------+----------
+ 1.67096374795646 | 3.14159265358979 |      4.1
+ 1.77215424758523 | 3.14159265358979 |      4.1
+ 1.87548898081029 | 3.14159265358979 |      4.1
+(3 rows)
+
 -- select acos with order by (explain)
 --Testcase 223:
 EXPLAIN VERBOSE
-SELECT value1, acos(1-value1) FROM s3 order by acos(1-value1);
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Sort  (cost=2717.72..2724.12 rows=2560 width=16)
+SELECT value1, acos(1-value1) FROM s3 WHERE value2 != 200 ORDER BY acos(1-value1);
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Sort  (cost=2703.83..2710.19 rows=2547 width=16)
    Output: value1, (acos(('1'::double precision - value1)))
    Sort Key: (acos(('1'::double precision - s3.value1)))
-   ->  Foreign Scan on public.s3  (cost=10.00..2572.80 rows=2560 width=16)
+   ->  Foreign Scan on public.s3  (cost=10.00..2559.74 rows=2547 width=16)
          Output: value1, acos(('1'::double precision - value1))
-         InfluxDB query: SELECT "value1" FROM "s3"
+         InfluxDB query: SELECT "value1" FROM "s3" WHERE (("value2" <> 200))
 (6 rows)
 
 -- select acos with order by (result)
 --Testcase 224:
-SELECT value1, acos(1-value1) FROM s3 order by acos(1-value1);
-ERROR:  input is out of range
+SELECT value1, acos(1-value1) FROM s3 WHERE value2 != 200 ORDER BY acos(1-value1);
+ value1 |       acos        
+--------+-------------------
+    0.1 | 0.451026811796262
+    0.2 | 0.643501108793284
+    0.3 | 0.795398830184144
+(3 rows)
+
 -- select acos with order by index (result)
 --Testcase 225:
-SELECT value1, acos(1-value1) FROM s3 order by 2,1;
-ERROR:  input is out of range
+SELECT value1, acos(1-value1) FROM s3 WHERE value2 != 200 ORDER BY 2,1;
+ value1 |       acos        
+--------+-------------------
+    0.1 | 0.451026811796262
+    0.2 | 0.643501108793284
+    0.3 | 0.795398830184144
+(3 rows)
+
 -- select acos with order by index (result)
 --Testcase 226:
-SELECT value1, acos(1-value1) FROM s3 order by 1,2;
-ERROR:  input is out of range
+SELECT value1, acos(1-value1) FROM s3 WHERE value2 != 200 ORDER BY 1,2;
+ value1 |       acos        
+--------+-------------------
+    0.1 | 0.451026811796262
+    0.2 | 0.643501108793284
+    0.3 | 0.795398830184144
+(3 rows)
+
 -- select acos and as
 --Testcase 227:
-SELECT acos(value3) as acos1 FROM s3;
-ERROR:  input is out of range
+SELECT acos(value3) as acos1 FROM s3 WHERE value2 != 200;
+      acos1       
+------------------
+ 1.67096374795646
+ 1.77215424758523
+ 1.87548898081029
+(3 rows)
+
 -- select acos(*) (stub agg function, explain)
 --Testcase 760:
 EXPLAIN VERBOSE
@@ -5971,69 +6034,78 @@ CONTEXT:  PL/pgSQL function acos_all() line 3 at RAISE
 -- select asin (builtin function, explain)
 --Testcase 228:
 EXPLAIN VERBOSE
-SELECT asin(value1), asin(value2), asin(value3), asin(value4) FROM s3;
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2200.31 rows=1462 width=32)
-   Output: asin(value1), asin(value2), asin(value3), asin(value4)
-   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
+SELECT asin(value1), asin(value3) FROM s3;
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2058.24 rows=2048 width=16)
+   Output: asin(value1), asin(value3)
+   InfluxDB query: SELECT "value1", "value3" FROM "s3"
 (3 rows)
 
 -- select asin (builtin function, result)
 --Testcase 229:
-SELECT asin(value1), asin(value2), asin(value3), asin(value4) FROM s3;
-ERROR:  stub asin(bigint) is called
-CONTEXT:  PL/pgSQL function asin(bigint) line 3 at RAISE
+SELECT asin(value1), asin(value3) FROM s3;
+ERROR:  input is out of range
 -- select asin (builtin function, not pushdown constraints, explain)
 --Testcase 230:
 EXPLAIN VERBOSE
-SELECT asin(value1), asin(value2), asin(value3), asin(value4) FROM s3 WHERE to_hex(value2) = '64';
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..10.54 rows=7 width=32)
-   Output: asin(value1), asin(value2), asin(value3), asin(value4)
+SELECT asin(value1), asin(value3) FROM s3 WHERE to_hex(value2) = '64';
+                           QUERY PLAN                            
+-----------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..10.05 rows=10 width=16)
+   Output: asin(value1), asin(value3)
    Filter: (to_hex(s3.value2) = '64'::text)
-   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
+   InfluxDB query: SELECT "value1", "value2", "value3" FROM "s3"
 (4 rows)
 
 -- select asin (builtin function, not pushdown constraints, result)
 --Testcase 231:
-SELECT asin(value1), asin(value2), asin(value3), asin(value4) FROM s3 WHERE to_hex(value2) = '64';
-ERROR:  stub asin(bigint) is called
-CONTEXT:  PL/pgSQL function asin(bigint) line 3 at RAISE
+SELECT asin(value1), asin(value3) FROM s3 WHERE to_hex(value2) = '64';
+       asin        |        asin        
+-------------------+--------------------
+  0.10016742116156 |  -0.10016742116156
+ 0.201357920790331 | -0.201357920790331
+ 0.304692654015398 | -0.304692654015398
+(3 rows)
+
 -- select asin (builtin function, pushdown constraints, explain)
 --Testcase 232:
 EXPLAIN VERBOSE
-SELECT asin(value1), asin(value2), asin(value3), asin(value4) FROM s3 WHERE value2 != 200;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: asin(value1), asin(value2), asin(value3), asin(value4)
-   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3" WHERE (("value2" <> 200))
+SELECT asin(value1), asin(value3) FROM s3 WHERE value2 != 200;
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2048.19 rows=2038 width=16)
+   Output: asin(value1), asin(value3)
+   InfluxDB query: SELECT "value1", "value3" FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
 -- select asin (builtin function, pushdown constraints, result)
 --Testcase 233:
-SELECT asin(value1), asin(value2), asin(value3), asin(value4) FROM s3 WHERE value2 != 200;
-ERROR:  stub asin(bigint) is called
-CONTEXT:  PL/pgSQL function asin(bigint) line 3 at RAISE
+SELECT asin(value1), asin(value3) FROM s3 WHERE value2 != 200;
+       asin        |        asin        
+-------------------+--------------------
+  0.10016742116156 |  -0.10016742116156
+ 0.201357920790331 | -0.201357920790331
+ 0.304692654015398 | -0.304692654015398
+(3 rows)
+
 -- select asin as nest function with agg (pushdown, explain)
 --Testcase 234:
 EXPLAIN VERBOSE
-SELECT sum(value3),asin(sum(value3)) FROM s3;
-                              QUERY PLAN                               
------------------------------------------------------------------------
+SELECT sum(value3), asin(sum(value3)) FROM s3 WHERE value2 != 200;
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
  Foreign Scan  (cost=1.00..1.00 rows=1 width=16)
    Output: (sum(value3)), (asin(sum(value3)))
-   InfluxDB query: SELECT sum("value3"), asin(sum("value3")) FROM "s3"
+   InfluxDB query: SELECT sum("value3"), asin(sum("value3")) FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
 -- select asin as nest function with agg (pushdown, result)
 --Testcase 235:
-SELECT sum(value3),asin(sum(value3)) FROM s3;
- sum  | asin 
-------+------
- -7.2 |     
+SELECT sum(value3), asin(sum(value3)) FROM s3 WHERE value2 != 200;
+ sum  |        asin        
+------+--------------------
+ -0.6 | -0.643501108793284
 (1 row)
 
 -- select asin as nest with log2 (pushdown, explain)
@@ -6055,48 +6127,78 @@ CONTEXT:  PL/pgSQL function log2(double precision) line 3 at RAISE
 -- select asin with non pushdown func and explicit constant (explain)
 --Testcase 238:
 EXPLAIN VERBOSE
-SELECT asin(value3), pi(), 4.1 FROM s3;
-                             QUERY PLAN                              
----------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2566.40 rows=2560 width=48)
+SELECT asin(value3), pi(), 4.1 FROM s3 WHERE value2 != 200;
+                              QUERY PLAN                               
+-----------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2553.37 rows=2547 width=48)
    Output: asin(value3), '3.14159265358979'::double precision, 4.1
-   InfluxDB query: SELECT "value3" FROM "s3"
+   InfluxDB query: SELECT "value3" FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
 -- select asin with non pushdown func and explicit constant (result)
 --Testcase 239:
-SELECT asin(value3), pi(), 4.1 FROM s3;
-ERROR:  input is out of range
+SELECT asin(value3), pi(), 4.1 FROM s3 WHERE value2 != 200;
+        asin        |        pi        | ?column? 
+--------------------+------------------+----------
+  -0.10016742116156 | 3.14159265358979 |      4.1
+ -0.201357920790331 | 3.14159265358979 |      4.1
+ -0.304692654015398 | 3.14159265358979 |      4.1
+(3 rows)
+
 -- select asin with order by (explain)
 --Testcase 240:
 EXPLAIN VERBOSE
-SELECT value1, asin(1-value1) FROM s3 order by asin(1-value1);
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Sort  (cost=2717.72..2724.12 rows=2560 width=16)
+SELECT value1, asin(1-value1) FROM s3 WHERE value2 != 200 ORDER BY asin(1-value1);
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Sort  (cost=2703.83..2710.19 rows=2547 width=16)
    Output: value1, (asin(('1'::double precision - value1)))
    Sort Key: (asin(('1'::double precision - s3.value1)))
-   ->  Foreign Scan on public.s3  (cost=10.00..2572.80 rows=2560 width=16)
+   ->  Foreign Scan on public.s3  (cost=10.00..2559.74 rows=2547 width=16)
          Output: value1, asin(('1'::double precision - value1))
-         InfluxDB query: SELECT "value1" FROM "s3"
+         InfluxDB query: SELECT "value1" FROM "s3" WHERE (("value2" <> 200))
 (6 rows)
 
 -- select asin with order by (result)
 --Testcase 241:
-SELECT value1, asin(1-value1) FROM s3 order by asin(1-value1);
-ERROR:  input is out of range
+SELECT value1, asin(1-value1) FROM s3 WHERE value2 != 200 ORDER BY asin(1-value1);
+ value1 |       asin        
+--------+-------------------
+    0.3 | 0.775397496610753
+    0.2 | 0.927295218001612
+    0.1 |  1.11976951499863
+(3 rows)
+
 -- select asin with order by index (result)
 --Testcase 242:
-SELECT value1, asin(1-value1) FROM s3 order by 2,1;
-ERROR:  input is out of range
+SELECT value1, asin(1-value1) FROM s3 WHERE value2 != 200 ORDER BY 2,1;
+ value1 |       asin        
+--------+-------------------
+    0.3 | 0.775397496610753
+    0.2 | 0.927295218001612
+    0.1 |  1.11976951499863
+(3 rows)
+
 -- select asin with order by index (result)
 --Testcase 243:
-SELECT value1, asin(1-value1) FROM s3 order by 1,2;
-ERROR:  input is out of range
+SELECT value1, asin(1-value1) FROM s3 WHERE value2 != 200 ORDER BY 1,2;
+ value1 |       asin        
+--------+-------------------
+    0.1 |  1.11976951499863
+    0.2 | 0.927295218001612
+    0.3 | 0.775397496610753
+(3 rows)
+
 -- select asin and as
 --Testcase 244:
-SELECT asin(value3) as asin1 FROM s3;
-ERROR:  input is out of range
+SELECT asin(value3) as asin1 FROM s3 WHERE value2 != 200;
+       asin1        
+--------------------
+  -0.10016742116156
+ -0.201357920790331
+ -0.304692654015398
+(3 rows)
+
 -- select asin(*) (stub agg function, explain)
 --Testcase 766:
 EXPLAIN VERBOSE
@@ -6156,26 +6258,34 @@ CONTEXT:  PL/pgSQL function asin_all() line 3 at RAISE
 --Testcase 245:
 EXPLAIN VERBOSE
 SELECT atan(value1), atan(value2), atan(value3), atan(value4) FROM s3;
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2200.31 rows=1462 width=32)
-   Output: atan(value1), atan(value2), atan(value3), atan(value4)
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1483.93 rows=1462 width=32)
+   Output: atan(value1), atan((value2)::double precision), atan(value3), atan((value4)::double precision)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
 (3 rows)
 
 -- select atan (builtin function, result)
 --Testcase 246:
 SELECT atan(value1), atan(value2), atan(value3), atan(value4) FROM s3;
-ERROR:  stub atan(bigint) is called
-CONTEXT:  PL/pgSQL function atan(bigint) line 3 at RAISE
+       atan        |       atan       |        atan        |       atan        
+-------------------+------------------+--------------------+-------------------
+ 0.099668652491162 | 1.56079666010823 | -0.099668652491162 | -1.56079666010823
+ 0.197395559849881 | 1.56079666010823 | -0.197395559849881 | -1.56079666010823
+ 0.291456794477867 | 1.56079666010823 | -0.291456794477867 | -1.56079666010823
+ 0.832981266674432 | 1.56579636846094 | -0.832981266674432 | -1.56579636846094
+  1.14416883366802 | 1.56579636846094 |  -1.14416883366802 | -1.56579636846094
+  1.27656176168371 | 1.56579636846094 |  -1.27656176168371 | -1.56579636846094
+(6 rows)
+
 -- select atan (builtin function, not pushdown constraints, explain)
 --Testcase 247:
 EXPLAIN VERBOSE
 SELECT atan(value1), atan(value2), atan(value3), atan(value4) FROM s3 WHERE to_hex(value2) != '64';
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: atan(value1), atan(value2), atan(value3), atan(value4)
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: atan(value1), atan((value2)::double precision), atan(value3), atan((value4)::double precision)
    Filter: (to_hex(s3.value2) <> '64'::text)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
 (4 rows)
@@ -6183,24 +6293,34 @@ SELECT atan(value1), atan(value2), atan(value3), atan(value4) FROM s3 WHERE to_h
 -- select atan (builtin function, not pushdown constraints, result)
 --Testcase 248:
 SELECT atan(value1), atan(value2), atan(value3), atan(value4) FROM s3 WHERE to_hex(value2) != '64';
-ERROR:  stub atan(bigint) is called
-CONTEXT:  PL/pgSQL function atan(bigint) line 3 at RAISE
+       atan        |       atan       |        atan        |       atan        
+-------------------+------------------+--------------------+-------------------
+ 0.832981266674432 | 1.56579636846094 | -0.832981266674432 | -1.56579636846094
+  1.14416883366802 | 1.56579636846094 |  -1.14416883366802 | -1.56579636846094
+  1.27656176168371 | 1.56579636846094 |  -1.27656176168371 | -1.56579636846094
+(3 rows)
+
 -- select atan (builtin function, pushdown constraints, explain)
 --Testcase 249:
 EXPLAIN VERBOSE
 SELECT atan(value1), atan(value2), atan(value3), atan(value4) FROM s3 WHERE value2 != 200;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: atan(value1), atan(value2), atan(value3), atan(value4)
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: atan(value1), atan((value2)::double precision), atan(value3), atan((value4)::double precision)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
 -- select atan (builtin function, pushdown constraints, result)
 --Testcase 250:
 SELECT atan(value1), atan(value2), atan(value3), atan(value4) FROM s3 WHERE value2 != 200;
-ERROR:  stub atan(bigint) is called
-CONTEXT:  PL/pgSQL function atan(bigint) line 3 at RAISE
+       atan        |       atan       |        atan        |       atan        
+-------------------+------------------+--------------------+-------------------
+ 0.099668652491162 | 1.56079666010823 | -0.099668652491162 | -1.56079666010823
+ 0.197395559849881 | 1.56079666010823 | -0.197395559849881 | -1.56079666010823
+ 0.291456794477867 | 1.56079666010823 | -0.291456794477867 | -1.56079666010823
+(3 rows)
+
 -- select atan as nest function with agg (pushdown, explain)
 --Testcase 251:
 EXPLAIN VERBOSE
@@ -6385,26 +6505,34 @@ CONTEXT:  PL/pgSQL function asin_all() line 3 at RAISE
 --Testcase 262:
 EXPLAIN VERBOSE
 SELECT atan2(value1, value2), atan2(value2, value3), atan2(value3, value4), atan2(value4, value1) FROM s3;
-                                              QUERY PLAN                                              
-------------------------------------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2924.00 rows=1462 width=32)
-   Output: atan2(value1, value2), atan2(value2, value3), atan2(value3, value4), atan2(value4, value1)
+                                                                                      QUERY PLAN                                                                                      
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1491.24 rows=1462 width=32)
+   Output: atan2(value1, (value2)::double precision), atan2((value2)::double precision, value3), atan2(value3, (value4)::double precision), atan2((value4)::double precision, value1)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
 (3 rows)
 
 -- select atan2 (builtin function, result)
 --Testcase 263:
 SELECT atan2(value1, value2), atan2(value2, value3), atan2(value3, value4), atan2(value4, value1) FROM s3;
-ERROR:  stub atan2(float8, bigint) is called
-CONTEXT:  PL/pgSQL function atan2(double precision,bigint) line 3 at RAISE
+        atan2         |      atan2       |       atan2       |       atan2       
+----------------------+------------------+-------------------+-------------------
+ 0.000999999666666867 | 1.57179632646156 | -3.14059265392313 | -1.56979632712823
+  0.00199999733333973 | 1.57279632412824 | -3.13959265625645 | -1.56879632946156
+   0.0029999910000486 | 1.57379631779495 | -3.13859266258974 | -1.56779633579485
+  0.00549994454267321 | 1.57629627133757 | -3.13609270904712 | -1.56529638225222
+   0.0109995563655408 | 1.58179588316044 | -3.13059309722425 | -1.55979677042936
+   0.0164985028695487 | 1.58729482966445 | -3.12509415072024 | -1.55429782392535
+(6 rows)
+
 -- select atan2 (builtin function, not pushdown constraints, explain)
 --Testcase 264:
 EXPLAIN VERBOSE
 SELECT atan2(value1, value2), atan2(value2, value3), atan2(value3, value4), atan2(value4, value1) FROM s3 WHERE to_hex(value2) != '64';
-                                              QUERY PLAN                                              
-------------------------------------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2910.00 rows=1455 width=32)
-   Output: atan2(value1, value2), atan2(value2, value3), atan2(value3, value4), atan2(value4, value1)
+                                                                                      QUERY PLAN                                                                                      
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1484.10 rows=1455 width=32)
+   Output: atan2(value1, (value2)::double precision), atan2((value2)::double precision, value3), atan2(value3, (value4)::double precision), atan2((value4)::double precision, value1)
    Filter: (to_hex(s3.value2) <> '64'::text)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
 (4 rows)
@@ -6412,24 +6540,34 @@ SELECT atan2(value1, value2), atan2(value2, value3), atan2(value3, value4), atan
 -- select atan2 (builtin function, not pushdown constraints, result)
 --Testcase 265:
 SELECT atan2(value1, value2), atan2(value2, value3), atan2(value3, value4), atan2(value4, value1) FROM s3 WHERE to_hex(value2) != '64';
-ERROR:  stub atan2(float8, bigint) is called
-CONTEXT:  PL/pgSQL function atan2(double precision,bigint) line 3 at RAISE
+        atan2        |      atan2       |       atan2       |       atan2       
+---------------------+------------------+-------------------+-------------------
+ 0.00549994454267321 | 1.57629627133757 | -3.13609270904712 | -1.56529638225222
+  0.0109995563655408 | 1.58179588316044 | -3.13059309722425 | -1.55979677042936
+  0.0164985028695487 | 1.58729482966445 | -3.12509415072024 | -1.55429782392535
+(3 rows)
+
 -- select atan2 (builtin function, pushdown constraints, explain)
 --Testcase 266:
 EXPLAIN VERBOSE
 SELECT atan2(value1, value2), atan2(value2, value3), atan2(value3, value4), atan2(value4, value1) FROM s3 WHERE value2 != 200;
-                                              QUERY PLAN                                              
-------------------------------------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2910.00 rows=1455 width=32)
-   Output: atan2(value1, value2), atan2(value2, value3), atan2(value3, value4), atan2(value4, value1)
+                                                                                      QUERY PLAN                                                                                      
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1484.10 rows=1455 width=32)
+   Output: atan2(value1, (value2)::double precision), atan2((value2)::double precision, value3), atan2(value3, (value4)::double precision), atan2((value4)::double precision, value1)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
 -- select atan2 (builtin function, pushdown constraints, result)
 --Testcase 267:
 SELECT atan2(value1, value2), atan2(value2, value3), atan2(value3, value4), atan2(value4, value1) FROM s3 WHERE value2 != 200;
-ERROR:  stub atan2(float8, bigint) is called
-CONTEXT:  PL/pgSQL function atan2(double precision,bigint) line 3 at RAISE
+        atan2         |      atan2       |       atan2       |       atan2       
+----------------------+------------------+-------------------+-------------------
+ 0.000999999666666867 | 1.57179632646156 | -3.14059265392313 | -1.56979632712823
+  0.00199999733333973 | 1.57279632412824 | -3.13959265625645 | -1.56879632946156
+   0.0029999910000486 | 1.57379631779495 | -3.13859266258974 | -1.56779633579485
+(3 rows)
+
 -- select atan2 as nest function with agg (pushdown, explain)
 --Testcase 268:
 EXPLAIN VERBOSE
@@ -6469,52 +6607,92 @@ CONTEXT:  PL/pgSQL function log2(double precision) line 3 at RAISE
 --Testcase 272:
 EXPLAIN VERBOSE
 SELECT atan2(value3, value4), pi(), 4.1 FROM s3;
-                                 QUERY PLAN                                 
-----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2560.00 rows=2048 width=48)
-   Output: atan2(value3, value4), '3.14159265358979'::double precision, 4.1
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2058.24 rows=2048 width=48)
+   Output: atan2(value3, (value4)::double precision), '3.14159265358979'::double precision, 4.1
    InfluxDB query: SELECT "value3", "value4" FROM "s3"
 (3 rows)
 
 -- select atan2 with non pushdown func and explicit constant (result)
 --Testcase 273:
 SELECT atan2(value3, value4), pi(), 4.1 FROM s3;
-ERROR:  stub atan2(float8, bigint) is called
-CONTEXT:  PL/pgSQL function atan2(double precision,bigint) line 3 at RAISE
+       atan2       |        pi        | ?column? 
+-------------------+------------------+----------
+ -3.14059265392313 | 3.14159265358979 |      4.1
+ -3.13959265625645 | 3.14159265358979 |      4.1
+ -3.13859266258974 | 3.14159265358979 |      4.1
+ -3.13609270904712 | 3.14159265358979 |      4.1
+ -3.13059309722425 | 3.14159265358979 |      4.1
+ -3.12509415072024 | 3.14159265358979 |      4.1
+(6 rows)
+
 -- select atan2 with order by (explain)
 --Testcase 274:
 EXPLAIN VERBOSE
 SELECT value1, atan2(1-value1, 1-value2) FROM s3 order by atan2(1-value1, 1-value2);
-                                  QUERY PLAN                                   
--------------------------------------------------------------------------------
- Sort  (cost=2682.88..2688.00 rows=2048 width=16)
-   Output: value1, (atan2(('1'::double precision - value1), (1 - value2)))
-   Sort Key: (atan2(('1'::double precision - s3.value1), (1 - s3.value2)))
-   ->  Foreign Scan on public.s3  (cost=10.00..2570.24 rows=2048 width=16)
-         Output: value1, atan2(('1'::double precision - value1), (1 - value2))
+                                            QUERY PLAN                                             
+---------------------------------------------------------------------------------------------------
+ Sort  (cost=2181.12..2186.24 rows=2048 width=16)
+   Output: value1, (atan2(('1'::double precision - value1), ((1 - value2))::double precision))
+   Sort Key: (atan2(('1'::double precision - s3.value1), ((1 - s3.value2))::double precision))
+   ->  Foreign Scan on public.s3  (cost=10.00..2068.48 rows=2048 width=16)
+         Output: value1, atan2(('1'::double precision - value1), ((1 - value2))::double precision)
          InfluxDB query: SELECT "value1", "value2" FROM "s3"
 (6 rows)
 
 -- select atan2 with order by (result)
 --Testcase 275:
 SELECT value1, atan2(1-value1, 1-value2) FROM s3 order by atan2(1-value1, 1-value2);
-ERROR:  stub atan2(float8, bigint) is called
-CONTEXT:  PL/pgSQL function atan2(double precision,bigint) line 3 at RAISE
+ value1 |       atan2       
+--------+-------------------
+    1.1 | -3.14109014106928
+    2.2 | -3.13556257592532
+    3.3 | -3.13003537924322
+    0.1 |  3.13250199492473
+    0.2 |  3.13351202139289
+    0.3 |  3.13452206434865
+(6 rows)
+
 -- select atan2 with order by index (result)
 --Testcase 276:
 SELECT value1, atan2(1-value1, 1-value2) FROM s3 order by 2,1;
-ERROR:  stub atan2(float8, bigint) is called
-CONTEXT:  PL/pgSQL function atan2(double precision,bigint) line 3 at RAISE
+ value1 |       atan2       
+--------+-------------------
+    1.1 | -3.14109014106928
+    2.2 | -3.13556257592532
+    3.3 | -3.13003537924322
+    0.1 |  3.13250199492473
+    0.2 |  3.13351202139289
+    0.3 |  3.13452206434865
+(6 rows)
+
 -- select atan2 with order by index (result)
 --Testcase 277:
 SELECT value1, atan2(1-value1, 1-value2) FROM s3 order by 1,2;
-ERROR:  stub atan2(float8, bigint) is called
-CONTEXT:  PL/pgSQL function atan2(double precision,bigint) line 3 at RAISE
+ value1 |       atan2       
+--------+-------------------
+    0.1 |  3.13250199492473
+    0.2 |  3.13351202139289
+    0.3 |  3.13452206434865
+    1.1 | -3.14109014106928
+    2.2 | -3.13556257592532
+    3.3 | -3.13003537924322
+(6 rows)
+
 -- select atan2 and as
 --Testcase 278:
 SELECT atan2(value3, value4) as atan21 FROM s3;
-ERROR:  stub atan2(float8, bigint) is called
-CONTEXT:  PL/pgSQL function atan2(double precision,bigint) line 3 at RAISE
+      atan21       
+-------------------
+ -3.14059265392313
+ -3.13959265625645
+ -3.13859266258974
+ -3.13609270904712
+ -3.13059309722425
+ -3.12509415072024
+(6 rows)
+
 -- select atan2(*) (stub function, explain)
 --Testcase 779:
 EXPLAIN VERBOSE
@@ -6535,26 +6713,34 @@ CONTEXT:  PL/pgSQL function atan2_all(double precision) line 3 at RAISE
 --Testcase 279:
 EXPLAIN VERBOSE
 SELECT ceil(value1), ceil(value2), ceil(value3), ceil(value4) FROM s3;
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2200.31 rows=1462 width=32)
-   Output: ceil(value1), ceil(value2), ceil(value3), ceil(value4)
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1483.93 rows=1462 width=32)
+   Output: ceil(value1), ceil((value2)::double precision), ceil(value3), ceil((value4)::double precision)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
 (3 rows)
 
 -- select ceil (builtin function, result)
 --Testcase 280:
 SELECT ceil(value1), ceil(value2), ceil(value3), ceil(value4) FROM s3;
-ERROR:  stub ceil(bigint) is called
-CONTEXT:  PL/pgSQL function ceil(bigint) line 3 at RAISE
+ ceil | ceil | ceil | ceil 
+------+------+------+------
+    1 |  100 |   -0 | -100
+    1 |  100 |   -0 | -100
+    1 |  100 |   -0 | -100
+    2 |  200 |   -1 | -200
+    3 |  200 |   -2 | -200
+    4 |  200 |   -3 | -200
+(6 rows)
+
 -- select ceil (builtin function, not pushdown constraints, explain)
 --Testcase 281:
 EXPLAIN VERBOSE
 SELECT ceil(value1), ceil(value2), ceil(value3), ceil(value4) FROM s3 WHERE to_hex(value2) != '64';
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: ceil(value1), ceil(value2), ceil(value3), ceil(value4)
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: ceil(value1), ceil((value2)::double precision), ceil(value3), ceil((value4)::double precision)
    Filter: (to_hex(s3.value2) <> '64'::text)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
 (4 rows)
@@ -6562,24 +6748,34 @@ SELECT ceil(value1), ceil(value2), ceil(value3), ceil(value4) FROM s3 WHERE to_h
 -- select ceil (builtin function, not pushdown constraints, result)
 --Testcase 282:
 SELECT ceil(value1), ceil(value2), ceil(value3), ceil(value4) FROM s3 WHERE to_hex(value2) != '64';
-ERROR:  stub ceil(bigint) is called
-CONTEXT:  PL/pgSQL function ceil(bigint) line 3 at RAISE
+ ceil | ceil | ceil | ceil 
+------+------+------+------
+    2 |  200 |   -1 | -200
+    3 |  200 |   -2 | -200
+    4 |  200 |   -3 | -200
+(3 rows)
+
 -- select ceil (builtin function, pushdown constraints, explain)
 --Testcase 283:
 EXPLAIN VERBOSE
 SELECT ceil(value1), ceil(value2), ceil(value3), ceil(value4) FROM s3 WHERE value2 != 200;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: ceil(value1), ceil(value2), ceil(value3), ceil(value4)
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: ceil(value1), ceil((value2)::double precision), ceil(value3), ceil((value4)::double precision)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
 -- select ceil (builtin function, pushdown constraints, result)
 --Testcase 284:
 SELECT ceil(value1), ceil(value2), ceil(value3), ceil(value4) FROM s3 WHERE value2 != 200;
-ERROR:  stub ceil(bigint) is called
-CONTEXT:  PL/pgSQL function ceil(bigint) line 3 at RAISE
+ ceil | ceil | ceil | ceil 
+------+------+------+------
+    1 |  100 |   -0 | -100
+    1 |  100 |   -0 | -100
+    1 |  100 |   -0 | -100
+(3 rows)
+
 -- select ceil as nest function with agg (pushdown, explain)
 --Testcase 285:
 EXPLAIN VERBOSE
@@ -6764,26 +6960,34 @@ CONTEXT:  PL/pgSQL function ceil_all() line 3 at RAISE
 --Testcase 296:
 EXPLAIN VERBOSE
 SELECT cos(value1), cos(value2), cos(value3), cos(value4) FROM s3;
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2200.31 rows=1462 width=32)
-   Output: cos(value1), cos(value2), cos(value3), cos(value4)
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1483.93 rows=1462 width=32)
+   Output: cos(value1), cos((value2)::double precision), cos(value3), cos((value4)::double precision)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
 (3 rows)
 
 -- select cos (builtin function, result)
 --Testcase 297:
 SELECT cos(value1), cos(value2), cos(value3), cos(value4) FROM s3;
-ERROR:  stub cos(bigint) is called
-CONTEXT:  PL/pgSQL function cos(bigint) line 3 at RAISE
+        cos         |        cos        |        cos         |        cos        
+--------------------+-------------------+--------------------+-------------------
+  0.995004165278026 | 0.862318872287684 |  0.995004165278026 | 0.862318872287684
+  0.980066577841242 | 0.862318872287684 |  0.980066577841242 | 0.862318872287684
+  0.955336489125606 | 0.862318872287684 |  0.955336489125606 | 0.862318872287684
+  0.453596121425577 | 0.487187675007006 |  0.453596121425577 | 0.487187675007006
+ -0.588501117255346 | 0.487187675007006 | -0.588501117255346 | 0.487187675007006
+ -0.987479769908865 | 0.487187675007006 | -0.987479769908865 | 0.487187675007006
+(6 rows)
+
 -- select cos (builtin function, not pushdown constraints, explain)
 --Testcase 298:
 EXPLAIN VERBOSE
 SELECT cos(value1), cos(value2), cos(value3), cos(value4) FROM s3 WHERE to_hex(value2) != '64';
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: cos(value1), cos(value2), cos(value3), cos(value4)
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: cos(value1), cos((value2)::double precision), cos(value3), cos((value4)::double precision)
    Filter: (to_hex(s3.value2) <> '64'::text)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
 (4 rows)
@@ -6791,24 +6995,34 @@ SELECT cos(value1), cos(value2), cos(value3), cos(value4) FROM s3 WHERE to_hex(v
 -- select cos (builtin function, not pushdown constraints, result)
 --Testcase 299:
 SELECT cos(value1), cos(value2), cos(value3), cos(value4) FROM s3 WHERE to_hex(value2) != '64';
-ERROR:  stub cos(bigint) is called
-CONTEXT:  PL/pgSQL function cos(bigint) line 3 at RAISE
+        cos         |        cos        |        cos         |        cos        
+--------------------+-------------------+--------------------+-------------------
+  0.453596121425577 | 0.487187675007006 |  0.453596121425577 | 0.487187675007006
+ -0.588501117255346 | 0.487187675007006 | -0.588501117255346 | 0.487187675007006
+ -0.987479769908865 | 0.487187675007006 | -0.987479769908865 | 0.487187675007006
+(3 rows)
+
 -- select cos (builtin function, pushdown constraints, explain)
 --Testcase 300:
 EXPLAIN VERBOSE
 SELECT cos(value1), cos(value2), cos(value3), cos(value4) FROM s3 WHERE value2 != 200;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: cos(value1), cos(value2), cos(value3), cos(value4)
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: cos(value1), cos((value2)::double precision), cos(value3), cos((value4)::double precision)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
 -- select cos (builtin function, pushdown constraints, result)
 --Testcase 301:
 SELECT cos(value1), cos(value2), cos(value3), cos(value4) FROM s3 WHERE value2 != 200;
-ERROR:  stub cos(bigint) is called
-CONTEXT:  PL/pgSQL function cos(bigint) line 3 at RAISE
+        cos        |        cos        |        cos        |        cos        
+-------------------+-------------------+-------------------+-------------------
+ 0.995004165278026 | 0.862318872287684 | 0.995004165278026 | 0.862318872287684
+ 0.980066577841242 | 0.862318872287684 | 0.980066577841242 | 0.862318872287684
+ 0.955336489125606 | 0.862318872287684 | 0.955336489125606 | 0.862318872287684
+(3 rows)
+
 -- select cos as nest function with agg (pushdown, explain)
 --Testcase 302:
 EXPLAIN VERBOSE
@@ -6977,26 +7191,34 @@ SELECT cos_all() FROM s3 WHERE time >= to_timestamp(0) and time <= to_timestamp(
 --Testcase 313:
 EXPLAIN VERBOSE
 SELECT exp(value1), exp(value2), exp(value3), exp(value4) FROM s3;
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2200.31 rows=1462 width=32)
-   Output: exp(value1), exp(value2), exp(value3), exp(value4)
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1483.93 rows=1462 width=32)
+   Output: exp(value1), exp((value2)::double precision), exp(value3), exp((value4)::double precision)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
 (3 rows)
 
 -- select exp (builtin function, result)
 --Testcase 314:
 SELECT exp(value1), exp(value2), exp(value3), exp(value4) FROM s3;
-ERROR:  stub exp(bigint) is called
-CONTEXT:  PL/pgSQL function exp(bigint) line 3 at RAISE
+       exp        |         exp          |        exp        |         exp          
+------------------+----------------------+-------------------+----------------------
+ 1.10517091807565 | 2.68811714181614e+43 |  0.90483741803596 | 3.72007597602084e-44
+ 1.22140275816017 | 2.68811714181614e+43 | 0.818730753077982 | 3.72007597602084e-44
+   1.349858807576 | 2.68811714181614e+43 | 0.740818220681718 | 3.72007597602084e-44
+ 3.00416602394643 | 7.22597376812575e+86 |  0.33287108369808 | 1.38389652673674e-87
+ 9.02501349943412 | 7.22597376812575e+86 | 0.110803158362334 | 1.38389652673674e-87
+ 27.1126389206579 | 7.22597376812575e+86 |  0.03688316740124 | 1.38389652673674e-87
+(6 rows)
+
 -- select exp (builtin function, not pushdown constraints, explain)
 --Testcase 315:
 EXPLAIN VERBOSE
 SELECT exp(value1), exp(value2), exp(value3), exp(value4) FROM s3 WHERE to_hex(value2) != '64';
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: exp(value1), exp(value2), exp(value3), exp(value4)
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: exp(value1), exp((value2)::double precision), exp(value3), exp((value4)::double precision)
    Filter: (to_hex(s3.value2) <> '64'::text)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
 (4 rows)
@@ -7004,24 +7226,34 @@ SELECT exp(value1), exp(value2), exp(value3), exp(value4) FROM s3 WHERE to_hex(v
 -- select exp (builtin function, not pushdown constraints, result)
 --Testcase 316:
 SELECT exp(value1), exp(value2), exp(value3), exp(value4) FROM s3 WHERE to_hex(value2) != '64';
-ERROR:  stub exp(bigint) is called
-CONTEXT:  PL/pgSQL function exp(bigint) line 3 at RAISE
+       exp        |         exp          |        exp        |         exp          
+------------------+----------------------+-------------------+----------------------
+ 3.00416602394643 | 7.22597376812575e+86 |  0.33287108369808 | 1.38389652673674e-87
+ 9.02501349943412 | 7.22597376812575e+86 | 0.110803158362334 | 1.38389652673674e-87
+ 27.1126389206579 | 7.22597376812575e+86 |  0.03688316740124 | 1.38389652673674e-87
+(3 rows)
+
 -- select exp (builtin function, pushdown constraints, explain)
 --Testcase 317:
 EXPLAIN VERBOSE
 SELECT exp(value1), exp(value2), exp(value3), exp(value4) FROM s3 WHERE value2 != 200;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: exp(value1), exp(value2), exp(value3), exp(value4)
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: exp(value1), exp((value2)::double precision), exp(value3), exp((value4)::double precision)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
 -- select exp (builtin function, pushdown constraints, result)
 --Testcase 318:
 SELECT exp(value1), exp(value2), exp(value3), exp(value4) FROM s3 WHERE value2 != 200;
-ERROR:  stub exp(bigint) is called
-CONTEXT:  PL/pgSQL function exp(bigint) line 3 at RAISE
+       exp        |         exp          |        exp        |         exp          
+------------------+----------------------+-------------------+----------------------
+ 1.10517091807565 | 2.68811714181614e+43 |  0.90483741803596 | 3.72007597602084e-44
+ 1.22140275816017 | 2.68811714181614e+43 | 0.818730753077982 | 3.72007597602084e-44
+   1.349858807576 | 2.68811714181614e+43 | 0.740818220681718 | 3.72007597602084e-44
+(3 rows)
+
 -- select exp as nest function with agg (pushdown, explain)
 --Testcase 319:
 EXPLAIN VERBOSE
@@ -7195,26 +7427,34 @@ CONTEXT:  PL/pgSQL function ceil_all() line 3 at RAISE
 --Testcase 330:
 EXPLAIN VERBOSE
 SELECT floor(value1), floor(value2), floor(value3), floor(value4) FROM s3;
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2200.31 rows=1462 width=32)
-   Output: floor(value1), floor(value2), floor(value3), floor(value4)
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1483.93 rows=1462 width=32)
+   Output: floor(value1), floor((value2)::double precision), floor(value3), floor((value4)::double precision)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
 (3 rows)
 
 -- select floor (builtin function, result)
 --Testcase 331:
 SELECT floor(value1), floor(value2), floor(value3), floor(value4) FROM s3;
-ERROR:  stub floor(bigint) is called
-CONTEXT:  PL/pgSQL function floor(bigint) line 3 at RAISE
+ floor | floor | floor | floor 
+-------+-------+-------+-------
+     0 |   100 |    -1 |  -100
+     0 |   100 |    -1 |  -100
+     0 |   100 |    -1 |  -100
+     1 |   200 |    -2 |  -200
+     2 |   200 |    -3 |  -200
+     3 |   200 |    -4 |  -200
+(6 rows)
+
 -- select floor (builtin function, not pushdown constraints, explain)
 --Testcase 332:
 EXPLAIN VERBOSE
 SELECT floor(value1), floor(value2), floor(value3), floor(value4) FROM s3 WHERE to_hex(value2) != '64';
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: floor(value1), floor(value2), floor(value3), floor(value4)
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: floor(value1), floor((value2)::double precision), floor(value3), floor((value4)::double precision)
    Filter: (to_hex(s3.value2) <> '64'::text)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
 (4 rows)
@@ -7222,24 +7462,34 @@ SELECT floor(value1), floor(value2), floor(value3), floor(value4) FROM s3 WHERE 
 -- select floor (builtin function, not pushdown constraints, result)
 --Testcase 333:
 SELECT floor(value1), floor(value2), floor(value3), floor(value4) FROM s3 WHERE to_hex(value2) != '64';
-ERROR:  stub floor(bigint) is called
-CONTEXT:  PL/pgSQL function floor(bigint) line 3 at RAISE
+ floor | floor | floor | floor 
+-------+-------+-------+-------
+     1 |   200 |    -2 |  -200
+     2 |   200 |    -3 |  -200
+     3 |   200 |    -4 |  -200
+(3 rows)
+
 -- select floor (builtin function, pushdown constraints, explain)
 --Testcase 334:
 EXPLAIN VERBOSE
 SELECT floor(value1), floor(value2), floor(value3), floor(value4) FROM s3 WHERE value2 != 200;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: floor(value1), floor(value2), floor(value3), floor(value4)
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: floor(value1), floor((value2)::double precision), floor(value3), floor((value4)::double precision)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
 -- select floor (builtin function, pushdown constraints, result)
 --Testcase 335:
 SELECT floor(value1), floor(value2), floor(value3), floor(value4) FROM s3 WHERE value2 != 200;
-ERROR:  stub floor(bigint) is called
-CONTEXT:  PL/pgSQL function floor(bigint) line 3 at RAISE
+ floor | floor | floor | floor 
+-------+-------+-------+-------
+     0 |   100 |    -1 |  -100
+     0 |   100 |    -1 |  -100
+     0 |   100 |    -1 |  -100
+(3 rows)
+
 -- select floor as nest function with agg (pushdown, explain)
 --Testcase 336:
 EXPLAIN VERBOSE
@@ -7423,52 +7673,70 @@ CONTEXT:  PL/pgSQL function floor_all() line 3 at RAISE
 -- select ln (builtin function, explain)
 --Testcase 347:
 EXPLAIN VERBOSE
-SELECT ln(value1), ln(value2), ln(value3), ln(value4) FROM s3;
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2200.31 rows=1462 width=32)
-   Output: ln(value1), ln(value2), ln(value3), ln(value4)
-   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
+SELECT ln(value1), ln(value2) FROM s3;
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2063.36 rows=2048 width=16)
+   Output: ln(value1), ln((value2)::double precision)
+   InfluxDB query: SELECT "value1", "value2" FROM "s3"
 (3 rows)
 
 -- select ln (builtin function, result)
 --Testcase 348:
-SELECT ln(value1), ln(value2), ln(value3), ln(value4) FROM s3;
-ERROR:  stub ln(bigint) is called
-CONTEXT:  PL/pgSQL function ln(bigint) line 3 at RAISE
+SELECT ln(value1), ln(value2) FROM s3;
+         ln         |        ln        
+--------------------+------------------
+  -2.30258509299405 | 4.60517018598809
+   -1.6094379124341 | 4.60517018598809
+  -1.20397280432594 | 4.60517018598809
+ 0.0953101798043249 | 5.29831736654804
+   0.78845736036427 | 5.29831736654804
+   1.19392246847243 | 5.29831736654804
+(6 rows)
+
 -- select ln (builtin function, not pushdown constraints, explain)
 --Testcase 349:
 EXPLAIN VERBOSE
-SELECT ln(value1), ln(value2), ln(value3), ln(value4) FROM s3 WHERE to_hex(value2) != '64';
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: ln(value1), ln(value2), ln(value3), ln(value4)
+SELECT ln(value1), ln(value2) FROM s3 WHERE to_hex(value2) != '64';
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2053.28 rows=2038 width=16)
+   Output: ln(value1), ln((value2)::double precision)
    Filter: (to_hex(s3.value2) <> '64'::text)
-   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
+   InfluxDB query: SELECT "value1", "value2" FROM "s3"
 (4 rows)
 
 -- select ln (builtin function, not pushdown constraints, result)
 --Testcase 350:
-SELECT ln(value1), ln(value2), ln(value3), ln(value4) FROM s3 WHERE to_hex(value2) != '64';
-ERROR:  stub ln(bigint) is called
-CONTEXT:  PL/pgSQL function ln(bigint) line 3 at RAISE
+SELECT ln(value1), ln(value2) FROM s3 WHERE to_hex(value2) != '64';
+         ln         |        ln        
+--------------------+------------------
+ 0.0953101798043249 | 5.29831736654804
+   0.78845736036427 | 5.29831736654804
+   1.19392246847243 | 5.29831736654804
+(3 rows)
+
 -- select ln (builtin function, pushdown constraints, explain)
 --Testcase 351:
 EXPLAIN VERBOSE
-SELECT ln(value1), ln(value2), ln(value3), ln(value4) FROM s3 WHERE value2 != 200;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: ln(value1), ln(value2), ln(value3), ln(value4)
-   InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3" WHERE (("value2" <> 200))
+SELECT ln(value1), ln(value2) FROM s3 WHERE value2 != 200;
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2053.28 rows=2038 width=16)
+   Output: ln(value1), ln((value2)::double precision)
+   InfluxDB query: SELECT "value1", "value2" FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
 -- select ln (builtin function, pushdown constraints, result)
 --Testcase 352:
-SELECT ln(value1), ln(value2), ln(value3), ln(value4) FROM s3 WHERE value2 != 200;
-ERROR:  stub ln(bigint) is called
-CONTEXT:  PL/pgSQL function ln(bigint) line 3 at RAISE
+SELECT ln(value1), ln(value2) FROM s3 WHERE value2 != 200;
+        ln         |        ln        
+-------------------+------------------
+ -2.30258509299405 | 4.60517018598809
+  -1.6094379124341 | 4.60517018598809
+ -1.20397280432594 | 4.60517018598809
+(3 rows)
+
 -- select ln as nest function with agg (pushdown, explain)
 --Testcase 353:
 EXPLAIN VERBOSE
@@ -7606,26 +7874,34 @@ CONTEXT:  PL/pgSQL function ln_all() line 3 at RAISE
 --Testcase 364:
 EXPLAIN VERBOSE
 SELECT pow(value1, 2), pow(value2, 2), pow(value3, 2), pow(value4, 2) FROM s3;
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2924.00 rows=1462 width=32)
-   Output: pow(value1, 2), pow(value2, 2), pow(value3, 2), pow(value4, 2)
+                                                                                            QUERY PLAN                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1483.93 rows=1462 width=32)
+   Output: pow(value1, '2'::double precision), pow((value2)::double precision, '2'::double precision), pow(value3, '2'::double precision), pow((value4)::double precision, '2'::double precision)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
 (3 rows)
 
 -- select pow (builtin function, result)
 --Testcase 365:
 SELECT pow(value1, 2), pow(value2, 2), pow(value3, 2), pow(value4, 2) FROM s3;
-ERROR:  stub pow(float8, int) is called
-CONTEXT:  PL/pgSQL function pow(double precision,integer) line 3 at RAISE
+  pow  |  pow  |  pow  |  pow  
+-------+-------+-------+-------
+  0.01 | 10000 |  0.01 | 10000
+  0.04 | 10000 |  0.04 | 10000
+  0.09 | 10000 |  0.09 | 10000
+  1.21 | 40000 |  1.21 | 40000
+  4.84 | 40000 |  4.84 | 40000
+ 10.89 | 40000 | 10.89 | 40000
+(6 rows)
+
 -- select pow (builtin function, not pushdown constraints, explain)
 --Testcase 366:
 EXPLAIN VERBOSE
 SELECT pow(value1, 2), pow(value2, 2), pow(value3, 2), pow(value4, 2) FROM s3 WHERE to_hex(value2) != '64';
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2910.00 rows=1455 width=32)
-   Output: pow(value1, 2), pow(value2, 2), pow(value3, 2), pow(value4, 2)
+                                                                                            QUERY PLAN                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: pow(value1, '2'::double precision), pow((value2)::double precision, '2'::double precision), pow(value3, '2'::double precision), pow((value4)::double precision, '2'::double precision)
    Filter: (to_hex(s3.value2) <> '64'::text)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
 (4 rows)
@@ -7633,24 +7909,34 @@ SELECT pow(value1, 2), pow(value2, 2), pow(value3, 2), pow(value4, 2) FROM s3 WH
 -- select pow (builtin function, not pushdown constraints, result)
 --Testcase 367:
 SELECT pow(value1, 2), pow(value2, 2), pow(value3, 2), pow(value4, 2) FROM s3 WHERE to_hex(value2) != '64';
-ERROR:  stub pow(float8, int) is called
-CONTEXT:  PL/pgSQL function pow(double precision,integer) line 3 at RAISE
+  pow  |  pow  |  pow  |  pow  
+-------+-------+-------+-------
+  1.21 | 40000 |  1.21 | 40000
+  4.84 | 40000 |  4.84 | 40000
+ 10.89 | 40000 | 10.89 | 40000
+(3 rows)
+
 -- select pow (builtin function, pushdown constraints, explain)
 --Testcase 368:
 EXPLAIN VERBOSE
 SELECT pow(value1, 2), pow(value2, 2), pow(value3, 2), pow(value4, 2) FROM s3 WHERE value2 != 200;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2910.00 rows=1455 width=32)
-   Output: pow(value1, 2), pow(value2, 2), pow(value3, 2), pow(value4, 2)
+                                                                                            QUERY PLAN                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: pow(value1, '2'::double precision), pow((value2)::double precision, '2'::double precision), pow(value3, '2'::double precision), pow((value4)::double precision, '2'::double precision)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
 -- select pow (builtin function, pushdown constraints, result)
 --Testcase 369:
 SELECT pow(value1, 2), pow(value2, 2), pow(value3, 2), pow(value4, 2) FROM s3 WHERE value2 != 200;
-ERROR:  stub pow(float8, int) is called
-CONTEXT:  PL/pgSQL function pow(double precision,integer) line 3 at RAISE
+ pow  |  pow  | pow  |  pow  
+------+-------+------+-------
+ 0.01 | 10000 | 0.01 | 10000
+ 0.04 | 10000 | 0.04 | 10000
+ 0.09 | 10000 | 0.09 | 10000
+(3 rows)
+
 -- select pow as nest function with agg (pushdown, explain)
 --Testcase 370:
 EXPLAIN VERBOSE
@@ -7658,7 +7944,7 @@ SELECT sum(value3),pow(sum(value3), 2) FROM s3;
                                QUERY PLAN                                
 -------------------------------------------------------------------------
  Foreign Scan  (cost=1.00..1.00 rows=1 width=16)
-   Output: (sum(value3)), (pow(sum(value3), 2))
+   Output: (sum(value3)), (pow(sum(value3), '2'::double precision))
    InfluxDB query: SELECT sum("value3"), pow(sum("value3"), 2) FROM "s3"
 (3 rows)
 
@@ -7674,10 +7960,10 @@ SELECT sum(value3),pow(sum(value3), 2) FROM s3;
 --Testcase 372:
 EXPLAIN VERBOSE
 SELECT pow(log2(value1), 2),pow(log2(1/value1), 2) FROM s3;
-                                   QUERY PLAN                                   
---------------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..5126.40 rows=2560 width=16)
-   Output: pow(log2(value1), 2), pow(log2(('1'::double precision / value1)), 2)
+                                                       QUERY PLAN                                                       
+------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..3859.20 rows=2560 width=16)
+   Output: pow(log2(value1), '2'::double precision), pow(log2(('1'::double precision / value1)), '2'::double precision)
    InfluxDB query: SELECT "value1" FROM "s3"
 (3 rows)
 
@@ -7690,52 +7976,92 @@ CONTEXT:  PL/pgSQL function log2(double precision) line 3 at RAISE
 --Testcase 374:
 EXPLAIN VERBOSE
 SELECT pow(value3, 2), pi(), 4.1 FROM s3;
-                             QUERY PLAN                              
----------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..3200.00 rows=2560 width=48)
-   Output: pow(value3, 2), '3.14159265358979'::double precision, 4.1
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..2566.40 rows=2560 width=48)
+   Output: pow(value3, '2'::double precision), '3.14159265358979'::double precision, 4.1
    InfluxDB query: SELECT "value3" FROM "s3"
 (3 rows)
 
 -- select pow with non pushdown func and explicit constant (result)
 --Testcase 375:
 SELECT pow(value3, 2), pi(), 4.1 FROM s3;
-ERROR:  stub pow(float8, int) is called
-CONTEXT:  PL/pgSQL function pow(double precision,integer) line 3 at RAISE
+  pow  |        pi        | ?column? 
+-------+------------------+----------
+  0.01 | 3.14159265358979 |      4.1
+  0.04 | 3.14159265358979 |      4.1
+  0.09 | 3.14159265358979 |      4.1
+  1.21 | 3.14159265358979 |      4.1
+  4.84 | 3.14159265358979 |      4.1
+ 10.89 | 3.14159265358979 |      4.1
+(6 rows)
+
 -- select pow with order by (explain)
 --Testcase 376:
 EXPLAIN VERBOSE
 SELECT value1, pow(1-value1, 2) FROM s3 order by pow(1-value1, 2);
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Sort  (cost=3351.32..3357.72 rows=2560 width=16)
-   Output: value1, (pow(('1'::double precision - value1), 2))
-   Sort Key: (pow(('1'::double precision - s3.value1), 2))
-   ->  Foreign Scan on public.s3  (cost=10.00..3206.40 rows=2560 width=16)
-         Output: value1, pow(('1'::double precision - value1), 2)
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Sort  (cost=2717.72..2724.12 rows=2560 width=16)
+   Output: value1, (pow(('1'::double precision - value1), '2'::double precision))
+   Sort Key: (pow(('1'::double precision - s3.value1), '2'::double precision))
+   ->  Foreign Scan on public.s3  (cost=10.00..2572.80 rows=2560 width=16)
+         Output: value1, pow(('1'::double precision - value1), '2'::double precision)
          InfluxDB query: SELECT "value1" FROM "s3"
 (6 rows)
 
 -- select pow with order by (result)
 --Testcase 377:
 SELECT value1, pow(1-value1, 2) FROM s3 order by pow(1-value1, 2);
-ERROR:  stub pow(float8, int) is called
-CONTEXT:  PL/pgSQL function pow(double precision,integer) line 3 at RAISE
+ value1 | pow  
+--------+------
+    1.1 | 0.01
+    0.3 | 0.49
+    0.2 | 0.64
+    0.1 | 0.81
+    2.2 | 1.44
+    3.3 | 5.29
+(6 rows)
+
 -- select pow with order by index (result)
 --Testcase 378:
 SELECT value1, pow(1-value1, 2) FROM s3 order by 2,1;
-ERROR:  stub pow(float8, int) is called
-CONTEXT:  PL/pgSQL function pow(double precision,integer) line 3 at RAISE
+ value1 | pow  
+--------+------
+    1.1 | 0.01
+    0.3 | 0.49
+    0.2 | 0.64
+    0.1 | 0.81
+    2.2 | 1.44
+    3.3 | 5.29
+(6 rows)
+
 -- select pow with order by index (result)
 --Testcase 379:
 SELECT value1, pow(1-value1, 2) FROM s3 order by 1,2;
-ERROR:  stub pow(float8, int) is called
-CONTEXT:  PL/pgSQL function pow(double precision,integer) line 3 at RAISE
+ value1 | pow  
+--------+------
+    0.1 | 0.81
+    0.2 | 0.64
+    0.3 | 0.49
+    1.1 | 0.01
+    2.2 | 1.44
+    3.3 | 5.29
+(6 rows)
+
 -- select pow and as
 --Testcase 380:
 SELECT pow(value3, 2) as pow1 FROM s3;
-ERROR:  stub pow(float8, int) is called
-CONTEXT:  PL/pgSQL function pow(double precision,integer) line 3 at RAISE
+ pow1  
+-------
+  0.01
+  0.04
+  0.09
+  1.21
+  4.84
+ 10.89
+(6 rows)
+
 -- select pow_all(2) (stub agg function, explain)
 --Testcase 809:
 EXPLAIN VERBOSE
@@ -7795,26 +8121,34 @@ CONTEXT:  PL/pgSQL function pow_all(integer) line 3 at RAISE
 --Testcase 381:
 EXPLAIN VERBOSE
 SELECT round(value1), round(value2), round(value3), round(value4) FROM s3;
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2200.31 rows=1462 width=32)
-   Output: round(value1), round(value2), round(value3), round(value4)
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1483.93 rows=1462 width=32)
+   Output: round(value1), round((value2)::double precision), round(value3), round((value4)::double precision)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
 (3 rows)
 
 -- select round (builtin function, result)
 --Testcase 382:
 SELECT round(value1), round(value2), round(value3), round(value4) FROM s3;
-ERROR:  stub round(bigint) is called
-CONTEXT:  PL/pgSQL function round(bigint) line 3 at RAISE
+ round | round | round | round 
+-------+-------+-------+-------
+     0 |   100 |    -0 |  -100
+     0 |   100 |    -0 |  -100
+     0 |   100 |    -0 |  -100
+     1 |   200 |    -1 |  -200
+     2 |   200 |    -2 |  -200
+     3 |   200 |    -3 |  -200
+(6 rows)
+
 -- select round (builtin function, not pushdown constraints, explain)
 --Testcase 383:
 EXPLAIN VERBOSE
 SELECT round(value1), round(value2), round(value3), round(value4) FROM s3 WHERE to_hex(value2) != '64';
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: round(value1), round(value2), round(value3), round(value4)
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: round(value1), round((value2)::double precision), round(value3), round((value4)::double precision)
    Filter: (to_hex(s3.value2) <> '64'::text)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
 (4 rows)
@@ -7822,24 +8156,34 @@ SELECT round(value1), round(value2), round(value3), round(value4) FROM s3 WHERE 
 -- select round (builtin function, not pushdown constraints, result)
 --Testcase 384:
 SELECT round(value1), round(value2), round(value3), round(value4) FROM s3 WHERE to_hex(value2) != '64';
-ERROR:  stub round(bigint) is called
-CONTEXT:  PL/pgSQL function round(bigint) line 3 at RAISE
+ round | round | round | round 
+-------+-------+-------+-------
+     1 |   200 |    -1 |  -200
+     2 |   200 |    -2 |  -200
+     3 |   200 |    -3 |  -200
+(3 rows)
+
 -- select round (builtin function, pushdown constraints, explain)
 --Testcase 385:
 EXPLAIN VERBOSE
 SELECT round(value1), round(value2), round(value3), round(value4) FROM s3 WHERE value2 != 200;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: round(value1), round(value2), round(value3), round(value4)
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: round(value1), round((value2)::double precision), round(value3), round((value4)::double precision)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
 -- select round (builtin function, pushdown constraints, result)
 --Testcase 386:
 SELECT round(value1), round(value2), round(value3), round(value4) FROM s3 WHERE value2 != 200;
-ERROR:  stub round(bigint) is called
-CONTEXT:  PL/pgSQL function round(bigint) line 3 at RAISE
+ round | round | round | round 
+-------+-------+-------+-------
+     0 |   100 |    -0 |  -100
+     0 |   100 |    -0 |  -100
+     0 |   100 |    -0 |  -100
+(3 rows)
+
 -- select round as nest function with agg (pushdown, explain)
 --Testcase 387:
 EXPLAIN VERBOSE
@@ -8024,26 +8368,34 @@ CONTEXT:  PL/pgSQL function round_all() line 3 at RAISE
 --Testcase 398:
 EXPLAIN VERBOSE
 SELECT sin(value1), sin(value2), sin(value3), sin(value4) FROM s3;
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2200.31 rows=1462 width=32)
-   Output: sin(value1), sin(value2), sin(value3), sin(value4)
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1483.93 rows=1462 width=32)
+   Output: sin(value1), sin((value2)::double precision), sin(value3), sin((value4)::double precision)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
 (3 rows)
 
 -- select sin (builtin function, result)
 --Testcase 399:
 SELECT sin(value1), sin(value2), sin(value3), sin(value4) FROM s3;
-ERROR:  stub sin(bigint) is called
-CONTEXT:  PL/pgSQL function sin(bigint) line 3 at RAISE
+        sin         |        sin         |         sin         |        sin        
+--------------------+--------------------+---------------------+-------------------
+ 0.0998334166468282 | -0.506365641109759 | -0.0998334166468282 | 0.506365641109759
+  0.198669330795061 | -0.506365641109759 |  -0.198669330795061 | 0.506365641109759
+   0.29552020666134 | -0.506365641109759 |   -0.29552020666134 | 0.506365641109759
+  0.891207360061435 | -0.873297297213995 |  -0.891207360061435 | 0.873297297213995
+   0.80849640381959 | -0.873297297213995 |   -0.80849640381959 | 0.873297297213995
+ -0.157745694143248 | -0.873297297213995 |   0.157745694143248 | 0.873297297213995
+(6 rows)
+
 -- select sin (builtin function, not pushdown constraints, explain)
 --Testcase 400:
 EXPLAIN VERBOSE
 SELECT sin(value1), sin(value2), sin(value3), sin(value4) FROM s3 WHERE to_hex(value2) != '64';
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: sin(value1), sin(value2), sin(value3), sin(value4)
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: sin(value1), sin((value2)::double precision), sin(value3), sin((value4)::double precision)
    Filter: (to_hex(s3.value2) <> '64'::text)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
 (4 rows)
@@ -8051,24 +8403,34 @@ SELECT sin(value1), sin(value2), sin(value3), sin(value4) FROM s3 WHERE to_hex(v
 -- select sin (builtin function, not pushdown constraints, result)
 --Testcase 401:
 SELECT sin(value1), sin(value2), sin(value3), sin(value4) FROM s3 WHERE to_hex(value2) != '64';
-ERROR:  stub sin(bigint) is called
-CONTEXT:  PL/pgSQL function sin(bigint) line 3 at RAISE
+        sin         |        sin         |        sin         |        sin        
+--------------------+--------------------+--------------------+-------------------
+  0.891207360061435 | -0.873297297213995 | -0.891207360061435 | 0.873297297213995
+   0.80849640381959 | -0.873297297213995 |  -0.80849640381959 | 0.873297297213995
+ -0.157745694143248 | -0.873297297213995 |  0.157745694143248 | 0.873297297213995
+(3 rows)
+
 -- select sin (builtin function, pushdown constraints, explain)
 --Testcase 402:
 EXPLAIN VERBOSE
 SELECT sin(value1), sin(value2), sin(value3), sin(value4) FROM s3 WHERE value2 != 200;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: sin(value1), sin(value2), sin(value3), sin(value4)
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: sin(value1), sin((value2)::double precision), sin(value3), sin((value4)::double precision)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
 -- select sin (builtin function, pushdown constraints, result)
 --Testcase 403:
 SELECT sin(value1), sin(value2), sin(value3), sin(value4) FROM s3 WHERE value2 != 200;
-ERROR:  stub sin(bigint) is called
-CONTEXT:  PL/pgSQL function sin(bigint) line 3 at RAISE
+        sin         |        sin         |         sin         |        sin        
+--------------------+--------------------+---------------------+-------------------
+ 0.0998334166468282 | -0.506365641109759 | -0.0998334166468282 | 0.506365641109759
+  0.198669330795061 | -0.506365641109759 |  -0.198669330795061 | 0.506365641109759
+   0.29552020666134 | -0.506365641109759 |   -0.29552020666134 | 0.506365641109759
+(3 rows)
+
 -- select sin as nest function with agg (pushdown, explain)
 --Testcase 404:
 EXPLAIN VERBOSE
@@ -8237,26 +8599,34 @@ SELECT sin_all() FROM s3 WHERE time >= to_timestamp(0) and time <= to_timestamp(
 --Testcase 825:
 EXPLAIN VERBOSE
 SELECT tan(value1), tan(value2), tan(value3), tan(value4) FROM s3;
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2200.31 rows=1462 width=32)
-   Output: tan(value1), tan(value2), tan(value3), tan(value4)
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1483.93 rows=1462 width=32)
+   Output: tan(value1), tan((value2)::double precision), tan(value3), tan((value4)::double precision)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
 (3 rows)
 
 -- select tan (builtin function, result)
 --Testcase 826:
 SELECT tan(value1), tan(value2), tan(value3), tan(value4) FROM s3;
-ERROR:  stub tan(bigint) is called
-CONTEXT:  PL/pgSQL function tan(bigint) line 3 at RAISE
+        tan        |        tan         |        tan         |        tan        
+-------------------+--------------------+--------------------+-------------------
+ 0.100334672085451 | -0.587213915156929 | -0.100334672085451 | 0.587213915156929
+ 0.202710035508673 | -0.587213915156929 | -0.202710035508673 | 0.587213915156929
+ 0.309336249609623 | -0.587213915156929 | -0.309336249609623 | 0.587213915156929
+  1.96475965724865 |  -1.79252748379038 |  -1.96475965724865 |  1.79252748379038
+ -1.37382305676879 |  -1.79252748379038 |   1.37382305676879 |  1.79252748379038
+ 0.159745747660032 |  -1.79252748379038 | -0.159745747660032 |  1.79252748379038
+(6 rows)
+
 -- select tan (builtin function, not pushdown constraints, explain)
 --Testcase 827:
 EXPLAIN VERBOSE
 SELECT tan(value1), tan(value2), tan(value3), tan(value4) FROM s3 WHERE to_hex(value2) != '64';
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: tan(value1), tan(value2), tan(value3), tan(value4)
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: tan(value1), tan((value2)::double precision), tan(value3), tan((value4)::double precision)
    Filter: (to_hex(s3.value2) <> '64'::text)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3"
 (4 rows)
@@ -8264,24 +8634,34 @@ SELECT tan(value1), tan(value2), tan(value3), tan(value4) FROM s3 WHERE to_hex(v
 -- select tan (builtin function, not pushdown constraints, result)
 --Testcase 828:
 SELECT tan(value1), tan(value2), tan(value3), tan(value4) FROM s3 WHERE to_hex(value2) != '64';
-ERROR:  stub tan(bigint) is called
-CONTEXT:  PL/pgSQL function tan(bigint) line 3 at RAISE
+        tan        |        tan        |        tan         |       tan        
+-------------------+-------------------+--------------------+------------------
+  1.96475965724865 | -1.79252748379038 |  -1.96475965724865 | 1.79252748379038
+ -1.37382305676879 | -1.79252748379038 |   1.37382305676879 | 1.79252748379038
+ 0.159745747660032 | -1.79252748379038 | -0.159745747660032 | 1.79252748379038
+(3 rows)
+
 -- select tan (builtin function, pushdown constraints, explain)
 --Testcase 829:
 EXPLAIN VERBOSE
 SELECT tan(value1), tan(value2), tan(value3), tan(value4) FROM s3 WHERE value2 != 200;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
- Foreign Scan on public.s3  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: tan(value1), tan(value2), tan(value3), tan(value4)
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.s3  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: tan(value1), tan((value2)::double precision), tan(value3), tan((value4)::double precision)
    InfluxDB query: SELECT "value1", "value2", "value3", "value4" FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
 -- select tan (builtin function, pushdown constraints, result)
 --Testcase 830:
 SELECT tan(value1), tan(value2), tan(value3), tan(value4) FROM s3 WHERE value2 != 200;
-ERROR:  stub tan(bigint) is called
-CONTEXT:  PL/pgSQL function tan(bigint) line 3 at RAISE
+        tan        |        tan         |        tan         |        tan        
+-------------------+--------------------+--------------------+-------------------
+ 0.100334672085451 | -0.587213915156929 | -0.100334672085451 | 0.587213915156929
+ 0.202710035508673 | -0.587213915156929 | -0.202710035508673 | 0.587213915156929
+ 0.309336249609623 | -0.587213915156929 | -0.309336249609623 | 0.587213915156929
+(3 rows)
+
 -- select tan as nest function with agg (pushdown, explain)
 --Testcase 831:
 EXPLAIN VERBOSE

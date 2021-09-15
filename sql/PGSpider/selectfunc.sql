@@ -115,32 +115,32 @@ SELECT log(value1::numeric, value2::numeric) FROM s3 WHERE value1 != 1;
 --Testcase 22:
 SELECT log(value1::numeric, value2::numeric) FROM s3 WHERE value1 != 1;
 
--- select log (stub function, need to swap arguments, float8, explain)
+-- select log (builtin function, need to swap arguments, float8, explain)
 --Testcase 23:
 EXPLAIN VERBOSE
-SELECT log(value1, 0.1) FROM s3 WHERE value1 != 1;
+SELECT log(value1::numeric, 0.1) FROM s3 WHERE value1 != 1;
 
--- select log (stub function, need to swap arguments, float8, result)
+-- select log (builtin function, need to swap arguments, float8, result)
 --Testcase 24:
-SELECT log(value1, 0.1) FROM s3 WHERE value1 != 1;
+SELECT log(value1::numeric, 0.1) FROM s3 WHERE value1 != 1;
 
--- select log (stub function, need to swap arguments, bigint, explain)
+-- select log (builtin function, need to swap arguments, bigint, explain)
 --Testcase 25:
 EXPLAIN VERBOSE
-SELECT log(value2, 3) FROM s3 WHERE value1 != 1;
+SELECT log(value2::numeric, 3::numeric) FROM s3 WHERE value1 != 1;
 
--- select log (stub function, need to swap arguments, bigint, result)
+-- select log (builtin function, need to swap arguments, bigint, result)
 --Testcase 26:
-SELECT log(value2, 3) FROM s3 WHERE value1 != 1;
+SELECT log(value2::numeric, 3::numeric) FROM s3 WHERE value1 != 1;
 
--- select log (stub function, need to swap arguments, mix type, explain)
+-- select log (builtin function, need to swap arguments, mix type, explain)
 --Testcase 27:
 EXPLAIN VERBOSE
-SELECT log(value1, value2) FROM s3 WHERE value1 != 1;
+SELECT log(value1::numeric, value2::numeric) FROM s3 WHERE value1 != 1;
 
--- select log (stub function, need to swap arguments, mix type, result)
+-- select log (builtin function, need to swap arguments, mix type, result)
 --Testcase 28:
-SELECT log(value1, value2) FROM s3 WHERE value1 != 1;
+SELECT log(value1::numeric, value2::numeric) FROM s3 WHERE value1 != 1;
 
 -- select log(*) (stub agg function, explain)
 --Testcase 423:
@@ -1689,7 +1689,7 @@ SELECT integral("value1", interval '1s'),influx_time(time, interval '1s'),tag1 F
 
 -- select integral (stub agg function and group by tag only) (result)
 --Testcase 148:
-SELECT tag1,integral("value1") FROM s3 WHERE time >= to_timestamp(0) and time <= to_timestamp(4) GROUP BY tag1;
+SELECT tag1,integral("value1") FROM s3 WHERE time >= to_timestamp(0) and time <= to_timestamp(4) GROUP BY tag1 ORDER BY tag1;
 
 -- select integral (stub agg function and other aggs) (result)
 --Testcase 149:
@@ -1697,7 +1697,7 @@ SELECT sum("value1"),integral("value1"),count("value1") FROM s3;
 
 -- select integral (stub agg function and group by tag only) (result)
 --Testcase 150:
-SELECT tag1,integral("value1", interval '1s') FROM s3 WHERE time >= to_timestamp(0) and time <= to_timestamp(4) GROUP BY tag1;
+SELECT tag1,integral("value1", interval '1s') FROM s3 WHERE time >= to_timestamp(0) and time <= to_timestamp(4) GROUP BY tag1 ORDER BY tag1;
 
 -- select integral (stub agg function and other aggs) (result)
 --Testcase 151:
@@ -2704,19 +2704,19 @@ SELECT acos(value3), pi(), 4.1 FROM s3;
 -- select acos with order by (explain)
 --Testcase 223:
 EXPLAIN VERBOSE
-SELECT value1, acos(1-value1) FROM s3 order by acos(1-value1);
+SELECT value1, acos(1-value1) FROM s3 ORDER BY acos(1-value1);
 
 -- select acos with order by (result)
 --Testcase 224:
-SELECT value1, acos(1-value1) FROM s3 order by acos(1-value1);
+SELECT value1, acos(1-value1) FROM s3 ORDER BY acos(1-value1);
 
 -- select acos with order by index (result)
 --Testcase 225:
-SELECT value1, acos(1-value1) FROM s3 order by 2,1;
+SELECT value1, acos(1-value1) FROM s3 ORDER BY 2,1;
 
 -- select acos with order by index (result)
 --Testcase 226:
-SELECT value1, acos(1-value1) FROM s3 order by 1,2;
+SELECT value1, acos(1-value1) FROM s3 ORDER BY 1,2;
 
 -- select acos and as
 --Testcase 227:
@@ -2779,11 +2779,11 @@ SELECT asin(value1), asin(value2), asin(value3), asin(value4) FROM s3 WHERE valu
 -- select asin as nest function with agg (pushdown, explain)
 --Testcase 234:
 EXPLAIN VERBOSE
-SELECT sum(value3),asin(sum(value3)) FROM s3;
+SELECT sum(value3), asin(sum(value3)) FROM s3;
 
 -- select asin as nest function with agg (pushdown, result)
 --Testcase 235:
-SELECT sum(value3),asin(sum(value3)) FROM s3;
+SELECT sum(value3), asin(sum(value3)) FROM s3;
 
 -- select asin as nest with log2 (pushdown, explain)
 --Testcase 236:
@@ -2806,19 +2806,19 @@ SELECT asin(value3), pi(), 4.1 FROM s3;
 -- select asin with order by (explain)
 --Testcase 240:
 EXPLAIN VERBOSE
-SELECT value1, asin(1-value1) FROM s3 order by asin(1-value1);
+SELECT value1, asin(1-value1) FROM s3 ORDER BY asin(1-value1);
 
 -- select asin with order by (result)
 --Testcase 241:
-SELECT value1, asin(1-value1) FROM s3 order by asin(1-value1);
+SELECT value1, asin(1-value1) FROM s3 ORDER BY asin(1-value1);
 
 -- select asin with order by index (result)
 --Testcase 242:
-SELECT value1, asin(1-value1) FROM s3 order by 2,1;
+SELECT value1, asin(1-value1) FROM s3 ORDER BY 2,1;
 
 -- select asin with order by index (result)
 --Testcase 243:
-SELECT value1, asin(1-value1) FROM s3 order by 1,2;
+SELECT value1, asin(1-value1) FROM s3 ORDER BY 1,2;
 
 -- select asin and as
 --Testcase 244:

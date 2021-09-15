@@ -1,10 +1,11 @@
 def NODE_NAME = 'AWS_Instance_CentOS'
-def MAIL_TO = 'db-jenkins@swc.toshiba.co.jp'
+def MAIL_TO = '$DEFAULT_RECIPIENTS'
 def BRANCH_NAME = 'Branch [' + env.BRANCH_NAME + ']'
 def BUILD_INFO = 'Jenkins job: ' + env.BUILD_URL + '\n'
 
-def INFLUXDB_DOCKER_PATH = '/home/jenkins/Docker_ExistedMulti/Server/Influx'
+def INFLUXDB_DOCKER_PATH = '/home/jenkins/Docker/Server/Influx'
 def TEST_TYPE = 'INFLUX'
+def BRANCH_PGSPIDER = 'unimplemented_21A'
 
 def make_check_test(String target, String version) {
     def prefix = ""
@@ -20,7 +21,7 @@ def make_check_test(String target, String version) {
         sh """
             rm -rf make_check_existed_test.out || true
             docker exec -u postgres postgresserver_multi_for_influxdb_existed_test /bin/bash -c '/tmp/influxdb_existed_test.sh ${env.GIT_BRANCH} ${target}${version}'
-            docker exec -u postgres -w /home/postgres/${target}${version}/contrib/influxdb_fdw postgresserver_multi_for_influxdb_existed_test /bin/bash -c 'export http_proxy=http://133.199.251.110:8080 && export https_proxy=http://133.199.251.110:8080 && export PATH=$PATH:/usr/local/go/bin && go get github.com/influxdata/influxdb1-client/v2 && export LANGUAGE="en_US.UTF-8" && export LANG="en_US.UTF-8" && export LC_ALL="en_US.UTF-8" && make ${prefix} && export NO_PROXY=172.23.0.3 && make check ${prefix} | tee make_check.out'
+            docker exec -u postgres -w /home/postgres/${target}${version}/contrib/influxdb_fdw postgresserver_multi_for_influxdb_existed_test /bin/bash -c 'export http_proxy=${EXPORT_PROXY} && export https_proxy=${EXPORT_PROXY} && export PATH=$PATH:/usr/local/go/bin && go env -w GO111MODULE=auto && go get github.com/influxdata/influxdb1-client/v2 && export LANGUAGE="en_US.UTF-8" && export LANG="en_US.UTF-8" && export LC_ALL="en_US.UTF-8" && make ${prefix} && export NO_PROXY=172.23.0.3 && make check ${prefix} | tee make_check.out'
             docker cp postgresserver_multi_for_influxdb_existed_test:/home/postgres/${target}${version}/contrib/influxdb_fdw/make_check.out make_check_existed_test.out
             docker cp postgresserver_multi_for_influxdb_existed_test:/home/postgres/${target}${version}/contrib/influxdb_fdw/results/ results_${target}${version}
         """
@@ -67,11 +68,11 @@ pipeline {
                     if (env.GIT_URL != null) {
                         BUILD_INFO = BUILD_INFO + "Git commit: " + env.GIT_URL.replace(".git", "/commit/") + env.GIT_COMMIT + "\n"
                     }
+                    sh 'rm -rf results_* || true'
                 }
                 catchError() {
                     sh """
                         cd ${INFLUXDB_DOCKER_PATH}
-                        docker-compose build
                         docker-compose up -d
                     """
                 }
@@ -86,20 +87,19 @@ pipeline {
                 }
             }
         }
-        stage('Init_data_InfluxDB') {
+        stage('Init_data_INFLUX_For_Testing_Postgres_9_6_19') {
             steps {
                 catchError() {
                     sh """
                         echo 'Influx version:'
                         docker exec influxserver_multi_for_existed_test /bin/bash -c 'influxd version'
-                        rm -rf results_* || true
                         docker exec influxserver_multi_for_existed_test /bin/bash -c '/tmp/start_existed_test.sh ${env.GIT_BRANCH}'
                     """
                 }
             }
             post {
                 failure {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false
+                    emailext subject: '[CI INFLUX_FDW] EXISTED_TEST: Initialize data with v9.6.19 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
                     updateGitlabCommitStatus name: 'Init_Data', state: 'failed'
                 }
                 success {
@@ -114,10 +114,50 @@ pipeline {
                 }
             }
         }
+        stage('Init_data_INFLUX_For_Testing_Postgres_10_14') {
+            steps {
+                catchError() {
+                    sh """
+                        echo 'Influx version:'
+                        docker exec influxserver_multi_for_existed_test /bin/bash -c 'influxd version'
+                        docker exec influxserver_multi_for_existed_test /bin/bash -c '/tmp/start_existed_test.sh ${env.GIT_BRANCH}'
+                    """
+                }
+            }
+            post {
+                failure {
+                    emailext subject: '[CI INFLUX_FDW] EXISTED_TEST: Initialize data with v10.14 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
+                    updateGitlabCommitStatus name: 'Init_Data', state: 'failed'
+                }
+                success {
+                    updateGitlabCommitStatus name: 'Init_Data', state: 'success'
+                }
+            }
+        }
         stage('make_check_FDW_Test_With_Postgres_10_14') {
             steps {
                 catchError() {
                     make_check_test("postgresql", "10.14")
+                }
+            }
+        }
+        stage('Init_data_INFLUX_For_Testing_Postgres_11_9') {
+            steps {
+                catchError() {
+                    sh """
+                        echo 'Influx version:'
+                        docker exec influxserver_multi_for_existed_test /bin/bash -c 'influxd version'
+                        docker exec influxserver_multi_for_existed_test /bin/bash -c '/tmp/start_existed_test.sh ${env.GIT_BRANCH}'
+                    """
+                }
+            }
+            post {
+                failure {
+                    emailext subject: '[CI INFLUX_FDW] EXISTED_TEST: Initialize data with v11.9 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
+                    updateGitlabCommitStatus name: 'Init_Data', state: 'failed'
+                }
+                success {
+                    updateGitlabCommitStatus name: 'Init_Data', state: 'success'
                 }
             }
         }
@@ -128,10 +168,50 @@ pipeline {
                 }
             }
         }
+        stage('Init_data_INFLUX_For_Testing_Postgres_12_4') {
+            steps {
+                catchError() {
+                    sh """
+                        echo 'Influx version:'
+                        docker exec influxserver_multi_for_existed_test /bin/bash -c 'influxd version'
+                        docker exec influxserver_multi_for_existed_test /bin/bash -c '/tmp/start_existed_test.sh ${env.GIT_BRANCH}'
+                    """
+                }
+            }
+            post {
+                failure {
+                    emailext subject: '[CI INFLUX_FDW] EXISTED_TEST: Initialize data with v12.4 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
+                    updateGitlabCommitStatus name: 'Init_Data', state: 'failed'
+                }
+                success {
+                    updateGitlabCommitStatus name: 'Init_Data', state: 'success'
+                }
+            }
+        }
         stage('make_check_FDW_Test_With_Postgres_12_4') {
             steps {
                 catchError() {
                     make_check_test("postgresql", "12.4")
+                }
+            }
+        }
+        stage('Init_data_INFLUX_For_Testing_Postgres_13_0') {
+            steps {
+                catchError() {
+                    sh """
+                        echo 'Influx version:'
+                        docker exec influxserver_multi_for_existed_test /bin/bash -c 'influxd version'
+                        docker exec influxserver_multi_for_existed_test /bin/bash -c '/tmp/start_existed_test.sh ${env.GIT_BRANCH}'
+                    """
+                }
+            }
+            post {
+                failure {
+                    emailext subject: '[CI INFLUX_FDW] EXISTED_TEST: Initialize data with v13.0 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
+                    updateGitlabCommitStatus name: 'Init_Data', state: 'failed'
+                }
+                success {
+                    updateGitlabCommitStatus name: 'Init_Data', state: 'success'
                 }
             }
         }
@@ -146,7 +226,8 @@ pipeline {
             steps {
                 catchError() {
                     sh """
-                        docker exec -u postgres postgresserver_multi_for_influxdb_existed_test /bin/bash -c '/tmp/initialize_pgspider_existed_test.sh'
+                        docker exec -u postgres postgresserver_multi_for_influxdb_existed_test /bin/bash -c '/tmp/initialize_pgspider_existed_test.sh ${BRANCH_PGSPIDER}'
+                        docker exec influxserver_multi_for_existed_test /bin/bash -c '/tmp/start_existed_test.sh ${env.GIT_BRANCH}'
                     """
                 }
             }

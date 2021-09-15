@@ -1,7 +1,9 @@
 --SET log_min_messages=debug1;
 --SET client_min_messages=debug1;
+--Testcase 23:
 SET datestyle=ISO;
 -- timestamp with time zone differs based on this
+--Testcase 24:
 SET timezone='UTC';
 \set ECHO none
 --Testcase 14:
@@ -28,8 +30,8 @@ SELECT * FROM t4;
 (6 rows)
 
 --Testcase 2:
-EXPLAIN (verbose)  
-SELECT sum("value1"),influx_time(time,interval '1s', interval '0.00001s'),tag1 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00' 
+EXPLAIN (verbose)
+SELECT sum("value1"),influx_time(time,interval '1s', interval '0.00001s'),tag1 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00'
 GROUP BY influx_time(time,interval '1s', interval '0.00001s'), tag1;
                                                                                    QUERY PLAN                                                                                    
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -39,7 +41,7 @@ GROUP BY influx_time(time,interval '1s', interval '0.00001s'), tag1;
 (3 rows)
 
 --Testcase 3:
-SELECT sum("value1"),influx_time(time,interval '1s', interval '0.00001s'),tag1 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00' 
+SELECT sum("value1"),influx_time(time,interval '1s', interval '0.00001s'),tag1 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00'
 GROUP BY influx_time(time,interval '1s', interval '0.00001s'), tag1;
  sum |         influx_time          | tag1 
 -----+------------------------------+------
@@ -58,8 +60,8 @@ GROUP BY influx_time(time,interval '1s', interval '0.00001s'), tag1;
 (12 rows)
 
 --Testcase 4:
-EXPLAIN (verbose) 
-SELECT tag1,sum("value1"),tag2 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00' 
+EXPLAIN (verbose)
+SELECT tag1,sum("value1"),tag2 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00'
  GROUP BY tag2, tag1;
                                                                        QUERY PLAN                                                                       
 --------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -69,7 +71,7 @@ SELECT tag1,sum("value1"),tag2 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' 
 (3 rows)
 
 --Testcase 5:
-SELECT tag1,sum("value1"),tag2 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00' 
+SELECT tag1,sum("value1"),tag2 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00'
  GROUP BY tag2, tag1;
  tag1 | sum | tag2 
 ------+-----+------
@@ -99,7 +101,7 @@ EXPLAIN (verbose)  SELECT tag1,sum("value1"), count(value1), tag2 FROM "t4" grou
 (3 rows)
 
 --Testcase 8:
-SELECT influx_time(time,interval '5s',interval '0s'),tag1,last(time, value1) FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00' 
+SELECT influx_time(time,interval '5s',interval '0s'),tag1,last(time, value1) FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00'
  GROUP BY influx_time(time,interval '5s', interval '0s'), tag1;
       influx_time       | tag1 | last 
 ------------------------+------+------
@@ -111,7 +113,7 @@ SELECT influx_time(time,interval '5s',interval '0s'),tag1,last(time, value1) FRO
 
 --Testcase 9:
 EXPLAIN (VERBOSE)
-SELECT influx_time(time,interval '5s',interval '0s'),tag1,last(time, value1) FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00' 
+SELECT influx_time(time,interval '5s',interval '0s'),tag1,last(time, value1) FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00'
 GROUP BY influx_time(time,interval '5s', interval '0s'), tag1;
                                                                                    QUERY PLAN                                                                                    
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -120,9 +122,9 @@ GROUP BY influx_time(time,interval '5s', interval '0s'), tag1;
    InfluxDB query: SELECT last("value1") FROM "t4" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:05')) GROUP BY (time(0d0h0m5s0u, 0d0h0m0s0u)), "tag1"
 (3 rows)
 
--- no offset 
+-- no offset
 --Testcase 10:
-SELECT influx_time(time,interval '5s'),tag1,last(time, value1) FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00' 
+SELECT influx_time(time,interval '5s'),tag1,last(time, value1) FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00'
 GROUP BY influx_time(time,interval '5s'), tag1;
       influx_time       | tag1 | last 
 ------------------------+------+------
@@ -133,7 +135,7 @@ GROUP BY influx_time(time,interval '5s'), tag1;
 (4 rows)
 
 --Testcase 11:
-EXPLAIN (verbose) 
+EXPLAIN (verbose)
 SELECT last(time, value1),last(time, value2) FROM t4 GROUP BY tag1;
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
@@ -149,6 +151,659 @@ SELECT last(time, value1),last(time, value2) FROM t4 GROUP BY tag1;
     3 |  100
    30 |  200
 (2 rows)
+
+-- GROUP BY time intervals and fill()
+--Testcase 25:
+SELECT * FROM tx;
+          time          |      time_text       | tag1 | tag2 | value1 | value2 
+------------------------+----------------------+------+------+--------+--------
+ 1970-01-01 00:00:00+00 | 1970-01-01T00:00:00Z | a    | x    |      1 |    100
+ 1970-01-01 00:00:01+00 | 1970-01-01T00:00:01Z | a    | y    |      2 |    100
+ 1970-01-01 00:00:02+00 | 1970-01-01T00:00:02Z | a    | x    |      3 |    100
+ 1970-01-01 00:00:03+00 | 1970-01-01T00:00:03Z | b    | y    |     10 |    200
+ 1970-01-01 00:00:04+00 | 1970-01-01T00:00:04Z | b    | z    |     20 |    200
+ 1970-01-01 00:00:05+00 | 1970-01-01T00:00:05Z | b    | z    |     30 |    200
+ 1970-01-01 00:00:06+00 | 1970-01-01T00:00:06Z | b    | z    |        |    200
+ 1970-01-01 00:00:07+00 | 1970-01-01T00:00:07Z | b    | z    |        |    200
+ 1970-01-01 00:00:08+00 | 1970-01-01T00:00:08Z | b    | z    |     80 |    200
+ 1970-01-01 00:00:09+00 | 1970-01-01T00:00:09Z | b    | z    |     90 |    200
+ 1970-01-01 00:00:10+00 | 1970-01-01T00:00:10Z | b    | z    |        |    200
+ 1970-01-01 00:00:11+00 | 1970-01-01T00:00:11Z | b    | z    |        |    200
+ 1970-01-01 00:00:12+00 | 1970-01-01T00:00:12Z | b    | z    |        |    200
+ 1970-01-01 00:00:13+00 | 1970-01-01T00:00:13Z | b    | z    |        |    200
+ 1970-01-01 00:00:14+00 | 1970-01-01T00:00:14Z | b    | z    |    140 |    200
+ 1970-01-01 00:00:15+00 | 1970-01-01T00:00:15Z | b    | z    |    150 |    200
+ 1970-01-01 00:00:16+00 | 1970-01-01T00:00:16Z | c    | zz   |        |   2000
+ 1970-01-01 00:00:20+00 | 1970-01-01T00:00:20Z | c    | zz   |        |   2000
+(18 rows)
+
+--Testcase 26:
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100)) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100));
+                                                                              QUERY PLAN                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=16)
+   Output: (sum(value1)), (influx_time("time", '@ 2 secs'::interval, influx_fill_numeric(100)))
+   InfluxDB query: SELECT sum("value1") FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15')) GROUP BY (time(0d0h0m2s0u)) fill(100)
+(3 rows)
+
+--Testcase 27:
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100)) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100));
+ sum |      influx_time       
+-----+------------------------
+   3 | 1970-01-01 00:00:00+00
+  13 | 1970-01-01 00:00:02+00
+  50 | 1970-01-01 00:00:04+00
+ 100 | 1970-01-01 00:00:06+00
+ 170 | 1970-01-01 00:00:08+00
+ 100 | 1970-01-01 00:00:10+00
+ 100 | 1970-01-01 00:00:12+00
+ 290 | 1970-01-01 00:00:14+00
+(8 rows)
+
+--Testcase 28:
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100.001)) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100.001));
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=16)
+   Output: (sum(value1)), (influx_time("time", '@ 2 secs'::interval, influx_fill_numeric('100.001'::double precision)))
+   InfluxDB query: SELECT sum("value1") FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15')) GROUP BY (time(0d0h0m2s0u)) fill(100.001)
+(3 rows)
+
+--Testcase 29:
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100.001)) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100.001));
+   sum   |      influx_time       
+---------+------------------------
+       3 | 1970-01-01 00:00:00+00
+      13 | 1970-01-01 00:00:02+00
+      50 | 1970-01-01 00:00:04+00
+ 100.001 | 1970-01-01 00:00:06+00
+     170 | 1970-01-01 00:00:08+00
+ 100.001 | 1970-01-01 00:00:10+00
+ 100.001 | 1970-01-01 00:00:12+00
+     290 | 1970-01-01 00:00:14+00
+(8 rows)
+
+--Testcase 30:
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_option('none')) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('none'));
+                                                                              QUERY PLAN                                                                               
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=16)
+   Output: (sum(value1)), (influx_time("time", '@ 2 secs'::interval, influx_fill_option('none'::influx_fill_enum)))
+   InfluxDB query: SELECT sum("value1") FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15')) GROUP BY (time(0d0h0m2s0u)) fill(none)
+(3 rows)
+
+--Testcase 31:
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_option('none')) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('none'));
+ sum |      influx_time       
+-----+------------------------
+   3 | 1970-01-01 00:00:00+00
+  13 | 1970-01-01 00:00:02+00
+  50 | 1970-01-01 00:00:04+00
+ 170 | 1970-01-01 00:00:08+00
+ 290 | 1970-01-01 00:00:14+00
+(5 rows)
+
+--Testcase 32:
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_option('null')) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('null'));
+                                                                              QUERY PLAN                                                                               
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=16)
+   Output: (sum(value1)), (influx_time("time", '@ 2 secs'::interval, influx_fill_option('null'::influx_fill_enum)))
+   InfluxDB query: SELECT sum("value1") FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15')) GROUP BY (time(0d0h0m2s0u)) fill(null)
+(3 rows)
+
+--Testcase 33:
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_option('null')) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('null'));
+ sum |      influx_time       
+-----+------------------------
+   3 | 1970-01-01 00:00:00+00
+  13 | 1970-01-01 00:00:02+00
+  50 | 1970-01-01 00:00:04+00
+     | 1970-01-01 00:00:06+00
+ 170 | 1970-01-01 00:00:08+00
+     | 1970-01-01 00:00:10+00
+     | 1970-01-01 00:00:12+00
+ 290 | 1970-01-01 00:00:14+00
+(8 rows)
+
+--Testcase 34:
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_option('previous')) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('previous'));
+                                                                                QUERY PLAN                                                                                 
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=16)
+   Output: (sum(value1)), (influx_time("time", '@ 2 secs'::interval, influx_fill_option('previous'::influx_fill_enum)))
+   InfluxDB query: SELECT sum("value1") FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15')) GROUP BY (time(0d0h0m2s0u)) fill(previous)
+(3 rows)
+
+--Testcase 35:
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_option('previous')) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('previous'));
+ sum |      influx_time       
+-----+------------------------
+   3 | 1970-01-01 00:00:00+00
+  13 | 1970-01-01 00:00:02+00
+  50 | 1970-01-01 00:00:04+00
+  50 | 1970-01-01 00:00:06+00
+ 170 | 1970-01-01 00:00:08+00
+ 170 | 1970-01-01 00:00:10+00
+ 170 | 1970-01-01 00:00:12+00
+ 290 | 1970-01-01 00:00:14+00
+(8 rows)
+
+--Testcase 36:
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_option('linear')) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('linear'));
+                                                                               QUERY PLAN                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=16)
+   Output: (sum(value1)), (influx_time("time", '@ 2 secs'::interval, influx_fill_option('linear'::influx_fill_enum)))
+   InfluxDB query: SELECT sum("value1") FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15')) GROUP BY (time(0d0h0m2s0u)) fill(linear)
+(3 rows)
+
+--Testcase 37:
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_option('linear')) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('linear'));
+ sum |      influx_time       
+-----+------------------------
+   3 | 1970-01-01 00:00:00+00
+  13 | 1970-01-01 00:00:02+00
+  50 | 1970-01-01 00:00:04+00
+ 110 | 1970-01-01 00:00:06+00
+ 170 | 1970-01-01 00:00:08+00
+ 210 | 1970-01-01 00:00:10+00
+ 250 | 1970-01-01 00:00:12+00
+ 290 | 1970-01-01 00:00:14+00
+(8 rows)
+
+-- with offset interval '0.00001s'
+--Testcase 38:
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100)) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100));
+                                                                                    QUERY PLAN                                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=16)
+   Output: (sum(value1)), (influx_time("time", '@ 2 secs'::interval, '@ 0.00001 secs'::interval, influx_fill_numeric(100)))
+   InfluxDB query: SELECT sum("value1") FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15')) GROUP BY (time(0d0h0m2s0u, 0d0h0m0s10u)) fill(100)
+(3 rows)
+
+--Testcase 39:
+SELECT sum("value1"), influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100)) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100));
+ sum |         influx_time          
+-----+------------------------------
+   1 | 1969-12-31 23:59:58.00001+00
+   5 | 1970-01-01 00:00:00.00001+00
+  30 | 1970-01-01 00:00:02.00001+00
+  30 | 1970-01-01 00:00:04.00001+00
+  80 | 1970-01-01 00:00:06.00001+00
+  90 | 1970-01-01 00:00:08.00001+00
+ 100 | 1970-01-01 00:00:10.00001+00
+ 140 | 1970-01-01 00:00:12.00001+00
+ 150 | 1970-01-01 00:00:14.00001+00
+(9 rows)
+
+--Testcase 40:
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100)), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100)), tag1;
+                                                                                        QUERY PLAN                                                                                         
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=48)
+   Output: (sum(value1)), (influx_time("time", '@ 2 secs'::interval, '@ 0.00001 secs'::interval, influx_fill_numeric(100))), tag1
+   InfluxDB query: SELECT sum("value1") FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15')) GROUP BY (time(0d0h0m2s0u, 0d0h0m0s10u)), "tag1" fill(100)
+(3 rows)
+
+--Testcase 41:
+SELECT sum("value1"), influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100)), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100)), tag1;
+ sum |         influx_time          | tag1 
+-----+------------------------------+------
+   1 | 1969-12-31 23:59:58.00001+00 | a
+   5 | 1970-01-01 00:00:00.00001+00 | a
+ 100 | 1970-01-01 00:00:02.00001+00 | a
+ 100 | 1970-01-01 00:00:04.00001+00 | a
+ 100 | 1970-01-01 00:00:06.00001+00 | a
+ 100 | 1970-01-01 00:00:08.00001+00 | a
+ 100 | 1970-01-01 00:00:10.00001+00 | a
+ 100 | 1970-01-01 00:00:12.00001+00 | a
+ 100 | 1970-01-01 00:00:14.00001+00 | a
+ 100 | 1969-12-31 23:59:58.00001+00 | b
+ 100 | 1970-01-01 00:00:00.00001+00 | b
+  30 | 1970-01-01 00:00:02.00001+00 | b
+  30 | 1970-01-01 00:00:04.00001+00 | b
+  80 | 1970-01-01 00:00:06.00001+00 | b
+  90 | 1970-01-01 00:00:08.00001+00 | b
+ 100 | 1970-01-01 00:00:10.00001+00 | b
+ 140 | 1970-01-01 00:00:12.00001+00 | b
+ 150 | 1970-01-01 00:00:14.00001+00 | b
+(18 rows)
+
+--Testcase 42:
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100)), tag1, tag2 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100)), tag1, tag2;
+                                                                                            QUERY PLAN                                                                                             
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=80)
+   Output: (sum(value1)), (influx_time("time", '@ 2 secs'::interval, '@ 0.00001 secs'::interval, influx_fill_numeric(100))), tag1, tag2
+   InfluxDB query: SELECT sum("value1") FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15')) GROUP BY (time(0d0h0m2s0u, 0d0h0m0s10u)), "tag1", "tag2" fill(100)
+(3 rows)
+
+--Testcase 43:
+SELECT sum("value1"), influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100)), tag1, tag2 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100)), tag1, tag2;
+ sum |         influx_time          | tag1 | tag2 
+-----+------------------------------+------+------
+   1 | 1969-12-31 23:59:58.00001+00 | a    | x
+   3 | 1970-01-01 00:00:00.00001+00 | a    | x
+ 100 | 1970-01-01 00:00:02.00001+00 | a    | x
+ 100 | 1970-01-01 00:00:04.00001+00 | a    | x
+ 100 | 1970-01-01 00:00:06.00001+00 | a    | x
+ 100 | 1970-01-01 00:00:08.00001+00 | a    | x
+ 100 | 1970-01-01 00:00:10.00001+00 | a    | x
+ 100 | 1970-01-01 00:00:12.00001+00 | a    | x
+ 100 | 1970-01-01 00:00:14.00001+00 | a    | x
+ 100 | 1969-12-31 23:59:58.00001+00 | a    | y
+   2 | 1970-01-01 00:00:00.00001+00 | a    | y
+ 100 | 1970-01-01 00:00:02.00001+00 | a    | y
+ 100 | 1970-01-01 00:00:04.00001+00 | a    | y
+ 100 | 1970-01-01 00:00:06.00001+00 | a    | y
+ 100 | 1970-01-01 00:00:08.00001+00 | a    | y
+ 100 | 1970-01-01 00:00:10.00001+00 | a    | y
+ 100 | 1970-01-01 00:00:12.00001+00 | a    | y
+ 100 | 1970-01-01 00:00:14.00001+00 | a    | y
+ 100 | 1969-12-31 23:59:58.00001+00 | b    | y
+ 100 | 1970-01-01 00:00:00.00001+00 | b    | y
+  10 | 1970-01-01 00:00:02.00001+00 | b    | y
+ 100 | 1970-01-01 00:00:04.00001+00 | b    | y
+ 100 | 1970-01-01 00:00:06.00001+00 | b    | y
+ 100 | 1970-01-01 00:00:08.00001+00 | b    | y
+ 100 | 1970-01-01 00:00:10.00001+00 | b    | y
+ 100 | 1970-01-01 00:00:12.00001+00 | b    | y
+ 100 | 1970-01-01 00:00:14.00001+00 | b    | y
+ 100 | 1969-12-31 23:59:58.00001+00 | b    | z
+ 100 | 1970-01-01 00:00:00.00001+00 | b    | z
+  20 | 1970-01-01 00:00:02.00001+00 | b    | z
+  30 | 1970-01-01 00:00:04.00001+00 | b    | z
+  80 | 1970-01-01 00:00:06.00001+00 | b    | z
+  90 | 1970-01-01 00:00:08.00001+00 | b    | z
+ 100 | 1970-01-01 00:00:10.00001+00 | b    | z
+ 140 | 1970-01-01 00:00:12.00001+00 | b    | z
+ 150 | 1970-01-01 00:00:14.00001+00 | b    | z
+(36 rows)
+
+--with tag1
+--Testcase 44:
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100)), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100)), tag1;
+                                                                                  QUERY PLAN                                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=48)
+   Output: (sum(value1)), (influx_time("time", '@ 2 secs'::interval, influx_fill_numeric(100))), tag1
+   InfluxDB query: SELECT sum("value1") FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15')) GROUP BY (time(0d0h0m2s0u)), "tag1" fill(100)
+(3 rows)
+
+--Testcase 45:
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100)), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100)), tag1;
+ sum |      influx_time       | tag1 
+-----+------------------------+------
+   3 | 1970-01-01 00:00:00+00 | a
+   3 | 1970-01-01 00:00:02+00 | a
+ 100 | 1970-01-01 00:00:04+00 | a
+ 100 | 1970-01-01 00:00:06+00 | a
+ 100 | 1970-01-01 00:00:08+00 | a
+ 100 | 1970-01-01 00:00:10+00 | a
+ 100 | 1970-01-01 00:00:12+00 | a
+ 100 | 1970-01-01 00:00:14+00 | a
+ 100 | 1970-01-01 00:00:00+00 | b
+  10 | 1970-01-01 00:00:02+00 | b
+  50 | 1970-01-01 00:00:04+00 | b
+ 100 | 1970-01-01 00:00:06+00 | b
+ 170 | 1970-01-01 00:00:08+00 | b
+ 100 | 1970-01-01 00:00:10+00 | b
+ 100 | 1970-01-01 00:00:12+00 | b
+ 290 | 1970-01-01 00:00:14+00 | b
+(16 rows)
+
+--Testcase 46:
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100.001)), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100.001)), tag1;
+                                                                                    QUERY PLAN                                                                                    
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=48)
+   Output: (sum(value1)), (influx_time("time", '@ 2 secs'::interval, influx_fill_numeric('100.001'::double precision))), tag1
+   InfluxDB query: SELECT sum("value1") FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15')) GROUP BY (time(0d0h0m2s0u)), "tag1" fill(100.001)
+(3 rows)
+
+--Testcase 47:
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100.001)), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100.001)), tag1;
+   sum   |      influx_time       | tag1 
+---------+------------------------+------
+       3 | 1970-01-01 00:00:00+00 | a
+       3 | 1970-01-01 00:00:02+00 | a
+ 100.001 | 1970-01-01 00:00:04+00 | a
+ 100.001 | 1970-01-01 00:00:06+00 | a
+ 100.001 | 1970-01-01 00:00:08+00 | a
+ 100.001 | 1970-01-01 00:00:10+00 | a
+ 100.001 | 1970-01-01 00:00:12+00 | a
+ 100.001 | 1970-01-01 00:00:14+00 | a
+ 100.001 | 1970-01-01 00:00:00+00 | b
+      10 | 1970-01-01 00:00:02+00 | b
+      50 | 1970-01-01 00:00:04+00 | b
+ 100.001 | 1970-01-01 00:00:06+00 | b
+     170 | 1970-01-01 00:00:08+00 | b
+ 100.001 | 1970-01-01 00:00:10+00 | b
+ 100.001 | 1970-01-01 00:00:12+00 | b
+     290 | 1970-01-01 00:00:14+00 | b
+(16 rows)
+
+--Testcase 48:
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s',influx_fill_option('null')), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('null')), tag1;
+                                                                                  QUERY PLAN                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=48)
+   Output: (sum(value1)), (influx_time("time", '@ 2 secs'::interval, influx_fill_option('null'::influx_fill_enum))), tag1
+   InfluxDB query: SELECT sum("value1") FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15')) GROUP BY (time(0d0h0m2s0u)), "tag1" fill(null)
+(3 rows)
+
+--Testcase 49:
+SELECT sum("value1"), influx_time(time,interval '2s',influx_fill_option('null')), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('null')), tag1;
+ sum |      influx_time       | tag1 
+-----+------------------------+------
+   3 | 1970-01-01 00:00:00+00 | a
+   3 | 1970-01-01 00:00:02+00 | a
+     | 1970-01-01 00:00:04+00 | a
+     | 1970-01-01 00:00:06+00 | a
+     | 1970-01-01 00:00:08+00 | a
+     | 1970-01-01 00:00:10+00 | a
+     | 1970-01-01 00:00:12+00 | a
+     | 1970-01-01 00:00:14+00 | a
+     | 1970-01-01 00:00:00+00 | b
+  10 | 1970-01-01 00:00:02+00 | b
+  50 | 1970-01-01 00:00:04+00 | b
+     | 1970-01-01 00:00:06+00 | b
+ 170 | 1970-01-01 00:00:08+00 | b
+     | 1970-01-01 00:00:10+00 | b
+     | 1970-01-01 00:00:12+00 | b
+ 290 | 1970-01-01 00:00:14+00 | b
+(16 rows)
+
+--Testcase 50:
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s',influx_fill_option('none')), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('none')), tag1;
+                                                                                  QUERY PLAN                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=48)
+   Output: (sum(value1)), (influx_time("time", '@ 2 secs'::interval, influx_fill_option('none'::influx_fill_enum))), tag1
+   InfluxDB query: SELECT sum("value1") FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15')) GROUP BY (time(0d0h0m2s0u)), "tag1" fill(none)
+(3 rows)
+
+--Testcase 51:
+SELECT sum("value1"), influx_time(time,interval '2s',influx_fill_option('none')), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('none')), tag1;
+ sum |      influx_time       | tag1 
+-----+------------------------+------
+   3 | 1970-01-01 00:00:00+00 | a
+   3 | 1970-01-01 00:00:02+00 | a
+  10 | 1970-01-01 00:00:02+00 | b
+  50 | 1970-01-01 00:00:04+00 | b
+ 170 | 1970-01-01 00:00:08+00 | b
+ 290 | 1970-01-01 00:00:14+00 | b
+(6 rows)
+
+--Testcase 52:
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s',influx_fill_option('previous')), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('previous')), tag1;
+                                                                                    QUERY PLAN                                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=48)
+   Output: (sum(value1)), (influx_time("time", '@ 2 secs'::interval, influx_fill_option('previous'::influx_fill_enum))), tag1
+   InfluxDB query: SELECT sum("value1") FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15')) GROUP BY (time(0d0h0m2s0u)), "tag1" fill(previous)
+(3 rows)
+
+--Testcase 53:
+SELECT sum("value1"), influx_time(time,interval '2s',influx_fill_option('previous')), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('previous')), tag1;
+ sum |      influx_time       | tag1 
+-----+------------------------+------
+   3 | 1970-01-01 00:00:00+00 | a
+   3 | 1970-01-01 00:00:02+00 | a
+   3 | 1970-01-01 00:00:04+00 | a
+   3 | 1970-01-01 00:00:06+00 | a
+   3 | 1970-01-01 00:00:08+00 | a
+   3 | 1970-01-01 00:00:10+00 | a
+   3 | 1970-01-01 00:00:12+00 | a
+   3 | 1970-01-01 00:00:14+00 | a
+     | 1970-01-01 00:00:00+00 | b
+  10 | 1970-01-01 00:00:02+00 | b
+  50 | 1970-01-01 00:00:04+00 | b
+  50 | 1970-01-01 00:00:06+00 | b
+ 170 | 1970-01-01 00:00:08+00 | b
+ 170 | 1970-01-01 00:00:10+00 | b
+ 170 | 1970-01-01 00:00:12+00 | b
+ 290 | 1970-01-01 00:00:14+00 | b
+(16 rows)
+
+--Testcase 54:
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s',influx_fill_option('linear')), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('linear')), tag1;
+                                                                                   QUERY PLAN                                                                                    
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=48)
+   Output: (sum(value1)), (influx_time("time", '@ 2 secs'::interval, influx_fill_option('linear'::influx_fill_enum))), tag1
+   InfluxDB query: SELECT sum("value1") FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15')) GROUP BY (time(0d0h0m2s0u)), "tag1" fill(linear)
+(3 rows)
+
+--Testcase 55:
+SELECT sum("value1"), influx_time(time,interval '2s',influx_fill_option('linear')), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('linear')), tag1;
+ sum |      influx_time       | tag1 
+-----+------------------------+------
+   3 | 1970-01-01 00:00:00+00 | a
+   3 | 1970-01-01 00:00:02+00 | a
+     | 1970-01-01 00:00:04+00 | a
+     | 1970-01-01 00:00:06+00 | a
+     | 1970-01-01 00:00:08+00 | a
+     | 1970-01-01 00:00:10+00 | a
+     | 1970-01-01 00:00:12+00 | a
+     | 1970-01-01 00:00:14+00 | a
+     | 1970-01-01 00:00:00+00 | b
+  10 | 1970-01-01 00:00:02+00 | b
+  50 | 1970-01-01 00:00:04+00 | b
+ 110 | 1970-01-01 00:00:06+00 | b
+ 170 | 1970-01-01 00:00:08+00 | b
+ 210 | 1970-01-01 00:00:10+00 | b
+ 250 | 1970-01-01 00:00:12+00 | b
+ 290 | 1970-01-01 00:00:14+00 | b
+(16 rows)
+
+--with tag1,tag2
+--Testcase 56:
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100)), tag1, tag2 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100)), tag1, tag2;
+                                                                                      QUERY PLAN                                                                                      
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=80)
+   Output: (sum(value1)), (influx_time("time", '@ 2 secs'::interval, influx_fill_numeric(100))), tag1, tag2
+   InfluxDB query: SELECT sum("value1") FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15')) GROUP BY (time(0d0h0m2s0u)), "tag1", "tag2" fill(100)
+(3 rows)
+
+--Testcase 57:
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100)), tag1, tag2 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100)), tag1, tag2;
+ sum |      influx_time       | tag1 | tag2 
+-----+------------------------+------+------
+   1 | 1970-01-01 00:00:00+00 | a    | x
+   3 | 1970-01-01 00:00:02+00 | a    | x
+ 100 | 1970-01-01 00:00:04+00 | a    | x
+ 100 | 1970-01-01 00:00:06+00 | a    | x
+ 100 | 1970-01-01 00:00:08+00 | a    | x
+ 100 | 1970-01-01 00:00:10+00 | a    | x
+ 100 | 1970-01-01 00:00:12+00 | a    | x
+ 100 | 1970-01-01 00:00:14+00 | a    | x
+   2 | 1970-01-01 00:00:00+00 | a    | y
+ 100 | 1970-01-01 00:00:02+00 | a    | y
+ 100 | 1970-01-01 00:00:04+00 | a    | y
+ 100 | 1970-01-01 00:00:06+00 | a    | y
+ 100 | 1970-01-01 00:00:08+00 | a    | y
+ 100 | 1970-01-01 00:00:10+00 | a    | y
+ 100 | 1970-01-01 00:00:12+00 | a    | y
+ 100 | 1970-01-01 00:00:14+00 | a    | y
+ 100 | 1970-01-01 00:00:00+00 | b    | y
+  10 | 1970-01-01 00:00:02+00 | b    | y
+ 100 | 1970-01-01 00:00:04+00 | b    | y
+ 100 | 1970-01-01 00:00:06+00 | b    | y
+ 100 | 1970-01-01 00:00:08+00 | b    | y
+ 100 | 1970-01-01 00:00:10+00 | b    | y
+ 100 | 1970-01-01 00:00:12+00 | b    | y
+ 100 | 1970-01-01 00:00:14+00 | b    | y
+ 100 | 1970-01-01 00:00:00+00 | b    | z
+ 100 | 1970-01-01 00:00:02+00 | b    | z
+  50 | 1970-01-01 00:00:04+00 | b    | z
+ 100 | 1970-01-01 00:00:06+00 | b    | z
+ 170 | 1970-01-01 00:00:08+00 | b    | z
+ 100 | 1970-01-01 00:00:10+00 | b    | z
+ 100 | 1970-01-01 00:00:12+00 | b    | z
+ 290 | 1970-01-01 00:00:14+00 | b    | z
+(32 rows)
+
+--Testcase 58:
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100.001)), tag1, tag2 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100.001)), tag1, tag2;
+                                                                                        QUERY PLAN                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=80)
+   Output: (sum(value1)), (influx_time("time", '@ 2 secs'::interval, influx_fill_numeric('100.001'::double precision))), tag1, tag2
+   InfluxDB query: SELECT sum("value1") FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15')) GROUP BY (time(0d0h0m2s0u)), "tag1", "tag2" fill(100.001)
+(3 rows)
+
+--Testcase 59:
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100.001)), tag1, tag2 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100.001)), tag1, tag2;
+   sum   |      influx_time       | tag1 | tag2 
+---------+------------------------+------+------
+       1 | 1970-01-01 00:00:00+00 | a    | x
+       3 | 1970-01-01 00:00:02+00 | a    | x
+ 100.001 | 1970-01-01 00:00:04+00 | a    | x
+ 100.001 | 1970-01-01 00:00:06+00 | a    | x
+ 100.001 | 1970-01-01 00:00:08+00 | a    | x
+ 100.001 | 1970-01-01 00:00:10+00 | a    | x
+ 100.001 | 1970-01-01 00:00:12+00 | a    | x
+ 100.001 | 1970-01-01 00:00:14+00 | a    | x
+       2 | 1970-01-01 00:00:00+00 | a    | y
+ 100.001 | 1970-01-01 00:00:02+00 | a    | y
+ 100.001 | 1970-01-01 00:00:04+00 | a    | y
+ 100.001 | 1970-01-01 00:00:06+00 | a    | y
+ 100.001 | 1970-01-01 00:00:08+00 | a    | y
+ 100.001 | 1970-01-01 00:00:10+00 | a    | y
+ 100.001 | 1970-01-01 00:00:12+00 | a    | y
+ 100.001 | 1970-01-01 00:00:14+00 | a    | y
+ 100.001 | 1970-01-01 00:00:00+00 | b    | y
+      10 | 1970-01-01 00:00:02+00 | b    | y
+ 100.001 | 1970-01-01 00:00:04+00 | b    | y
+ 100.001 | 1970-01-01 00:00:06+00 | b    | y
+ 100.001 | 1970-01-01 00:00:08+00 | b    | y
+ 100.001 | 1970-01-01 00:00:10+00 | b    | y
+ 100.001 | 1970-01-01 00:00:12+00 | b    | y
+ 100.001 | 1970-01-01 00:00:14+00 | b    | y
+ 100.001 | 1970-01-01 00:00:00+00 | b    | z
+ 100.001 | 1970-01-01 00:00:02+00 | b    | z
+      50 | 1970-01-01 00:00:04+00 | b    | z
+ 100.001 | 1970-01-01 00:00:06+00 | b    | z
+     170 | 1970-01-01 00:00:08+00 | b    | z
+ 100.001 | 1970-01-01 00:00:10+00 | b    | z
+ 100.001 | 1970-01-01 00:00:12+00 | b    | z
+     290 | 1970-01-01 00:00:14+00 | b    | z
+(32 rows)
+
+-- unsupport syntax
+--Testcase 60:
+EXPLAIN (verbose)
+SELECT influx_fill_numeric(100) FROM "tx";
+ERROR:  influxdb_fdw: syntax error influx_fill_numeric() or influx_fill_option() must be embedded inside influx_time() function
+
+--Testcase 61:
+SELECT influx_fill_numeric(100) FROM "tx";
+ERROR:  influxdb_fdw: syntax error influx_fill_numeric() or influx_fill_option() must be embedded inside influx_time() function
+
+--Testcase 62:
+SELECT * FROM "tx" WHERE influx_fill_numeric(100) > 0;
+ERROR:  influxdb_fdw: syntax error influx_fill_numeric() or influx_fill_option() must be embedded inside influx_time() function
+
+--Testcase 63:
+EXPLAIN (verbose)
+SELECT influx_fill_option('linear') FROM "tx";
+ERROR:  influxdb_fdw: syntax error influx_fill_numeric() or influx_fill_option() must be embedded inside influx_time() function
+
+--Testcase 64:
+SELECT influx_fill_option('linear') FROM "tx";
+ERROR:  influxdb_fdw: syntax error influx_fill_numeric() or influx_fill_option() must be embedded inside influx_time() function
+
+--Testcase 65:
+SELECT * FROM "tx" WHERE influx_fill_option('linear') > 0;
+ERROR:  influxdb_fdw: syntax error influx_fill_numeric() or influx_fill_option() must be embedded inside influx_time() function
 
 -- InfluxDB does not return error for the following query
 --SELECT sum(value1) FROM t4 GROUP BY value1;
@@ -171,6 +826,8 @@ SELECT sum(value1) FROM t4 GROUP BY time;
 DROP FOREIGN TABLE t3;
 --Testcase 18:
 DROP FOREIGN TABLE t4;
+--Testcase 66:
+DROP FOREIGN TABLE tx;
 --Testcase 19:
 DROP FOREIGN TABLE cpu;
 --Testcase 20:
