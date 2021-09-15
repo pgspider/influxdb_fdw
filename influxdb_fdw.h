@@ -277,7 +277,7 @@ extern Datum influxdb_convert_record_to_datum(Oid pgtyp, int pgtypmod, char **ro
 
 extern void influxdb_bind_sql_var(Oid type, int attnum, Datum value, bool *isnull,
 								  InfluxDBType * param_influxdb_types, InfluxDBValue * param_influxdb_values);
-extern char *influxdb_get_function_name(Oid funcid);
+extern char *influxdb_get_data_type_name(Oid data_type_id);
 extern bool influxdb_is_mixing_aggref(List *tlist);
 extern bool influxdb_is_tag_key(const char *colname, Oid reloid);
 extern char *influxdb_get_column_name(Oid relid, int attnum);
@@ -286,7 +286,7 @@ extern int influxdb_get_number_field_key_match(Oid relid, char *regex);
 extern int influxdb_get_number_tag_key(Oid relid);
 extern bool influxdb_is_builtin(Oid oid);
 extern bool influxdb_is_regex_argument(Const* node, char **extval);
-extern bool influxdb_need_star(char *in);
+extern bool influxdb_is_star_func(Oid funcid, char *in);
 extern List *influxdb_pull_func_clause(Node *node);
 extern bool influxdb_is_grouping_target(TargetEntry *tle, Query *query);
 #endif							/* InfluxDB_FDW_H */

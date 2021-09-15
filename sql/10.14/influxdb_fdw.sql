@@ -32,11 +32,12 @@ DROP FOREIGN TABLE cpu;
 DROP FOREIGN TABLE t3;
 --Testcase 10:
 DROP FOREIGN TABLE t4;
+DROP FOREIGN TABLE tx;
 --Testcase 11:
 DROP FOREIGN TABLE numbers;
 
 -- test EXECPT
-IMPORT FOREIGN SCHEMA public EXCEPT (cpu, t3, t4, numbers) FROM SERVER server1 INTO public;
+IMPORT FOREIGN SCHEMA public EXCEPT (cpu, t3, t4, tx, numbers) FROM SERVER server1 INTO public;
 --Testcase 12:
 SELECT ftoptions FROM pg_foreign_table;
 
@@ -474,6 +475,7 @@ DROP FOREIGN TABLE t3;
 DROP FOREIGN TABLE t4;
 --Testcase 154:
 DROP FOREIGN TABLE t5;
+DROP FOREIGN TABLE tx;
 
 -- test INSERT, DELETE
 IMPORT FOREIGN SCHEMA public FROM SERVER server1 INTO public OPTIONS(import_time_text 'true');

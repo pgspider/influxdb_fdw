@@ -1073,7 +1073,7 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 				}
 			}
 			else if (IsA(target, FuncExpr) &&
-					 strcmp(influxdb_get_function_name(((FuncExpr *) target)->funcid), "influx_time") == 0)
+					 strcmp(get_func_name(((FuncExpr *) target)->funcid), "influx_time") == 0)
 			{
 				/* Time column corresponding to influx_time */
 				result_idx = 0;
@@ -1088,26 +1088,28 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 				Aggref	   *agg = (Aggref *)target;
 				FuncExpr   *func = (FuncExpr *) target;
 				HeapTuple	tuple;
-				bool		need_star = false;
 				bool		is_func = false, is_agg = false;
+				bool		funcstar = false;
 				bool		aggstar = false;
+				Oid			objectId = InvalidOid;
 
 				if (IsA(target, FuncExpr))
+				{
 					is_func = true;
+					objectId = func->funcid;
+				}
 				else
 				{
 					is_agg = true;
 					aggstar = agg->aggstar;
+					objectId = agg->aggfnoid;
 				}
 				/* get function name and schema */
-				if (is_func)
-					tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(func->funcid));
-				else
-					tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(agg->aggfnoid));
+				tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(objectId));
 
 				if (!HeapTupleIsValid(tuple))
 				{
-					elog(ERROR, "cache lookup failed for function %u", func->funcid);
+					elog(ERROR, "cache lookup failed for function %u", objectId);
 				}
 				opername = pstrdup(((Form_pg_proc) GETSTRUCT(tuple))->proname.data);
 
@@ -1120,9 +1122,9 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 				 */
 				if ((is_agg && !(aggstar && strcmp(opername, "count") == 0)) || is_func)
 				{
-					need_star = influxdb_need_star(opername);
+					funcstar = influxdb_is_star_func(objectId, opername);
 
-					if ((aggstar || need_star) && !influxdb_is_builtin(func->funcid))
+					if ((aggstar || funcstar) && !influxdb_is_builtin(objectId))
 					{
 						is_agg_star = true;
 						nfields = influxdb_get_number_field_key_match(relid, NULL);
@@ -2371,7 +2373,7 @@ influxdb_contain_regex_star_functions_walker(Node *node, void *context)
 		ReleaseSysCache(tuple);
 
 		/* Star function */
-		if (influxdb_need_star(opername))
+		if (influxdb_is_star_func(funcoid, opername))
 			return true;
 
 		/* Regex function */

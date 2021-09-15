@@ -269,20 +269,20 @@ SELECT log(value1::numeric, value2::numeric) FROM s3 WHERE value1 != 1;
     4.43773989221174
 (6 rows)
 
--- select log (stub function, need to swap arguments, float8, explain)
+-- select log (builtin function, need to swap arguments, float8, explain)
 --Testcase 23:
 EXPLAIN VERBOSE
-SELECT log(value1, 0.1) FROM s3 WHERE value1 != 1;
+SELECT log(value1::numeric, 0.1) FROM s3 WHERE value1 != 1;
                                   QUERY PLAN                                   
 -------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..3183.75 rows=2547 width=8)
-   Output: (log(value1, '0.1'::double precision))
+ Foreign Scan  (cost=10.00..2559.74 rows=2547 width=32)
+   Output: (log((value1)::numeric, 0.1))
    InfluxDB query: SELECT log(0.1, "value1") FROM "s3" WHERE (("value1" <> 1))
 (3 rows)
 
--- select log (stub function, need to swap arguments, float8, result)
+-- select log (builtin function, need to swap arguments, float8, result)
 --Testcase 24:
-SELECT log(value1, 0.1) FROM s3 WHERE value1 != 1;
+SELECT log(value1::numeric, 0.1) FROM s3 WHERE value1 != 1;
          log         
 ---------------------
                    1
@@ -293,20 +293,20 @@ SELECT log(value1, 0.1) FROM s3 WHERE value1 != 1;
  -1.9285884584617043
 (6 rows)
 
--- select log (stub function, need to swap arguments, bigint, explain)
+-- select log (builtin function, need to swap arguments, bigint, explain)
 --Testcase 25:
 EXPLAIN VERBOSE
-SELECT log(value2, 3) FROM s3 WHERE value1 != 1;
+SELECT log(value2::numeric, 3::numeric) FROM s3 WHERE value1 != 1;
                                  QUERY PLAN                                  
 -----------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..3183.75 rows=2547 width=8)
-   Output: (log(value2, '3'::bigint))
+ Foreign Scan  (cost=10.00..2559.74 rows=2547 width=32)
+   Output: (log((value2)::numeric, '3'::numeric))
    InfluxDB query: SELECT log(3, "value2") FROM "s3" WHERE (("value1" <> 1))
 (3 rows)
 
--- select log (stub function, need to swap arguments, bigint, result)
+-- select log (builtin function, need to swap arguments, bigint, result)
 --Testcase 26:
-SELECT log(value2, 3) FROM s3 WHERE value1 != 1;
+SELECT log(value2::numeric, 3::numeric) FROM s3 WHERE value1 != 1;
          log         
 ---------------------
  0.23856062735983116
@@ -317,20 +317,20 @@ SELECT log(value2, 3) FROM s3 WHERE value1 != 1;
   0.2073511669203535
 (6 rows)
 
--- select log (stub function, need to swap arguments, mix type, explain)
+-- select log (builtin function, need to swap arguments, mix type, explain)
 --Testcase 27:
 EXPLAIN VERBOSE
-SELECT log(value1, value2) FROM s3 WHERE value1 != 1;
+SELECT log(value1::numeric, value2::numeric) FROM s3 WHERE value1 != 1;
                                      QUERY PLAN                                     
 ------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2552.60 rows=2038 width=8)
-   Output: (log(value1, (value2)::double precision))
+ Foreign Scan  (cost=10.00..2053.28 rows=2038 width=32)
+   Output: (log((value1)::numeric, (value2)::numeric))
    InfluxDB query: SELECT log("value2", "value1") FROM "s3" WHERE (("value1" <> 1))
 (3 rows)
 
--- select log (stub function, need to swap arguments, mix type, result)
+-- select log (builtin function, need to swap arguments, mix type, result)
 --Testcase 28:
-SELECT log(value1, value2) FROM s3 WHERE value1 != 1;
+SELECT log(value1::numeric, value2::numeric) FROM s3 WHERE value1 != 1;
          log         
 ---------------------
  -2.0000000000000004
@@ -424,8 +424,8 @@ EXPLAIN VERBOSE
 SELECT log2(value1),log2(value2) FROM s3;
                             QUERY PLAN                             
 -------------------------------------------------------------------
- Foreign Scan  (cost=10.00..3072.00 rows=2048 width=16)
-   Output: (log2(value1)), (log2(value2))
+ Foreign Scan  (cost=10.00..3077.12 rows=2048 width=16)
+   Output: (log2(value1)), (log2((value2)::double precision))
    InfluxDB query: SELECT log2("value1"), log2("value2") FROM "s3"
 (3 rows)
 
@@ -495,8 +495,8 @@ EXPLAIN VERBOSE
 SELECT log10(value1),log10(value2) FROM s3;
                              QUERY PLAN                              
 ---------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2565.12 rows=2048 width=16)
-   Output: (log10(value1)), (log10(value2))
+ Foreign Scan  (cost=10.00..2063.36 rows=2048 width=16)
+   Output: (log10(value1)), (log10((value2)::double precision))
    InfluxDB query: SELECT log10("value1"), log10("value2") FROM "s3"
 (3 rows)
 
@@ -4222,11 +4222,11 @@ SELECT integral("value1", interval '1s'),influx_time(time, interval '1s'),tag1 F
 
 -- select integral (stub agg function and group by tag only) (result)
 --Testcase 148:
-SELECT tag1,integral("value1") FROM s3 WHERE time >= to_timestamp(0) and time <= to_timestamp(4) GROUP BY tag1;
+SELECT tag1,integral("value1") FROM s3 WHERE time >= to_timestamp(0) and time <= to_timestamp(4) GROUP BY tag1 ORDER BY tag1;
  tag1 |      integral      
 ------+--------------------
- b    | 1.6500000000000001
  a    |                0.4
+ b    | 1.6500000000000001
 (2 rows)
 
 -- select integral (stub agg function and other aggs) (result)
@@ -4239,11 +4239,11 @@ SELECT sum("value1"),integral("value1"),count("value1") FROM s3;
 
 -- select integral (stub agg function and group by tag only) (result)
 --Testcase 150:
-SELECT tag1,integral("value1", interval '1s') FROM s3 WHERE time >= to_timestamp(0) and time <= to_timestamp(4) GROUP BY tag1;
+SELECT tag1,integral("value1", interval '1s') FROM s3 WHERE time >= to_timestamp(0) and time <= to_timestamp(4) GROUP BY tag1 ORDER BY tag1;
  tag1 |      integral      
 ------+--------------------
- b    | 1.6500000000000001
  a    |                0.4
+ b    | 1.6500000000000001
 (2 rows)
 
 -- select integral (stub agg function and other aggs) (result)
@@ -6475,10 +6475,10 @@ ERROR:  influxdb_fdw : selector function top() cannot be combined with other fun
 --Testcase 211:
 EXPLAIN VERBOSE
 SELECT acos(value1), acos(value2), acos(value3), acos(value4) FROM s3;
-                                            QUERY PLAN                                             
----------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2200.31 rows=1462 width=32)
-   Output: (acos(value1)), (acos(value2)), (acos(value3)), (acos(value4))
+                                                    QUERY PLAN                                                    
+------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1483.93 rows=1462 width=32)
+   Output: (acos(value1)), (acos((value2)::double precision)), (acos(value3)), (acos((value4)::double precision))
    InfluxDB query: SELECT acos("value1"), acos("value2"), acos("value3"), acos("value4") FROM "s3"
 (3 rows)
 
@@ -6499,10 +6499,10 @@ SELECT acos(value1), acos(value2), acos(value3), acos(value4) FROM s3;
 --Testcase 213:
 EXPLAIN VERBOSE
 SELECT acos(value1), acos(value2), acos(value3), acos(value4) FROM s3 WHERE to_hex(value2) = '64';
-                                                 QUERY PLAN                                                  
--------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..10.54 rows=7 width=32)
-   Output: (acos(value1)), (acos(value2)), (acos(value3)), (acos(value4))
+                                                    QUERY PLAN                                                    
+------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..7.11 rows=7 width=32)
+   Output: (acos(value1)), (acos((value2)::double precision)), (acos(value3)), (acos((value4)::double precision))
    Filter: (to_hex(s3.value2) = '64'::text)
    InfluxDB query: SELECT acos("value1"), acos("value2"), acos("value3"), acos("value4"), "value2" FROM "s3"
 (4 rows)
@@ -6523,8 +6523,8 @@ EXPLAIN VERBOSE
 SELECT acos(value1), acos(value2), acos(value3), acos(value4) FROM s3 WHERE value2 != 200;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: (acos(value1)), (acos(value2)), (acos(value3)), (acos(value4))
+ Foreign Scan  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: (acos(value1)), (acos((value2)::double precision)), (acos(value3)), (acos((value4)::double precision))
    InfluxDB query: SELECT acos("value1"), acos("value2"), acos("value3"), acos("value4") FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
@@ -6608,7 +6608,7 @@ SELECT acos(value3), pi(), 4.1 FROM s3;
 -- select acos with order by (explain)
 --Testcase 223:
 EXPLAIN VERBOSE
-SELECT value1, acos(1-value1) FROM s3 order by acos(1-value1);
+SELECT value1, acos(1-value1) FROM s3 ORDER BY acos(1-value1);
                                QUERY PLAN                                
 -------------------------------------------------------------------------
  Sort  (cost=2717.72..2724.12 rows=2560 width=16)
@@ -6621,7 +6621,7 @@ SELECT value1, acos(1-value1) FROM s3 order by acos(1-value1);
 
 -- select acos with order by (result)
 --Testcase 224:
-SELECT value1, acos(1-value1) FROM s3 order by acos(1-value1);
+SELECT value1, acos(1-value1) FROM s3 ORDER BY acos(1-value1);
  value1 |        acos         
 --------+---------------------
     0.1 | 0.45102681179626236
@@ -6634,7 +6634,7 @@ SELECT value1, acos(1-value1) FROM s3 order by acos(1-value1);
 
 -- select acos with order by index (result)
 --Testcase 225:
-SELECT value1, acos(1-value1) FROM s3 order by 2,1;
+SELECT value1, acos(1-value1) FROM s3 ORDER BY 2,1;
  value1 |        acos         
 --------+---------------------
     0.1 | 0.45102681179626236
@@ -6647,7 +6647,7 @@ SELECT value1, acos(1-value1) FROM s3 order by 2,1;
 
 -- select acos with order by index (result)
 --Testcase 226:
-SELECT value1, acos(1-value1) FROM s3 order by 1,2;
+SELECT value1, acos(1-value1) FROM s3 ORDER BY 1,2;
  value1 |        acos         
 --------+---------------------
     0.1 | 0.45102681179626236
@@ -6746,10 +6746,10 @@ SELECT (acos_all()::s3).* from s3;
 --Testcase 228:
 EXPLAIN VERBOSE
 SELECT asin(value1), asin(value2), asin(value3), asin(value4) FROM s3;
-                                            QUERY PLAN                                             
----------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2200.31 rows=1462 width=32)
-   Output: (asin(value1)), (asin(value2)), (asin(value3)), (asin(value4))
+                                                    QUERY PLAN                                                    
+------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1483.93 rows=1462 width=32)
+   Output: (asin(value1)), (asin((value2)::double precision)), (asin(value3)), (asin((value4)::double precision))
    InfluxDB query: SELECT asin("value1"), asin("value2"), asin("value3"), asin("value4") FROM "s3"
 (3 rows)
 
@@ -6770,10 +6770,10 @@ SELECT asin(value1), asin(value2), asin(value3), asin(value4) FROM s3;
 --Testcase 230:
 EXPLAIN VERBOSE
 SELECT asin(value1), asin(value2), asin(value3), asin(value4) FROM s3 WHERE to_hex(value2) = '64';
-                                                 QUERY PLAN                                                  
--------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..10.54 rows=7 width=32)
-   Output: (asin(value1)), (asin(value2)), (asin(value3)), (asin(value4))
+                                                    QUERY PLAN                                                    
+------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..7.11 rows=7 width=32)
+   Output: (asin(value1)), (asin((value2)::double precision)), (asin(value3)), (asin((value4)::double precision))
    Filter: (to_hex(s3.value2) = '64'::text)
    InfluxDB query: SELECT asin("value1"), asin("value2"), asin("value3"), asin("value4"), "value2" FROM "s3"
 (4 rows)
@@ -6794,8 +6794,8 @@ EXPLAIN VERBOSE
 SELECT asin(value1), asin(value2), asin(value3), asin(value4) FROM s3 WHERE value2 != 200;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: (asin(value1)), (asin(value2)), (asin(value3)), (asin(value4))
+ Foreign Scan  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: (asin(value1)), (asin((value2)::double precision)), (asin(value3)), (asin((value4)::double precision))
    InfluxDB query: SELECT asin("value1"), asin("value2"), asin("value3"), asin("value4") FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
@@ -6812,7 +6812,7 @@ SELECT asin(value1), asin(value2), asin(value3), asin(value4) FROM s3 WHERE valu
 -- select asin as nest function with agg (pushdown, explain)
 --Testcase 234:
 EXPLAIN VERBOSE
-SELECT sum(value3),asin(sum(value3)) FROM s3;
+SELECT sum(value3), asin(sum(value3)) FROM s3;
                               QUERY PLAN                               
 -----------------------------------------------------------------------
  Foreign Scan  (cost=1.00..1.00 rows=1 width=16)
@@ -6822,7 +6822,7 @@ SELECT sum(value3),asin(sum(value3)) FROM s3;
 
 -- select asin as nest function with agg (pushdown, result)
 --Testcase 235:
-SELECT sum(value3),asin(sum(value3)) FROM s3;
+SELECT sum(value3), asin(sum(value3)) FROM s3;
         sum         | asin 
 --------------------+------
  -7.199999999999999 |     
@@ -6879,7 +6879,7 @@ SELECT asin(value3), pi(), 4.1 FROM s3;
 -- select asin with order by (explain)
 --Testcase 240:
 EXPLAIN VERBOSE
-SELECT value1, asin(1-value1) FROM s3 order by asin(1-value1);
+SELECT value1, asin(1-value1) FROM s3 ORDER BY asin(1-value1);
                                QUERY PLAN                                
 -------------------------------------------------------------------------
  Sort  (cost=2717.72..2724.12 rows=2560 width=16)
@@ -6892,7 +6892,7 @@ SELECT value1, asin(1-value1) FROM s3 order by asin(1-value1);
 
 -- select asin with order by (result)
 --Testcase 241:
-SELECT value1, asin(1-value1) FROM s3 order by asin(1-value1);
+SELECT value1, asin(1-value1) FROM s3 ORDER BY asin(1-value1);
  value1 |         asin         
 --------+----------------------
     1.1 | -0.10016742116155988
@@ -6905,7 +6905,7 @@ SELECT value1, asin(1-value1) FROM s3 order by asin(1-value1);
 
 -- select asin with order by index (result)
 --Testcase 242:
-SELECT value1, asin(1-value1) FROM s3 order by 2,1;
+SELECT value1, asin(1-value1) FROM s3 ORDER BY 2,1;
  value1 |         asin         
 --------+----------------------
     1.1 | -0.10016742116155988
@@ -6918,7 +6918,7 @@ SELECT value1, asin(1-value1) FROM s3 order by 2,1;
 
 -- select asin with order by index (result)
 --Testcase 243:
-SELECT value1, asin(1-value1) FROM s3 order by 1,2;
+SELECT value1, asin(1-value1) FROM s3 ORDER BY 1,2;
  value1 |         asin         
 --------+----------------------
     0.1 |   1.1197695149986342
@@ -7017,10 +7017,10 @@ SELECT (asin_all()::s3).* from s3;
 --Testcase 245:
 EXPLAIN VERBOSE
 SELECT atan(value1), atan(value2), atan(value3), atan(value4) FROM s3;
-                                            QUERY PLAN                                             
----------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2200.31 rows=1462 width=32)
-   Output: (atan(value1)), (atan(value2)), (atan(value3)), (atan(value4))
+                                                    QUERY PLAN                                                    
+------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1483.93 rows=1462 width=32)
+   Output: (atan(value1)), (atan((value2)::double precision)), (atan(value3)), (atan((value4)::double precision))
    InfluxDB query: SELECT atan("value1"), atan("value2"), atan("value3"), atan("value4") FROM "s3"
 (3 rows)
 
@@ -7041,10 +7041,10 @@ SELECT atan(value1), atan(value2), atan(value3), atan(value4) FROM s3;
 --Testcase 247:
 EXPLAIN VERBOSE
 SELECT atan(value1), atan(value2), atan(value3), atan(value4) FROM s3 WHERE to_hex(value2) != '64';
-                                                 QUERY PLAN                                                  
--------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: (atan(value1)), (atan(value2)), (atan(value3)), (atan(value4))
+                                                    QUERY PLAN                                                    
+------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: (atan(value1)), (atan((value2)::double precision)), (atan(value3)), (atan((value4)::double precision))
    Filter: (to_hex(s3.value2) <> '64'::text)
    InfluxDB query: SELECT atan("value1"), atan("value2"), atan("value3"), atan("value4"), "value2" FROM "s3"
 (4 rows)
@@ -7065,8 +7065,8 @@ EXPLAIN VERBOSE
 SELECT atan(value1), atan(value2), atan(value3), atan(value4) FROM s3 WHERE value2 != 200;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: (atan(value1)), (atan(value2)), (atan(value3)), (atan(value4))
+ Foreign Scan  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: (atan(value1)), (atan((value2)::double precision)), (atan(value3)), (atan((value4)::double precision))
    InfluxDB query: SELECT atan("value1"), atan("value2"), atan("value3"), atan("value4") FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
@@ -7281,10 +7281,10 @@ CONTEXT:  PL/pgSQL function asin_all() line 3 at RAISE
 --Testcase 262:
 EXPLAIN VERBOSE
 SELECT atan2(value1, value2), atan2(value2, value3), atan2(value3, value4), atan2(value4, value1) FROM s3;
-                                                                  QUERY PLAN                                                                   
------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2924.00 rows=1462 width=32)
-   Output: (atan2(value1, value2)), (atan2(value2, value3)), (atan2(value3, value4)), (atan2(value4, value1))
+                                                                                          QUERY PLAN                                                                                          
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1491.24 rows=1462 width=32)
+   Output: (atan2(value1, (value2)::double precision)), (atan2((value2)::double precision, value3)), (atan2(value3, (value4)::double precision)), (atan2((value4)::double precision, value1))
    InfluxDB query: SELECT atan2("value1", "value2"), atan2("value2", "value3"), atan2("value3", "value4"), atan2("value4", "value1") FROM "s3"
 (3 rows)
 
@@ -7305,10 +7305,10 @@ SELECT atan2(value1, value2), atan2(value2, value3), atan2(value3, value4), atan
 --Testcase 264:
 EXPLAIN VERBOSE
 SELECT atan2(value1, value2), atan2(value2, value3), atan2(value3, value4), atan2(value4, value1) FROM s3 WHERE to_hex(value2) != '64';
-                                                                       QUERY PLAN                                                                        
----------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2910.00 rows=1455 width=32)
-   Output: (atan2(value1, value2)), (atan2(value2, value3)), (atan2(value3, value4)), (atan2(value4, value1))
+                                                                                          QUERY PLAN                                                                                          
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1484.10 rows=1455 width=32)
+   Output: (atan2(value1, (value2)::double precision)), (atan2((value2)::double precision, value3)), (atan2(value3, (value4)::double precision)), (atan2((value4)::double precision, value1))
    Filter: (to_hex(s3.value2) <> '64'::text)
    InfluxDB query: SELECT atan2("value1", "value2"), atan2("value2", "value3"), atan2("value3", "value4"), atan2("value4", "value1"), "value2" FROM "s3"
 (4 rows)
@@ -7327,10 +7327,10 @@ SELECT atan2(value1, value2), atan2(value2, value3), atan2(value3, value4), atan
 --Testcase 266:
 EXPLAIN VERBOSE
 SELECT atan2(value1, value2), atan2(value2, value3), atan2(value3, value4), atan2(value4, value1) FROM s3 WHERE value2 != 200;
-                                                                               QUERY PLAN                                                                                
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2910.00 rows=1455 width=32)
-   Output: (atan2(value1, value2)), (atan2(value2, value3)), (atan2(value3, value4)), (atan2(value4, value1))
+                                                                                          QUERY PLAN                                                                                          
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1484.10 rows=1455 width=32)
+   Output: (atan2(value1, (value2)::double precision)), (atan2((value2)::double precision, value3)), (atan2(value3, (value4)::double precision)), (atan2((value4)::double precision, value1))
    InfluxDB query: SELECT atan2("value1", "value2"), atan2("value2", "value3"), atan2("value3", "value4"), atan2("value4", "value1") FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
@@ -7391,10 +7391,10 @@ SELECT atan2(log2(value1), log2(value1)),atan2(log2(1/value1), log2(1/value1)) F
 --Testcase 272:
 EXPLAIN VERBOSE
 SELECT atan2(value3, value4), pi(), 4.1 FROM s3;
-                                  QUERY PLAN                                   
--------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2560.00 rows=2048 width=48)
-   Output: (atan2(value3, value4)), '3.141592653589793'::double precision, 4.1
+                                            QUERY PLAN                                             
+---------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..2058.24 rows=2048 width=48)
+   Output: (atan2(value3, (value4)::double precision)), '3.141592653589793'::double precision, 4.1
    InfluxDB query: SELECT atan2("value3", "value4") FROM "s3"
 (3 rows)
 
@@ -7415,13 +7415,13 @@ SELECT atan2(value3, value4), pi(), 4.1 FROM s3;
 --Testcase 274:
 EXPLAIN VERBOSE
 SELECT value1, atan2(1-value1, 1-value2) FROM s3 order by atan2(1-value1, 1-value2);
-                                        QUERY PLAN                                        
-------------------------------------------------------------------------------------------
- Sort  (cost=2682.88..2688.00 rows=2048 width=16)
-   Output: value1, (atan2(('1'::double precision - value1), (1 - value2)))
-   Sort Key: (atan2(('1'::double precision - s3.value1), (1 - s3.value2)))
-   ->  Foreign Scan  (cost=10.00..2570.24 rows=2048 width=16)
-         Output: value1, (atan2(('1'::double precision - value1), (1 - value2)))
+                                             QUERY PLAN                                              
+-----------------------------------------------------------------------------------------------------
+ Sort  (cost=2181.12..2186.24 rows=2048 width=16)
+   Output: value1, (atan2(('1'::double precision - value1), ((1 - value2))::double precision))
+   Sort Key: (atan2(('1'::double precision - s3.value1), ((1 - s3.value2))::double precision))
+   ->  Foreign Scan  (cost=10.00..2068.48 rows=2048 width=16)
+         Output: value1, (atan2(('1'::double precision - value1), ((1 - value2))::double precision))
          InfluxDB query: SELECT "value1", atan2((1 - "value1"), (1 - "value2")) FROM "s3"
 (6 rows)
 
@@ -7505,10 +7505,10 @@ SELECT atan2_all(value1) from s3;
 --Testcase 279:
 EXPLAIN VERBOSE
 SELECT ceil(value1), ceil(value2), ceil(value3), ceil(value4) FROM s3;
-                                            QUERY PLAN                                             
----------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2200.31 rows=1462 width=32)
-   Output: (ceil(value1)), (ceil(value2)), (ceil(value3)), (ceil(value4))
+                                                    QUERY PLAN                                                    
+------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1483.93 rows=1462 width=32)
+   Output: (ceil(value1)), (ceil((value2)::double precision)), (ceil(value3)), (ceil((value4)::double precision))
    InfluxDB query: SELECT ceil("value1"), ceil("value2"), ceil("value3"), ceil("value4") FROM "s3"
 (3 rows)
 
@@ -7529,10 +7529,10 @@ SELECT ceil(value1), ceil(value2), ceil(value3), ceil(value4) FROM s3;
 --Testcase 281:
 EXPLAIN VERBOSE
 SELECT ceil(value1), ceil(value2), ceil(value3), ceil(value4) FROM s3 WHERE to_hex(value2) != '64';
-                                                 QUERY PLAN                                                  
--------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: (ceil(value1)), (ceil(value2)), (ceil(value3)), (ceil(value4))
+                                                    QUERY PLAN                                                    
+------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: (ceil(value1)), (ceil((value2)::double precision)), (ceil(value3)), (ceil((value4)::double precision))
    Filter: (to_hex(s3.value2) <> '64'::text)
    InfluxDB query: SELECT ceil("value1"), ceil("value2"), ceil("value3"), ceil("value4"), "value2" FROM "s3"
 (4 rows)
@@ -7553,8 +7553,8 @@ EXPLAIN VERBOSE
 SELECT ceil(value1), ceil(value2), ceil(value3), ceil(value4) FROM s3 WHERE value2 != 200;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: (ceil(value1)), (ceil(value2)), (ceil(value3)), (ceil(value4))
+ Foreign Scan  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: (ceil(value1)), (ceil((value2)::double precision)), (ceil(value3)), (ceil((value4)::double precision))
    InfluxDB query: SELECT ceil("value1"), ceil("value2"), ceil("value3"), ceil("value4") FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
@@ -7776,10 +7776,10 @@ SELECT (ceil_all()::s3).* from s3;
 --Testcase 296:
 EXPLAIN VERBOSE
 SELECT cos(value1), cos(value2), cos(value3), cos(value4) FROM s3;
-                                          QUERY PLAN                                           
------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2200.31 rows=1462 width=32)
-   Output: (cos(value1)), (cos(value2)), (cos(value3)), (cos(value4))
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1483.93 rows=1462 width=32)
+   Output: (cos(value1)), (cos((value2)::double precision)), (cos(value3)), (cos((value4)::double precision))
    InfluxDB query: SELECT cos("value1"), cos("value2"), cos("value3"), cos("value4") FROM "s3"
 (3 rows)
 
@@ -7800,10 +7800,10 @@ SELECT cos(value1), cos(value2), cos(value3), cos(value4) FROM s3;
 --Testcase 298:
 EXPLAIN VERBOSE
 SELECT cos(value1), cos(value2), cos(value3), cos(value4) FROM s3 WHERE to_hex(value2) != '64';
-                                               QUERY PLAN                                                
----------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: (cos(value1)), (cos(value2)), (cos(value3)), (cos(value4))
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: (cos(value1)), (cos((value2)::double precision)), (cos(value3)), (cos((value4)::double precision))
    Filter: (to_hex(s3.value2) <> '64'::text)
    InfluxDB query: SELECT cos("value1"), cos("value2"), cos("value3"), cos("value4"), "value2" FROM "s3"
 (4 rows)
@@ -7824,8 +7824,8 @@ EXPLAIN VERBOSE
 SELECT cos(value1), cos(value2), cos(value3), cos(value4) FROM s3 WHERE value2 != 200;
                                                        QUERY PLAN                                                        
 -------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: (cos(value1)), (cos(value2)), (cos(value3)), (cos(value4))
+ Foreign Scan  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: (cos(value1)), (cos((value2)::double precision)), (cos(value3)), (cos((value4)::double precision))
    InfluxDB query: SELECT cos("value1"), cos("value2"), cos("value3"), cos("value4") FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
@@ -8023,10 +8023,10 @@ SELECT cos_all() FROM s3 WHERE time >= to_timestamp(0) and time <= to_timestamp(
 --Testcase 313:
 EXPLAIN VERBOSE
 SELECT exp(value1), exp(value2), exp(value3), exp(value4) FROM s3;
-                                          QUERY PLAN                                           
------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2200.31 rows=1462 width=32)
-   Output: (exp(value1)), (exp(value2)), (exp(value3)), (exp(value4))
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1483.93 rows=1462 width=32)
+   Output: (exp(value1)), (exp((value2)::double precision)), (exp(value3)), (exp((value4)::double precision))
    InfluxDB query: SELECT exp("value1"), exp("value2"), exp("value3"), exp("value4") FROM "s3"
 (3 rows)
 
@@ -8047,10 +8047,10 @@ SELECT exp(value1), exp(value2), exp(value3), exp(value4) FROM s3;
 --Testcase 315:
 EXPLAIN VERBOSE
 SELECT exp(value1), exp(value2), exp(value3), exp(value4) FROM s3 WHERE to_hex(value2) != '64';
-                                               QUERY PLAN                                                
----------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: (exp(value1)), (exp(value2)), (exp(value3)), (exp(value4))
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: (exp(value1)), (exp((value2)::double precision)), (exp(value3)), (exp((value4)::double precision))
    Filter: (to_hex(s3.value2) <> '64'::text)
    InfluxDB query: SELECT exp("value1"), exp("value2"), exp("value3"), exp("value4"), "value2" FROM "s3"
 (4 rows)
@@ -8071,8 +8071,8 @@ EXPLAIN VERBOSE
 SELECT exp(value1), exp(value2), exp(value3), exp(value4) FROM s3 WHERE value2 != 200;
                                                        QUERY PLAN                                                        
 -------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: (exp(value1)), (exp(value2)), (exp(value3)), (exp(value4))
+ Foreign Scan  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: (exp(value1)), (exp((value2)::double precision)), (exp(value3)), (exp((value4)::double precision))
    InfluxDB query: SELECT exp("value1"), exp("value2"), exp("value3"), exp("value4") FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
@@ -8276,10 +8276,10 @@ CONTEXT:  PL/pgSQL function ceil_all() line 3 at RAISE
 --Testcase 330:
 EXPLAIN VERBOSE
 SELECT floor(value1), floor(value2), floor(value3), floor(value4) FROM s3;
-                                              QUERY PLAN                                               
--------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2200.31 rows=1462 width=32)
-   Output: (floor(value1)), (floor(value2)), (floor(value3)), (floor(value4))
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1483.93 rows=1462 width=32)
+   Output: (floor(value1)), (floor((value2)::double precision)), (floor(value3)), (floor((value4)::double precision))
    InfluxDB query: SELECT floor("value1"), floor("value2"), floor("value3"), floor("value4") FROM "s3"
 (3 rows)
 
@@ -8300,10 +8300,10 @@ SELECT floor(value1), floor(value2), floor(value3), floor(value4) FROM s3;
 --Testcase 332:
 EXPLAIN VERBOSE
 SELECT floor(value1), floor(value2), floor(value3), floor(value4) FROM s3 WHERE to_hex(value2) != '64';
-                                                   QUERY PLAN                                                    
------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: (floor(value1)), (floor(value2)), (floor(value3)), (floor(value4))
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: (floor(value1)), (floor((value2)::double precision)), (floor(value3)), (floor((value4)::double precision))
    Filter: (to_hex(s3.value2) <> '64'::text)
    InfluxDB query: SELECT floor("value1"), floor("value2"), floor("value3"), floor("value4"), "value2" FROM "s3"
 (4 rows)
@@ -8324,8 +8324,8 @@ EXPLAIN VERBOSE
 SELECT floor(value1), floor(value2), floor(value3), floor(value4) FROM s3 WHERE value2 != 200;
                                                            QUERY PLAN                                                            
 ---------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: (floor(value1)), (floor(value2)), (floor(value3)), (floor(value4))
+ Foreign Scan  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: (floor(value1)), (floor((value2)::double precision)), (floor(value3)), (floor((value4)::double precision))
    InfluxDB query: SELECT floor("value1"), floor("value2"), floor("value3"), floor("value4") FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
@@ -8547,10 +8547,10 @@ SELECT (floor_all()::s3).* from s3;
 --Testcase 347:
 EXPLAIN VERBOSE
 SELECT ln(value1), ln(value2), ln(value3), ln(value4) FROM s3;
-                                        QUERY PLAN                                         
--------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2200.31 rows=1462 width=32)
-   Output: (ln(value1)), (ln(value2)), (ln(value3)), (ln(value4))
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1483.93 rows=1462 width=32)
+   Output: (ln(value1)), (ln((value2)::double precision)), (ln(value3)), (ln((value4)::double precision))
    InfluxDB query: SELECT ln("value1"), ln("value2"), ln("value3"), ln("value4") FROM "s3"
 (3 rows)
 
@@ -8571,10 +8571,10 @@ SELECT ln(value1), ln(value2), ln(value3), ln(value4) FROM s3;
 --Testcase 349:
 EXPLAIN VERBOSE
 SELECT ln(value1), ln(value2), ln(value3), ln(value4) FROM s3 WHERE to_hex(value2) != '64';
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: (ln(value1)), (ln(value2)), (ln(value3)), (ln(value4))
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: (ln(value1)), (ln((value2)::double precision)), (ln(value3)), (ln((value4)::double precision))
    Filter: (to_hex(s3.value2) <> '64'::text)
    InfluxDB query: SELECT ln("value1"), ln("value2"), ln("value3"), ln("value4"), "value2" FROM "s3"
 (4 rows)
@@ -8595,8 +8595,8 @@ EXPLAIN VERBOSE
 SELECT ln(value1), ln(value2), ln(value3), ln(value4) FROM s3 WHERE value2 != 200;
                                                      QUERY PLAN                                                      
 ---------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: (ln(value1)), (ln(value2)), (ln(value3)), (ln(value4))
+ Foreign Scan  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: (ln(value1)), (ln((value2)::double precision)), (ln(value3)), (ln((value4)::double precision))
    InfluxDB query: SELECT ln("value1"), ln("value2"), ln("value3"), ln("value4") FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
@@ -8800,10 +8800,10 @@ CONTEXT:  PL/pgSQL function ln_all() line 3 at RAISE
 --Testcase 364:
 EXPLAIN VERBOSE
 SELECT pow(value1, 2), pow(value2, 2), pow(value3, 2), pow(value4, 2) FROM s3;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2924.00 rows=1462 width=32)
-   Output: (pow(value1, 2)), (pow(value2, 2)), (pow(value3, 2)), (pow(value4, 2))
+                                                                                                QUERY PLAN                                                                                                
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1483.93 rows=1462 width=32)
+   Output: (pow(value1, '2'::double precision)), (pow((value2)::double precision, '2'::double precision)), (pow(value3, '2'::double precision)), (pow((value4)::double precision, '2'::double precision))
    InfluxDB query: SELECT pow("value1", 2), pow("value2", 2), pow("value3", 2), pow("value4", 2) FROM "s3"
 (3 rows)
 
@@ -8824,10 +8824,10 @@ SELECT pow(value1, 2), pow(value2, 2), pow(value3, 2), pow(value4, 2) FROM s3;
 --Testcase 366:
 EXPLAIN VERBOSE
 SELECT pow(value1, 2), pow(value2, 2), pow(value3, 2), pow(value4, 2) FROM s3 WHERE to_hex(value2) != '64';
-                                                     QUERY PLAN                                                      
----------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2910.00 rows=1455 width=32)
-   Output: (pow(value1, 2)), (pow(value2, 2)), (pow(value3, 2)), (pow(value4, 2))
+                                                                                                QUERY PLAN                                                                                                
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: (pow(value1, '2'::double precision)), (pow((value2)::double precision, '2'::double precision)), (pow(value3, '2'::double precision)), (pow((value4)::double precision, '2'::double precision))
    Filter: (to_hex(s3.value2) <> '64'::text)
    InfluxDB query: SELECT pow("value1", 2), pow("value2", 2), pow("value3", 2), pow("value4", 2), "value2" FROM "s3"
 (4 rows)
@@ -8846,10 +8846,10 @@ SELECT pow(value1, 2), pow(value2, 2), pow(value3, 2), pow(value4, 2) FROM s3 WH
 --Testcase 368:
 EXPLAIN VERBOSE
 SELECT pow(value1, 2), pow(value2, 2), pow(value3, 2), pow(value4, 2) FROM s3 WHERE value2 != 200;
-                                                             QUERY PLAN                                                              
--------------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2910.00 rows=1455 width=32)
-   Output: (pow(value1, 2)), (pow(value2, 2)), (pow(value3, 2)), (pow(value4, 2))
+                                                                                                QUERY PLAN                                                                                                
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: (pow(value1, '2'::double precision)), (pow((value2)::double precision, '2'::double precision)), (pow(value3, '2'::double precision)), (pow((value4)::double precision, '2'::double precision))
    InfluxDB query: SELECT pow("value1", 2), pow("value2", 2), pow("value3", 2), pow("value4", 2) FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
@@ -8870,7 +8870,7 @@ SELECT sum(value3),pow(sum(value3), 2) FROM s3;
                                QUERY PLAN                                
 -------------------------------------------------------------------------
  Foreign Scan  (cost=1.00..1.00 rows=1 width=16)
-   Output: (sum(value3)), (pow(sum(value3), 2))
+   Output: (sum(value3)), (pow(sum(value3), '2'::double precision))
    InfluxDB query: SELECT sum("value3"), pow(sum("value3"), 2) FROM "s3"
 (3 rows)
 
@@ -8886,10 +8886,10 @@ SELECT sum(value3),pow(sum(value3), 2) FROM s3;
 --Testcase 372:
 EXPLAIN VERBOSE
 SELECT pow(log2(value1), 2),pow(log2(1/value1), 2) FROM s3;
-                                       QUERY PLAN                                        
------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..5126.40 rows=2560 width=16)
-   Output: (pow(log2(value1), 2)), (pow(log2(('1'::double precision / value1)), 2))
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..3859.20 rows=2560 width=16)
+   Output: (pow(log2(value1), '2'::double precision)), (pow(log2(('1'::double precision / value1)), '2'::double precision))
    InfluxDB query: SELECT pow(log2("value1"), 2), pow(log2((1 / "value1")), 2) FROM "s3"
 (3 rows)
 
@@ -8910,10 +8910,10 @@ SELECT pow(log2(value1), 2),pow(log2(1/value1), 2) FROM s3;
 --Testcase 374:
 EXPLAIN VERBOSE
 SELECT pow(value3, 2), pi(), 4.1 FROM s3;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..3200.00 rows=2560 width=48)
-   Output: (pow(value3, 2)), '3.141592653589793'::double precision, 4.1
+                                         QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..2566.40 rows=2560 width=48)
+   Output: (pow(value3, '2'::double precision)), '3.141592653589793'::double precision, 4.1
    InfluxDB query: SELECT pow("value3", 2) FROM "s3"
 (3 rows)
 
@@ -8934,13 +8934,13 @@ SELECT pow(value3, 2), pi(), 4.1 FROM s3;
 --Testcase 376:
 EXPLAIN VERBOSE
 SELECT value1, pow(1-value1, 2) FROM s3 order by pow(1-value1, 2);
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Sort  (cost=3351.32..3357.72 rows=2560 width=16)
-   Output: value1, (pow(('1'::double precision - value1), 2))
-   Sort Key: (pow(('1'::double precision - s3.value1), 2))
-   ->  Foreign Scan  (cost=10.00..3206.40 rows=2560 width=16)
-         Output: value1, (pow(('1'::double precision - value1), 2))
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+ Sort  (cost=2717.72..2724.12 rows=2560 width=16)
+   Output: value1, (pow(('1'::double precision - value1), '2'::double precision))
+   Sort Key: (pow(('1'::double precision - s3.value1), '2'::double precision))
+   ->  Foreign Scan  (cost=10.00..2572.80 rows=2560 width=16)
+         Output: value1, (pow(('1'::double precision - value1), '2'::double precision))
          InfluxDB query: SELECT "value1", pow((1 - "value1"), 2) FROM "s3"
 (6 rows)
 
@@ -9071,10 +9071,10 @@ SELECT (pow_all(2)::s3).* from s3;
 --Testcase 381:
 EXPLAIN VERBOSE
 SELECT round(value1), round(value2), round(value3), round(value4) FROM s3;
-                                              QUERY PLAN                                               
--------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2200.31 rows=1462 width=32)
-   Output: (round(value1)), (round(value2)), (round(value3)), (round(value4))
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1483.93 rows=1462 width=32)
+   Output: (round(value1)), (round((value2)::double precision)), (round(value3)), (round((value4)::double precision))
    InfluxDB query: SELECT round("value1"), round("value2"), round("value3"), round("value4") FROM "s3"
 (3 rows)
 
@@ -9095,10 +9095,10 @@ SELECT round(value1), round(value2), round(value3), round(value4) FROM s3;
 --Testcase 383:
 EXPLAIN VERBOSE
 SELECT round(value1), round(value2), round(value3), round(value4) FROM s3 WHERE to_hex(value2) != '64';
-                                                   QUERY PLAN                                                    
------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: (round(value1)), (round(value2)), (round(value3)), (round(value4))
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: (round(value1)), (round((value2)::double precision)), (round(value3)), (round((value4)::double precision))
    Filter: (to_hex(s3.value2) <> '64'::text)
    InfluxDB query: SELECT round("value1"), round("value2"), round("value3"), round("value4"), "value2" FROM "s3"
 (4 rows)
@@ -9119,8 +9119,8 @@ EXPLAIN VERBOSE
 SELECT round(value1), round(value2), round(value3), round(value4) FROM s3 WHERE value2 != 200;
                                                            QUERY PLAN                                                            
 ---------------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: (round(value1)), (round(value2)), (round(value3)), (round(value4))
+ Foreign Scan  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: (round(value1)), (round((value2)::double precision)), (round(value3)), (round((value4)::double precision))
    InfluxDB query: SELECT round("value1"), round("value2"), round("value3"), round("value4") FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
@@ -9342,10 +9342,10 @@ SELECT (round_all()::s3).* from s3;
 --Testcase 398:
 EXPLAIN VERBOSE
 SELECT sin(value1), sin(value2), sin(value3), sin(value4) FROM s3;
-                                          QUERY PLAN                                           
------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2200.31 rows=1462 width=32)
-   Output: (sin(value1)), (sin(value2)), (sin(value3)), (sin(value4))
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1483.93 rows=1462 width=32)
+   Output: (sin(value1)), (sin((value2)::double precision)), (sin(value3)), (sin((value4)::double precision))
    InfluxDB query: SELECT sin("value1"), sin("value2"), sin("value3"), sin("value4") FROM "s3"
 (3 rows)
 
@@ -9366,10 +9366,10 @@ SELECT sin(value1), sin(value2), sin(value3), sin(value4) FROM s3;
 --Testcase 400:
 EXPLAIN VERBOSE
 SELECT sin(value1), sin(value2), sin(value3), sin(value4) FROM s3 WHERE to_hex(value2) != '64';
-                                               QUERY PLAN                                                
----------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: (sin(value1)), (sin(value2)), (sin(value3)), (sin(value4))
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: (sin(value1)), (sin((value2)::double precision)), (sin(value3)), (sin((value4)::double precision))
    Filter: (to_hex(s3.value2) <> '64'::text)
    InfluxDB query: SELECT sin("value1"), sin("value2"), sin("value3"), sin("value4"), "value2" FROM "s3"
 (4 rows)
@@ -9390,8 +9390,8 @@ EXPLAIN VERBOSE
 SELECT sin(value1), sin(value2), sin(value3), sin(value4) FROM s3 WHERE value2 != 200;
                                                        QUERY PLAN                                                        
 -------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: (sin(value1)), (sin(value2)), (sin(value3)), (sin(value4))
+ Foreign Scan  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: (sin(value1)), (sin((value2)::double precision)), (sin(value3)), (sin((value4)::double precision))
    InfluxDB query: SELECT sin("value1"), sin("value2"), sin("value3"), sin("value4") FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 
@@ -9589,10 +9589,10 @@ SELECT sin_all() FROM s3 WHERE time >= to_timestamp(0) and time <= to_timestamp(
 --Testcase 825:
 EXPLAIN VERBOSE
 SELECT tan(value1), tan(value2), tan(value3), tan(value4) FROM s3;
-                                          QUERY PLAN                                           
------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2200.31 rows=1462 width=32)
-   Output: (tan(value1)), (tan(value2)), (tan(value3)), (tan(value4))
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1483.93 rows=1462 width=32)
+   Output: (tan(value1)), (tan((value2)::double precision)), (tan(value3)), (tan((value4)::double precision))
    InfluxDB query: SELECT tan("value1"), tan("value2"), tan("value3"), tan("value4") FROM "s3"
 (3 rows)
 
@@ -9613,10 +9613,10 @@ SELECT tan(value1), tan(value2), tan(value3), tan(value4) FROM s3;
 --Testcase 827:
 EXPLAIN VERBOSE
 SELECT tan(value1), tan(value2), tan(value3), tan(value4) FROM s3 WHERE to_hex(value2) != '64';
-                                               QUERY PLAN                                                
----------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: (tan(value1)), (tan(value2)), (tan(value3)), (tan(value4))
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: (tan(value1)), (tan((value2)::double precision)), (tan(value3)), (tan((value4)::double precision))
    Filter: (to_hex(s3.value2) <> '64'::text)
    InfluxDB query: SELECT tan("value1"), tan("value2"), tan("value3"), tan("value4"), "value2" FROM "s3"
 (4 rows)
@@ -9637,8 +9637,8 @@ EXPLAIN VERBOSE
 SELECT tan(value1), tan(value2), tan(value3), tan(value4) FROM s3 WHERE value2 != 200;
                                                        QUERY PLAN                                                        
 -------------------------------------------------------------------------------------------------------------------------
- Foreign Scan  (cost=10.00..2189.78 rows=1455 width=32)
-   Output: (tan(value1)), (tan(value2)), (tan(value3)), (tan(value4))
+ Foreign Scan  (cost=10.00..1476.83 rows=1455 width=32)
+   Output: (tan(value1)), (tan((value2)::double precision)), (tan(value3)), (tan((value4)::double precision))
    InfluxDB query: SELECT tan("value1"), tan("value2"), tan("value3"), tan("value4") FROM "s3" WHERE (("value2" <> 200))
 (3 rows)
 

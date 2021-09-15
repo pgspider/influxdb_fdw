@@ -1,3 +1,0 @@
-CREATE OR REPLACE FUNCTION influxdb_fdw_version()
-  RETURNS pg_catalog.int4 STRICT
-  AS 'MODULE_PATHNAME' LANGUAGE C;

@@ -28,8 +28,8 @@ SELECT * FROM t4;
 (6 rows)
 
 --Testcase 2:
-EXPLAIN (verbose)  
-SELECT sum("value1"),influx_time(time,interval '1s', interval '0.00001s'),tag1 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00' 
+EXPLAIN (verbose)
+SELECT sum("value1"),influx_time(time,interval '1s', interval '0.00001s'),tag1 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00'
 GROUP BY influx_time(time,interval '1s', interval '0.00001s'), tag1;
                                                                QUERY PLAN                                                                
 -----------------------------------------------------------------------------------------------------------------------------------------
@@ -42,13 +42,13 @@ GROUP BY influx_time(time,interval '1s', interval '0.00001s'), tag1;
 (6 rows)
 
 --Testcase 3:
-SELECT sum("value1"),influx_time(time,interval '1s', interval '0.00001s'),tag1 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00' 
+SELECT sum("value1"),influx_time(time,interval '1s', interval '0.00001s'),tag1 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00'
 GROUP BY influx_time(time,interval '1s', interval '0.00001s'), tag1;
 ERROR:  stub influx_time(timestamp with time zone, interval, interval) is called
 CONTEXT:  PL/pgSQL function influx_time(timestamp with time zone,interval,interval) line 3 at RAISE
 --Testcase 4:
-EXPLAIN (verbose) 
-SELECT tag1,sum("value1"),tag2 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00' 
+EXPLAIN (verbose)
+SELECT tag1,sum("value1"),tag2 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00'
  GROUP BY tag2, tag1;
                                                                    QUERY PLAN                                                                    
 -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -61,7 +61,7 @@ SELECT tag1,sum("value1"),tag2 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' 
 (6 rows)
 
 --Testcase 5:
-SELECT tag1,sum("value1"),tag2 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00' 
+SELECT tag1,sum("value1"),tag2 FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00'
  GROUP BY tag2, tag1;
  tag1 | sum | tag2 
 ------+-----+------
@@ -94,13 +94,13 @@ EXPLAIN (verbose)  SELECT tag1,sum("value1"), count(value1), tag2 FROM "t4" grou
 (6 rows)
 
 --Testcase 8:
-SELECT influx_time(time,interval '5s',interval '0s'),tag1,last(time, value1) FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00' 
+SELECT influx_time(time,interval '5s',interval '0s'),tag1,last(time, value1) FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00'
  GROUP BY influx_time(time,interval '5s', interval '0s'), tag1;
 ERROR:  stub influx_time(timestamp with time zone, interval, interval) is called
 CONTEXT:  PL/pgSQL function influx_time(timestamp with time zone,interval,interval) line 3 at RAISE
 --Testcase 9:
 EXPLAIN (VERBOSE)
-SELECT influx_time(time,interval '5s',interval '0s'),tag1,last(time, value1) FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00' 
+SELECT influx_time(time,interval '5s',interval '0s'),tag1,last(time, value1) FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00'
 GROUP BY influx_time(time,interval '5s', interval '0s'), tag1;
                                                                   QUERY PLAN                                                                   
 -----------------------------------------------------------------------------------------------------------------------------------------------
@@ -115,14 +115,14 @@ GROUP BY influx_time(time,interval '5s', interval '0s'), tag1;
                InfluxDB query: SELECT "tag1", "value1" FROM "t4" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:05'))
 (9 rows)
 
--- no offset 
+-- no offset
 --Testcase 10:
-SELECT influx_time(time,interval '5s'),tag1,last(time, value1) FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00' 
+SELECT influx_time(time,interval '5s'),tag1,last(time, value1) FROM "t4" WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:05+00'
 GROUP BY influx_time(time,interval '5s'), tag1;
 ERROR:  stub influx_time(timestamp with time zone, interval) is called
 CONTEXT:  PL/pgSQL function influx_time(timestamp with time zone,interval) line 3 at RAISE
 --Testcase 11:
-EXPLAIN (verbose) 
+EXPLAIN (verbose)
 SELECT last(time, value1),last(time, value2) FROM t4 GROUP BY tag1;
                                 QUERY PLAN                                 
 ---------------------------------------------------------------------------
@@ -138,6 +138,428 @@ SELECT last(time, value1),last(time, value2) FROM t4 GROUP BY tag1;
 SELECT last(time, value1),last(time, value2) FROM t4 GROUP BY tag1;
 ERROR:  stub last_sfunc(anyelement, timestamp with time zone, anyelement) is called
 CONTEXT:  PL/pgSQL function last_sfunc(anyelement,timestamp with time zone,anyelement) line 3 at RAISE
+-- GROUP BY time intervals and fill()
+SELECT * FROM tx;
+          time          |      time_text       | tag1 | tag2 | value1 | value2 
+------------------------+----------------------+------+------+--------+--------
+ 1970-01-01 00:00:00+00 | 1970-01-01T00:00:00Z | a    | x    |      1 |    100
+ 1970-01-01 00:00:01+00 | 1970-01-01T00:00:01Z | a    | y    |      2 |    100
+ 1970-01-01 00:00:02+00 | 1970-01-01T00:00:02Z | a    | x    |      3 |    100
+ 1970-01-01 00:00:03+00 | 1970-01-01T00:00:03Z | b    | y    |     10 |    200
+ 1970-01-01 00:00:04+00 | 1970-01-01T00:00:04Z | b    | z    |     20 |    200
+ 1970-01-01 00:00:05+00 | 1970-01-01T00:00:05Z | b    | z    |     30 |    200
+ 1970-01-01 00:00:06+00 | 1970-01-01T00:00:06Z | b    | z    |        |    200
+ 1970-01-01 00:00:07+00 | 1970-01-01T00:00:07Z | b    | z    |        |    200
+ 1970-01-01 00:00:08+00 | 1970-01-01T00:00:08Z | b    | z    |     80 |    200
+ 1970-01-01 00:00:09+00 | 1970-01-01T00:00:09Z | b    | z    |     90 |    200
+ 1970-01-01 00:00:10+00 | 1970-01-01T00:00:10Z | b    | z    |        |    200
+ 1970-01-01 00:00:11+00 | 1970-01-01T00:00:11Z | b    | z    |        |    200
+ 1970-01-01 00:00:12+00 | 1970-01-01T00:00:12Z | b    | z    |        |    200
+ 1970-01-01 00:00:13+00 | 1970-01-01T00:00:13Z | b    | z    |        |    200
+ 1970-01-01 00:00:14+00 | 1970-01-01T00:00:14Z | b    | z    |    140 |    200
+ 1970-01-01 00:00:15+00 | 1970-01-01T00:00:15Z | b    | z    |    150 |    200
+ 1970-01-01 00:00:16+00 | 1970-01-01T00:00:16Z | c    | zz   |        |   2000
+ 1970-01-01 00:00:20+00 | 1970-01-01T00:00:20Z | c    | zz   |        |   2000
+(18 rows)
+
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100)) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100));
+                                                              QUERY PLAN                                                               
+---------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=15.17..20.34 rows=10 width=16)
+   Output: sum(value1), (influx_time("time", '@ 2 secs'::interval, influx_fill_numeric(100)))
+   Group Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_numeric(100)))
+   ->  Sort  (cost=15.17..15.19 rows=10 width=16)
+         Output: (influx_time("time", '@ 2 secs'::interval, influx_fill_numeric(100))), value1
+         Sort Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_numeric(100)))
+         ->  Foreign Scan on public.tx  (cost=10.00..15.00 rows=10 width=16)
+               Output: influx_time("time", '@ 2 secs'::interval, influx_fill_numeric(100)), value1
+               InfluxDB query: SELECT "value1" FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15'))
+(9 rows)
+
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100)) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100));
+ERROR:  stub influx_fill_numeric(int) is called
+CONTEXT:  PL/pgSQL function influx_fill_numeric(integer) line 3 at RAISE
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100.001)) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100.001));
+                                                              QUERY PLAN                                                               
+---------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=15.17..20.34 rows=10 width=16)
+   Output: sum(value1), (influx_time("time", '@ 2 secs'::interval, influx_fill_numeric('100.001'::double precision)))
+   Group Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_numeric('100.001'::double precision)))
+   ->  Sort  (cost=15.17..15.19 rows=10 width=16)
+         Output: (influx_time("time", '@ 2 secs'::interval, influx_fill_numeric('100.001'::double precision))), value1
+         Sort Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_numeric('100.001'::double precision)))
+         ->  Foreign Scan on public.tx  (cost=10.00..15.00 rows=10 width=16)
+               Output: influx_time("time", '@ 2 secs'::interval, influx_fill_numeric('100.001'::double precision)), value1
+               InfluxDB query: SELECT "value1" FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15'))
+(9 rows)
+
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100.001)) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100.001));
+ERROR:  stub influx_fill_numeric(float8) is called
+CONTEXT:  PL/pgSQL function influx_fill_numeric(double precision) line 3 at RAISE
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_option('none')) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('none'));
+                                                              QUERY PLAN                                                               
+---------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=15.17..20.34 rows=10 width=16)
+   Output: sum(value1), (influx_time("time", '@ 2 secs'::interval, influx_fill_option('none'::influx_fill_enum)))
+   Group Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_option('none'::influx_fill_enum)))
+   ->  Sort  (cost=15.17..15.19 rows=10 width=16)
+         Output: (influx_time("time", '@ 2 secs'::interval, influx_fill_option('none'::influx_fill_enum))), value1
+         Sort Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_option('none'::influx_fill_enum)))
+         ->  Foreign Scan on public.tx  (cost=10.00..15.00 rows=10 width=16)
+               Output: influx_time("time", '@ 2 secs'::interval, influx_fill_option('none'::influx_fill_enum)), value1
+               InfluxDB query: SELECT "value1" FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15'))
+(9 rows)
+
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_option('none')) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('none'));
+ERROR:  stub influx_fill_option(influx_fill_enum) is called
+CONTEXT:  PL/pgSQL function influx_fill_option(influx_fill_enum) line 3 at RAISE
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_option('null')) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('null'));
+                                                              QUERY PLAN                                                               
+---------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=15.17..20.34 rows=10 width=16)
+   Output: sum(value1), (influx_time("time", '@ 2 secs'::interval, influx_fill_option('null'::influx_fill_enum)))
+   Group Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_option('null'::influx_fill_enum)))
+   ->  Sort  (cost=15.17..15.19 rows=10 width=16)
+         Output: (influx_time("time", '@ 2 secs'::interval, influx_fill_option('null'::influx_fill_enum))), value1
+         Sort Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_option('null'::influx_fill_enum)))
+         ->  Foreign Scan on public.tx  (cost=10.00..15.00 rows=10 width=16)
+               Output: influx_time("time", '@ 2 secs'::interval, influx_fill_option('null'::influx_fill_enum)), value1
+               InfluxDB query: SELECT "value1" FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15'))
+(9 rows)
+
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_option('null')) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('null'));
+ERROR:  stub influx_fill_option(influx_fill_enum) is called
+CONTEXT:  PL/pgSQL function influx_fill_option(influx_fill_enum) line 3 at RAISE
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_option('previous')) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('previous'));
+                                                              QUERY PLAN                                                               
+---------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=15.17..20.34 rows=10 width=16)
+   Output: sum(value1), (influx_time("time", '@ 2 secs'::interval, influx_fill_option('previous'::influx_fill_enum)))
+   Group Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_option('previous'::influx_fill_enum)))
+   ->  Sort  (cost=15.17..15.19 rows=10 width=16)
+         Output: (influx_time("time", '@ 2 secs'::interval, influx_fill_option('previous'::influx_fill_enum))), value1
+         Sort Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_option('previous'::influx_fill_enum)))
+         ->  Foreign Scan on public.tx  (cost=10.00..15.00 rows=10 width=16)
+               Output: influx_time("time", '@ 2 secs'::interval, influx_fill_option('previous'::influx_fill_enum)), value1
+               InfluxDB query: SELECT "value1" FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15'))
+(9 rows)
+
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_option('previous')) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('previous'));
+ERROR:  stub influx_fill_option(influx_fill_enum) is called
+CONTEXT:  PL/pgSQL function influx_fill_option(influx_fill_enum) line 3 at RAISE
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_option('linear')) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('linear'));
+                                                              QUERY PLAN                                                               
+---------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=15.17..20.34 rows=10 width=16)
+   Output: sum(value1), (influx_time("time", '@ 2 secs'::interval, influx_fill_option('linear'::influx_fill_enum)))
+   Group Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_option('linear'::influx_fill_enum)))
+   ->  Sort  (cost=15.17..15.19 rows=10 width=16)
+         Output: (influx_time("time", '@ 2 secs'::interval, influx_fill_option('linear'::influx_fill_enum))), value1
+         Sort Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_option('linear'::influx_fill_enum)))
+         ->  Foreign Scan on public.tx  (cost=10.00..15.00 rows=10 width=16)
+               Output: influx_time("time", '@ 2 secs'::interval, influx_fill_option('linear'::influx_fill_enum)), value1
+               InfluxDB query: SELECT "value1" FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15'))
+(9 rows)
+
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_option('linear')) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('linear'));
+ERROR:  stub influx_fill_option(influx_fill_enum) is called
+CONTEXT:  PL/pgSQL function influx_fill_option(influx_fill_enum) line 3 at RAISE
+-- with offset interval '0.00001s'
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100)) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100));
+                                                              QUERY PLAN                                                               
+---------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=15.17..20.34 rows=10 width=16)
+   Output: sum(value1), (influx_time("time", '@ 2 secs'::interval, '@ 0.00001 secs'::interval, influx_fill_numeric(100)))
+   Group Key: (influx_time(tx."time", '@ 2 secs'::interval, '@ 0.00001 secs'::interval, influx_fill_numeric(100)))
+   ->  Sort  (cost=15.17..15.19 rows=10 width=16)
+         Output: (influx_time("time", '@ 2 secs'::interval, '@ 0.00001 secs'::interval, influx_fill_numeric(100))), value1
+         Sort Key: (influx_time(tx."time", '@ 2 secs'::interval, '@ 0.00001 secs'::interval, influx_fill_numeric(100)))
+         ->  Foreign Scan on public.tx  (cost=10.00..15.00 rows=10 width=16)
+               Output: influx_time("time", '@ 2 secs'::interval, '@ 0.00001 secs'::interval, influx_fill_numeric(100)), value1
+               InfluxDB query: SELECT "value1" FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15'))
+(9 rows)
+
+SELECT sum("value1"), influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100)) FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100));
+ERROR:  stub influx_fill_numeric(int) is called
+CONTEXT:  PL/pgSQL function influx_fill_numeric(integer) line 3 at RAISE
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100)), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100)), tag1;
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=9.08..12.20 rows=6 width=48)
+   Output: sum(value1), (influx_time("time", '@ 2 secs'::interval, '@ 0.00001 secs'::interval, influx_fill_numeric(100))), tag1
+   Group Key: (influx_time(tx."time", '@ 2 secs'::interval, '@ 0.00001 secs'::interval, influx_fill_numeric(100))), tx.tag1
+   ->  Sort  (cost=9.08..9.09 rows=6 width=48)
+         Output: (influx_time("time", '@ 2 secs'::interval, '@ 0.00001 secs'::interval, influx_fill_numeric(100))), tag1, value1
+         Sort Key: (influx_time(tx."time", '@ 2 secs'::interval, '@ 0.00001 secs'::interval, influx_fill_numeric(100))), tx.tag1
+         ->  Foreign Scan on public.tx  (cost=10.00..9.00 rows=6 width=48)
+               Output: influx_time("time", '@ 2 secs'::interval, '@ 0.00001 secs'::interval, influx_fill_numeric(100)), tag1, value1
+               InfluxDB query: SELECT "tag1", "value1" FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15'))
+(9 rows)
+
+SELECT sum("value1"), influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100)), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100)), tag1;
+ERROR:  stub influx_fill_numeric(int) is called
+CONTEXT:  PL/pgSQL function influx_fill_numeric(integer) line 3 at RAISE
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100)), tag1, tag2 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100)), tag1, tag2;
+                                                                      QUERY PLAN                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=6.04..8.13 rows=4 width=80)
+   Output: sum(value1), (influx_time("time", '@ 2 secs'::interval, '@ 0.00001 secs'::interval, influx_fill_numeric(100))), tag1, tag2
+   Group Key: (influx_time(tx."time", '@ 2 secs'::interval, '@ 0.00001 secs'::interval, influx_fill_numeric(100))), tx.tag1, tx.tag2
+   ->  Sort  (cost=6.04..6.05 rows=4 width=80)
+         Output: (influx_time("time", '@ 2 secs'::interval, '@ 0.00001 secs'::interval, influx_fill_numeric(100))), tag1, tag2, value1
+         Sort Key: (influx_time(tx."time", '@ 2 secs'::interval, '@ 0.00001 secs'::interval, influx_fill_numeric(100))), tx.tag1, tx.tag2
+         ->  Foreign Scan on public.tx  (cost=10.00..6.00 rows=4 width=80)
+               Output: influx_time("time", '@ 2 secs'::interval, '@ 0.00001 secs'::interval, influx_fill_numeric(100)), tag1, tag2, value1
+               InfluxDB query: SELECT "tag1", "tag2", "value1" FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15'))
+(9 rows)
+
+SELECT sum("value1"), influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100)), tag1, tag2 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', interval '0.00001s', influx_fill_numeric(100)), tag1, tag2;
+ERROR:  stub influx_fill_numeric(int) is called
+CONTEXT:  PL/pgSQL function influx_fill_numeric(integer) line 3 at RAISE
+--with tag1
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100)), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100)), tag1;
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=9.08..12.20 rows=6 width=48)
+   Output: sum(value1), (influx_time("time", '@ 2 secs'::interval, influx_fill_numeric(100))), tag1
+   Group Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_numeric(100))), tx.tag1
+   ->  Sort  (cost=9.08..9.09 rows=6 width=48)
+         Output: (influx_time("time", '@ 2 secs'::interval, influx_fill_numeric(100))), tag1, value1
+         Sort Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_numeric(100))), tx.tag1
+         ->  Foreign Scan on public.tx  (cost=10.00..9.00 rows=6 width=48)
+               Output: influx_time("time", '@ 2 secs'::interval, influx_fill_numeric(100)), tag1, value1
+               InfluxDB query: SELECT "tag1", "value1" FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15'))
+(9 rows)
+
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100)), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100)), tag1;
+ERROR:  stub influx_fill_numeric(int) is called
+CONTEXT:  PL/pgSQL function influx_fill_numeric(integer) line 3 at RAISE
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100.001)), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100.001)), tag1;
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=9.08..12.20 rows=6 width=48)
+   Output: sum(value1), (influx_time("time", '@ 2 secs'::interval, influx_fill_numeric('100.001'::double precision))), tag1
+   Group Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_numeric('100.001'::double precision))), tx.tag1
+   ->  Sort  (cost=9.08..9.09 rows=6 width=48)
+         Output: (influx_time("time", '@ 2 secs'::interval, influx_fill_numeric('100.001'::double precision))), tag1, value1
+         Sort Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_numeric('100.001'::double precision))), tx.tag1
+         ->  Foreign Scan on public.tx  (cost=10.00..9.00 rows=6 width=48)
+               Output: influx_time("time", '@ 2 secs'::interval, influx_fill_numeric('100.001'::double precision)), tag1, value1
+               InfluxDB query: SELECT "tag1", "value1" FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15'))
+(9 rows)
+
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100.001)), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100.001)), tag1;
+ERROR:  stub influx_fill_numeric(float8) is called
+CONTEXT:  PL/pgSQL function influx_fill_numeric(double precision) line 3 at RAISE
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s',influx_fill_option('null')), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('null')), tag1;
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=9.08..12.20 rows=6 width=48)
+   Output: sum(value1), (influx_time("time", '@ 2 secs'::interval, influx_fill_option('null'::influx_fill_enum))), tag1
+   Group Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_option('null'::influx_fill_enum))), tx.tag1
+   ->  Sort  (cost=9.08..9.09 rows=6 width=48)
+         Output: (influx_time("time", '@ 2 secs'::interval, influx_fill_option('null'::influx_fill_enum))), tag1, value1
+         Sort Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_option('null'::influx_fill_enum))), tx.tag1
+         ->  Foreign Scan on public.tx  (cost=10.00..9.00 rows=6 width=48)
+               Output: influx_time("time", '@ 2 secs'::interval, influx_fill_option('null'::influx_fill_enum)), tag1, value1
+               InfluxDB query: SELECT "tag1", "value1" FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15'))
+(9 rows)
+
+SELECT sum("value1"), influx_time(time,interval '2s',influx_fill_option('null')), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('null')), tag1;
+ERROR:  stub influx_fill_option(influx_fill_enum) is called
+CONTEXT:  PL/pgSQL function influx_fill_option(influx_fill_enum) line 3 at RAISE
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s',influx_fill_option('none')), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('none')), tag1;
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=9.08..12.20 rows=6 width=48)
+   Output: sum(value1), (influx_time("time", '@ 2 secs'::interval, influx_fill_option('none'::influx_fill_enum))), tag1
+   Group Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_option('none'::influx_fill_enum))), tx.tag1
+   ->  Sort  (cost=9.08..9.09 rows=6 width=48)
+         Output: (influx_time("time", '@ 2 secs'::interval, influx_fill_option('none'::influx_fill_enum))), tag1, value1
+         Sort Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_option('none'::influx_fill_enum))), tx.tag1
+         ->  Foreign Scan on public.tx  (cost=10.00..9.00 rows=6 width=48)
+               Output: influx_time("time", '@ 2 secs'::interval, influx_fill_option('none'::influx_fill_enum)), tag1, value1
+               InfluxDB query: SELECT "tag1", "value1" FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15'))
+(9 rows)
+
+SELECT sum("value1"), influx_time(time,interval '2s',influx_fill_option('none')), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('none')), tag1;
+ERROR:  stub influx_fill_option(influx_fill_enum) is called
+CONTEXT:  PL/pgSQL function influx_fill_option(influx_fill_enum) line 3 at RAISE
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s',influx_fill_option('previous')), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('previous')), tag1;
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=9.08..12.20 rows=6 width=48)
+   Output: sum(value1), (influx_time("time", '@ 2 secs'::interval, influx_fill_option('previous'::influx_fill_enum))), tag1
+   Group Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_option('previous'::influx_fill_enum))), tx.tag1
+   ->  Sort  (cost=9.08..9.09 rows=6 width=48)
+         Output: (influx_time("time", '@ 2 secs'::interval, influx_fill_option('previous'::influx_fill_enum))), tag1, value1
+         Sort Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_option('previous'::influx_fill_enum))), tx.tag1
+         ->  Foreign Scan on public.tx  (cost=10.00..9.00 rows=6 width=48)
+               Output: influx_time("time", '@ 2 secs'::interval, influx_fill_option('previous'::influx_fill_enum)), tag1, value1
+               InfluxDB query: SELECT "tag1", "value1" FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15'))
+(9 rows)
+
+SELECT sum("value1"), influx_time(time,interval '2s',influx_fill_option('previous')), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('previous')), tag1;
+ERROR:  stub influx_fill_option(influx_fill_enum) is called
+CONTEXT:  PL/pgSQL function influx_fill_option(influx_fill_enum) line 3 at RAISE
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s',influx_fill_option('linear')), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('linear')), tag1;
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=9.08..12.20 rows=6 width=48)
+   Output: sum(value1), (influx_time("time", '@ 2 secs'::interval, influx_fill_option('linear'::influx_fill_enum))), tag1
+   Group Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_option('linear'::influx_fill_enum))), tx.tag1
+   ->  Sort  (cost=9.08..9.09 rows=6 width=48)
+         Output: (influx_time("time", '@ 2 secs'::interval, influx_fill_option('linear'::influx_fill_enum))), tag1, value1
+         Sort Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_option('linear'::influx_fill_enum))), tx.tag1
+         ->  Foreign Scan on public.tx  (cost=10.00..9.00 rows=6 width=48)
+               Output: influx_time("time", '@ 2 secs'::interval, influx_fill_option('linear'::influx_fill_enum)), tag1, value1
+               InfluxDB query: SELECT "tag1", "value1" FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15'))
+(9 rows)
+
+SELECT sum("value1"), influx_time(time,interval '2s',influx_fill_option('linear')), tag1 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_option('linear')), tag1;
+ERROR:  stub influx_fill_option(influx_fill_enum) is called
+CONTEXT:  PL/pgSQL function influx_fill_option(influx_fill_enum) line 3 at RAISE
+--with tag1,tag2
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100)), tag1, tag2 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100)), tag1, tag2;
+                                                                      QUERY PLAN                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=6.04..8.13 rows=4 width=80)
+   Output: sum(value1), (influx_time("time", '@ 2 secs'::interval, influx_fill_numeric(100))), tag1, tag2
+   Group Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_numeric(100))), tx.tag1, tx.tag2
+   ->  Sort  (cost=6.04..6.05 rows=4 width=80)
+         Output: (influx_time("time", '@ 2 secs'::interval, influx_fill_numeric(100))), tag1, tag2, value1
+         Sort Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_numeric(100))), tx.tag1, tx.tag2
+         ->  Foreign Scan on public.tx  (cost=10.00..6.00 rows=4 width=80)
+               Output: influx_time("time", '@ 2 secs'::interval, influx_fill_numeric(100)), tag1, tag2, value1
+               InfluxDB query: SELECT "tag1", "tag2", "value1" FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15'))
+(9 rows)
+
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100)), tag1, tag2 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100)), tag1, tag2;
+ERROR:  stub influx_fill_numeric(int) is called
+CONTEXT:  PL/pgSQL function influx_fill_numeric(integer) line 3 at RAISE
+EXPLAIN (verbose)
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100.001)), tag1, tag2 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100.001)), tag1, tag2;
+                                                                      QUERY PLAN                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=6.04..8.13 rows=4 width=80)
+   Output: sum(value1), (influx_time("time", '@ 2 secs'::interval, influx_fill_numeric('100.001'::double precision))), tag1, tag2
+   Group Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_numeric('100.001'::double precision))), tx.tag1, tx.tag2
+   ->  Sort  (cost=6.04..6.05 rows=4 width=80)
+         Output: (influx_time("time", '@ 2 secs'::interval, influx_fill_numeric('100.001'::double precision))), tag1, tag2, value1
+         Sort Key: (influx_time(tx."time", '@ 2 secs'::interval, influx_fill_numeric('100.001'::double precision))), tx.tag1, tx.tag2
+         ->  Foreign Scan on public.tx  (cost=10.00..6.00 rows=4 width=80)
+               Output: influx_time("time", '@ 2 secs'::interval, influx_fill_numeric('100.001'::double precision)), tag1, tag2, value1
+               InfluxDB query: SELECT "tag1", "tag2", "value1" FROM "tx" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:15'))
+(9 rows)
+
+SELECT sum("value1"), influx_time(time,interval '2s', influx_fill_numeric(100.001)), tag1, tag2 FROM "tx"
+WHERE time >= '1970-01-01 00:00:00+00' and time <= '1970-01-01 0:00:15+00'
+GROUP BY influx_time(time,interval '2s', influx_fill_numeric(100.001)), tag1, tag2;
+ERROR:  stub influx_fill_numeric(float8) is called
+CONTEXT:  PL/pgSQL function influx_fill_numeric(double precision) line 3 at RAISE
+-- unsupport syntax
+EXPLAIN (verbose)
+SELECT influx_fill_numeric(100) FROM "tx";
+ERROR:  influxdb_fdw: syntax error influx_fill_numeric() or influx_fill_option() must be embedded inside influx_time() function
+
+SELECT influx_fill_numeric(100) FROM "tx";
+ERROR:  influxdb_fdw: syntax error influx_fill_numeric() or influx_fill_option() must be embedded inside influx_time() function
+
+SELECT * FROM "tx" WHERE influx_fill_numeric(100) > 0;
+ERROR:  influxdb_fdw: syntax error influx_fill_numeric() or influx_fill_option() must be embedded inside influx_time() function
+
+EXPLAIN (verbose)
+SELECT influx_fill_option('linear') FROM "tx";
+ERROR:  influxdb_fdw: syntax error influx_fill_numeric() or influx_fill_option() must be embedded inside influx_time() function
+
+SELECT influx_fill_option('linear') FROM "tx";
+ERROR:  influxdb_fdw: syntax error influx_fill_numeric() or influx_fill_option() must be embedded inside influx_time() function
+
+SELECT * FROM "tx" WHERE influx_fill_option('linear') > 0;
+ERROR:  influxdb_fdw: syntax error influx_fill_numeric() or influx_fill_option() must be embedded inside influx_time() function
+
 -- InfluxDB does not return error for the following query
 --SELECT sum(value1) FROM t4 GROUP BY value1;
 -- not allowed
@@ -159,6 +581,7 @@ SELECT sum(value1) FROM t4 GROUP BY time;
 DROP FOREIGN TABLE t3;
 --Testcase 18:
 DROP FOREIGN TABLE t4;
+DROP FOREIGN TABLE tx;
 --Testcase 19:
 DROP FOREIGN TABLE cpu;
 --Testcase 20:

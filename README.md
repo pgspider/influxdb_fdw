@@ -61,7 +61,25 @@ SELECT * FROM t1;
 </pre>
 
 ## Features
+### GROUP BY time intervals and fill()
 
+Support GROUP BY times() fill() syntax for influxdb.
+The fill() is supported by two stub function:
+- influx_fill_numeric(): use with numeric parameter for example: 100, 100.1111
+- influx_fill_option(): use with specified option such as: none, null, linear, previous.
+
+The influx_fill_numeric() and influx_fill_option() is embeded as last parameter of time() function. The table below illustrates the usage:
+
+| PostgreSQL syntax | Influxdb Syntax |
+|-------------------|-----------------|
+|influx_time(time, interval '2h')|time(2h)|
+|influx_time(time, interval '2h', interval '1h')|time(2h, 1h)|
+|influx_time(time, interval '2h', influx_fill_numeric(100))|time(2h) fill(100)|
+|influx_time(time, interval '2h', influx_fill_option('linear'))|time(2h) fill(linear)|
+|influx_time(time, interval '2h', interval '1h', influx_fill_numeric(100))|time(2h, 1h) fill(100)|
+|influx_time(time, interval '2h', interval '1h', influx_fill_option('linear'))|time(2h,1h) fill(linear)|
+
+### Others
 - InfluxDB FDW supports pushed down some aggregate functions: count, stddev, sum, max, min.
 - InfluxDB FDW supports INSERT, DELETE statements.
   - `time` and `time_text` column can used for INSERT, DELETE statements.
