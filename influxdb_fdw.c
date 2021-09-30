@@ -934,7 +934,6 @@ static void
 influxdbBeginForeignScan(ForeignScanState *node, int eflags)
 {
 	InfluxDBFdwExecState *festate = NULL;
-	EState		   *estate = node->ss.ps.state;
 	ForeignScan    *fsplan = (ForeignScan *) node->ss.ps.plan;
 	int				numParams;
 
@@ -955,10 +954,6 @@ influxdbBeginForeignScan(ForeignScanState *node, int eflags)
 	festate->is_tlist_func_pushdown = intVal(list_nth(fsplan->fdw_private, 4)) ? true : false;
 
 	festate->cursor_exists = false;
-
-	festate->temp_cxt = AllocSetContextCreate(estate->es_query_cxt,
-											  "influxdb_fdw temporary data",
-											  ALLOCSET_SMALL_SIZES);
 
 	/* Prepare for output conversion of parameters used in remote query. */
 	numParams = list_length(fsplan->fdw_exprs);
@@ -2044,11 +2039,6 @@ influxdbBeginDirectModify(ForeignScanState * node, int eflags)
 												 FdwDirectModifyPrivateRetrievedAttrs);
 	dmstate->set_processed = intVal(list_nth(fsplan->fdw_private,
 											 FdwDirectModifyPrivateSetProcessed));
-
-	/* Create context for per-tuple temp workspace. */
-	dmstate->temp_cxt = AllocSetContextCreate(estate->es_query_cxt,
-											  "influxdb_fdw temporary data",
-											  ALLOCSET_SMALL_SIZES);
 
 	/*
 	 * Prepare for processing of parameters used in remote query, if any.

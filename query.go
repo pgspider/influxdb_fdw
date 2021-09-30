@@ -372,6 +372,7 @@ func InfluxDBQuery(cquery *C.char, addr *C.char, port C.int,
 
 	fieldLen := len(rows[0].Columns)
 	tagLen := len(rows[0].Tags)
+
 	result := C.InfluxDBResult{
 		ncol:    C.int(fieldLen + tagLen),
 		nrow:    C.int(nrow),
@@ -380,7 +381,9 @@ func InfluxDBQuery(cquery *C.char, addr *C.char, port C.int,
 		ntag:    C.int(tagLen),
 		tagkeys: allocCStringArray(tagLen),
 	}
+
 	ctagkeys := cStringArrayToSlice(result.tagkeys, tagLen)
+
 	tagkeys := make([]string, tagLen)
 	i := 0
 	for key := range rows[0].Tags {
@@ -429,6 +432,10 @@ func InfluxDBQuery(cquery *C.char, addr *C.char, port C.int,
 			}
 		}
 	}
+
+	//Clear tagkeys
+	tagkeys = nil
+
 	return result, nil
 }
 
@@ -438,11 +445,23 @@ func InfluxDBFreeResult(result *C.struct_InfluxDBResult) {
 	if result == nil {
 		return
 	}
+
 	nrow := int(result.nrow)
 	ncol := int(result.ncol)
+	ntag := int(result.ntag)
+
 	if nrow == 0 {
 		return
 	}
+
+	//Free column
+	resultCols := cStringArrayToSlice(result.columns, ncol - ntag)
+	for _, col := range resultCols {
+		C.free(unsafe.Pointer(col))
+	}
+	C.free(unsafe.Pointer(result.columns))
+
+	//Free tuple
 	resultRows := (*[1 << 30]C.struct_InfluxDBRow)(unsafe.Pointer(result.rows))[:nrow:nrow]
 	for _, r := range resultRows {
 		row := cStringArrayToSlice(r.tuple, ncol)
@@ -454,6 +473,13 @@ func InfluxDBFreeResult(result *C.struct_InfluxDBResult) {
 		C.free(unsafe.Pointer(r.tuple))
 	}
 	C.free(unsafe.Pointer(result.rows))
+
+	//Free tagkey
+	resultTagKeys := cStringArrayToSlice(result.tagkeys, ntag)
+	for _, tagkey := range resultTagKeys {
+		C.free(unsafe.Pointer(tagkey))
+	}
+	C.free(unsafe.Pointer(result.tagkeys))
 }
 
 func makeColumnValue(ccolumns *C.struct_InfluxDBColumnInfo, ctypes *C.InfluxDBType,
