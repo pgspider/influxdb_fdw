@@ -1,7 +1,7 @@
 # InfluxDB Foreign Data Wrapper for PostgreSQL
 This PostgreSQL extension is a Foreign Data Wrapper (FDW) for InfluxDB.
 
-The current version can work with PostgreSQL 9.6, 10, 11, 12 and 13.
+The current version can work with PostgreSQL 10, 11, 12, 13 and 14.
 
 Go version should be 1.10.4 or later.
 ## Installation
@@ -85,6 +85,7 @@ The influx_fill_numeric() and influx_fill_option() is embeded as last parameter 
   - `time` and `time_text` column can used for INSERT, DELETE statements.
   - `time` column can express timestamp with precision down to microseconds.
   - `time_text` column can express timestamp with precision down to nanoseconds.
+- InfluxDB FDW supports bulk INSERT by using batch_size option from PostgreSQL version 14 or later.
 - WHERE clauses including timestamp, interval and `now()` functions are pushed down.
 - LIMIT...OFFSET clauses are pushed down when there is LIMIT clause only or both LIMIT and OFFSET.<br>
 
@@ -105,7 +106,7 @@ When a query to foreign tables fails, you can find why it fails by seeing a quer
 Opening issues and pull requests on GitHub are welcome.
 
 ## License
-Copyright (c) 2018 - 2020, TOSHIBA Corporation
+Copyright (c) 2018 - 2021, TOSHIBA Corporation
 
 Copyright (c) 2011 - 2016, EnterpriseDB Corporation
 

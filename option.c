@@ -2,7 +2,7 @@
  *
  * InfluxDB Foreign Data Wrapper for PostgreSQL
  *
- * Portions Copyright (c) 2020, TOSHIBA CORPORATION
+ * Portions Copyright (c) 2021, TOSHIBA CORPORATION
  *
  * IDENTIFICATION
  *        option.c
@@ -55,11 +55,9 @@ struct InfluxDBFdwOption
 
 /*
  * Valid options for influxdb_fdw.
- *
  */
 static struct InfluxDBFdwOption valid_options[] =
 {
-
 	{"host", ForeignServerRelationId},
 	{"port", ForeignServerRelationId},
 	{"dbname", ForeignServerRelationId},
@@ -69,6 +67,11 @@ static struct InfluxDBFdwOption valid_options[] =
 	{"table", ForeignTableRelationId},
 	{"column_name", AttributeRelationId},
 	{"tags", ForeignTableRelationId},
+
+	/* batch_size is available on both server and table */
+	{"batch_size", ForeignServerRelationId},
+	{"batch_size", ForeignTableRelationId},
+
 	/* Sentinel */
 	{NULL, InvalidOid}
 };
@@ -78,8 +81,7 @@ static List *influxdbExtractTagsList(char *in_string);
 extern Datum influxdb_fdw_validator(PG_FUNCTION_ARGS);
 
 PG_FUNCTION_INFO_V1(influxdb_fdw_validator);
-bool
-			influxdb_is_valid_option(const char *option, Oid context);
+bool		influxdb_is_valid_option(const char *option, Oid context);
 
 /*
  * Validate the generic options given to a FOREIGN DATA WRAPPER, SERVER,
@@ -124,6 +126,21 @@ influxdb_fdw_validator(PG_FUNCTION_ARGS)
 					 errmsg("invalid option \"%s\"", def->defname),
 					 errhint("Valid options in this context are: %s", buf.len ? buf.data : "<none>")
 					 ));
+		}
+
+		/*
+		 * Validate option value, when we can do so without any context.
+		 */
+		if (strcmp(def->defname, "batch_size") == 0)
+		{
+			int			batch_size;
+
+			batch_size = strtol(defGetString(def), NULL, 10);
+			if (batch_size <= 0)
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("%s requires a non-negative integer value",
+								def->defname)));
 		}
 	}
 	PG_RETURN_VOID();
@@ -185,7 +202,6 @@ influxdb_get_options(Oid foreignoid)
 	options = list_concat(options, f_server->options);
 	options = list_concat(options, f_mapping->options);
 
-
 	/* Loop through the options, and get the server/port */
 	foreach(lc, options)
 	{
@@ -193,6 +209,7 @@ influxdb_get_options(Oid foreignoid)
 
 		if (strcmp(def->defname, "table") == 0)
 			opt->svr_table = defGetString(def);
+
 		if (strcmp(def->defname, "host") == 0)
 			opt->svr_address = defGetString(def);
 
@@ -212,9 +229,7 @@ influxdb_get_options(Oid foreignoid)
 			opt->svr_table = defGetString(def);
 
 		if (strcmp(def->defname, "tags") == 0)
-		{
 			opt->tags_list = influxdbExtractTagsList(defGetString(def));
-		}
 	}
 
 	if (!opt->svr_table && f_table)
