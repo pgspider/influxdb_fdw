@@ -1,6 +1,7 @@
 *.o
 *.so
 *.BAK
+*.a
 _cgo_*
 _obj*
 query.h

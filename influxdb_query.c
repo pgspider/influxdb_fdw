@@ -2,10 +2,10 @@
  *
  * InfluxDB Foreign Data Wrapper for PostgreSQL
  *
- * Portions Copyright (c) 2020, TOSHIBA CORPORATION
+ * Portions Copyright (c) 2021, TOSHIBA CORPORATION
  *
  * IDENTIFICATION
- * 		influxdbquery.c
+ * 		influxdb_query.c
  *
  *-------------------------------------------------------------------------
  */
@@ -103,7 +103,7 @@ influxdb_convert_record_to_datum(Oid pgtyp, int pgtypmod, char **row, int attnum
 	int			i;
 	StringInfo	record = makeStringInfo();
 	bool		first = true;
-	char		*foreignColName = NULL;
+	char	   *foreignColName = NULL;
 	int			nmatch = 0;
 
 	/* get the type's output function */
@@ -119,16 +119,17 @@ influxdb_convert_record_to_datum(Oid pgtyp, int pgtypmod, char **row, int attnum
 	appendStringInfo(record, "(%s,", row[0]);
 
 	/* Append tags column as NULL */
-	for(i = 0; i < ntags; i++)
+	for (i = 0; i < ntags; i++)
 		appendStringInfo(record, ",");
 
 	/* Append fields column */
 	i = 0;
-	do {
+	do
+	{
 		foreignColName = get_attname(relid, ++i
 #if (PG_VERSION_NUM >= 110000)
-							  ,
-							  true
+									 ,
+									 true
 #endif
 			);
 
@@ -136,30 +137,32 @@ influxdb_convert_record_to_datum(Oid pgtyp, int pgtypmod, char **row, int attnum
 			!INFLUXDB_IS_TIME_COLUMN(foreignColName) &&
 			!influxdb_is_tag_key(foreignColName, relid))
 		{
-			bool match = false;
-			int j;
+			bool		match = false;
+			int			j;
 
 			for (j = attnum; j < ncol; j++)
 			{
-				/* 
-				 * InfluxDB returns column name of result in format: functionname_columnname (Example: last_value1).
-				 * We need to concatenate string to compare with the column returned from InfluxDB.
+				/*
+				 * InfluxDB returns column name of result in format:
+				 * functionname_columnname (Example: last_value1). We need to
+				 * concatenate string to compare with the column returned from
+				 * InfluxDB.
 				 */
-				char *influxdbColName = column[j];
-				char *influxdbFuncName = influxdb_replace_function(opername);
-				char *tmpName = psprintf("%s_%s", influxdbFuncName, foreignColName);
+				char	   *influxdbColName = column[j];
+				char	   *influxdbFuncName = influxdb_replace_function(opername);
+				char	   *tmpName = psprintf("%s_%s", influxdbFuncName, foreignColName);
 
 				if (strcmp(tmpName, influxdbColName) == 0)
 				{
 					match = true;
 					nmatch++;
-					if(first)
+					if (first)
 					{
-						appendStringInfo(record, "%s", row[j] != NULL?row[j]:"");
+						appendStringInfo(record, "%s", row[j] != NULL ? row[j] : "");
 						first = false;
 					}
 					else
-						appendStringInfo(record, ",%s", row[j] != NULL?row[j]:"");
+						appendStringInfo(record, ",%s", row[j] != NULL ? row[j] : "");
 					break;
 				}
 			}
