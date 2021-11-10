@@ -2,7 +2,7 @@
  *
  * InfluxDB Foreign Data Wrapper for PostgreSQL
  *
- * Portions Copyright (c) 2020, TOSHIBA CORPORATION
+ * Portions Copyright (c) 2021, TOSHIBA CORPORATION
  *
  * IDENTIFICATION
  *        influxdb_fdw.h
@@ -54,6 +54,7 @@
 #if (PG_VERSION_NUM < 120000)
 #define table_close(rel, lock)	heap_close(rel, lock)
 #define table_open(rel, lock)	heap_open(rel, lock)
+#define exec_rt_fetch(rtindex, estate)	rt_fetch(rtindex, estate->es_range_table)
 #endif
 
 /*
@@ -64,6 +65,8 @@
 #define INFLUXDB_TARGETS_MARK_AGGREF			(1u << 1)
 #define INFLUXDB_TARGETS_MIXING_AGGREF_UNSAFE	(INFLUXDB_TARGETS_MARK_COLUMN | INFLUXDB_TARGETS_MARK_AGGREF)
 #define INFLUXDB_TARGETS_MIXING_AGGREF_SAFE		(0u)
+
+#define CODE_VERSION 10100
 
 #if (PG_VERSION_NUM < 100000)
 /*
@@ -124,6 +127,7 @@ typedef struct InfluxDBFdwExecState
 
 	influxdb_opt *influxdbFdwOptions;	/* InfluxDB FDW options */
 
+	int			batch_size;		/* value of FDW option "batch_size" */
 	List	   *attr_list;		/* query attribute list */
 	List	   *column_list;	/* Column list of InfluxDB Column structures */
 
@@ -134,9 +138,14 @@ typedef struct InfluxDBFdwExecState
 	bool		for_update;		/* true if this scan is update target */
 	bool		is_agg;			/* scan is aggregate or not */
 	List	   *tlist;			/* target list */
+
 	/* working memory context */
 	MemoryContext temp_cxt;		/* context for per-tuple temporary data */
 	AttrNumber *junk_idx;
+
+	/* for update row movement if subplan result rel */
+	struct InfluxDBFdwExecState *aux_fmstate;	/* foreign-insert state, if
+												 * created */
 
 	/* Function pushdown support in target list */
 	bool		is_tlist_func_pushdown;
@@ -188,9 +197,9 @@ typedef struct InfluxDBFdwRelationInfo
 	List	   *shippable_extensions;	/* OIDs of whitelisted extensions */
 
 	/* Cached catalog information. */
-	ForeignTable  *table;
+	ForeignTable *table;
 	ForeignServer *server;
-	UserMapping   *user;			/* only set in use_remote_estimate mode */
+	UserMapping *user;			/* only set in use_remote_estimate mode */
 
 	int			fetch_size;		/* fetch size for this remote table */
 
@@ -255,12 +264,12 @@ extern void influxdb_deparse_select_stmt_for_rel(StringInfo buf, PlannerInfo *ro
 extern void influxdb_deparse_insert(StringInfo buf, PlannerInfo *root, Index rtindex, Relation rel, List *targetAttrs);
 extern void influxdb_deparse_update(StringInfo buf, PlannerInfo *root, Index rtindex, Relation rel, List *targetAttrs, List *attname);
 extern void influxdb_deparse_delete(StringInfo buf, PlannerInfo *root, Index rtindex, Relation rel, List *attname);
-extern bool influxdb_deparse_direct_delete_sql(StringInfo buf, PlannerInfo * root,
+extern bool influxdb_deparse_direct_delete_sql(StringInfo buf, PlannerInfo *root,
 											   Index rtindex, Relation rel,
-											   RelOptInfo * foreignrel,
-											   List * remote_conds,
-											   List * *params_list,
-											   List * *retrieved_attrs);
+											   RelOptInfo *foreignrel,
+											   List *remote_conds,
+											   List **params_list,
+											   List **retrieved_attrs);
 extern void influxdb_append_where_clause(StringInfo buf, PlannerInfo *root, RelOptInfo *baserel, List *exprs,
 										 bool is_first, List **params);
 extern void influxdb_deparse_analyze(StringInfo buf, char *dbname, char *relname);
@@ -275,16 +284,16 @@ extern Datum influxdb_convert_record_to_datum(Oid pgtyp, int pgtypmod, char **ro
 
 extern void influxdb_bind_sql_var(Oid type, int attnum, Datum value, bool *isnull,
 								  InfluxDBType * param_influxdb_types, InfluxDBValue * param_influxdb_values);
-extern char *influxdb_get_function_name(Oid funcid);
+extern char *influxdb_get_data_type_name(Oid data_type_id);
 extern bool influxdb_is_mixing_aggref(List *tlist);
 extern bool influxdb_is_tag_key(const char *colname, Oid reloid);
 extern char *influxdb_get_column_name(Oid relid, int attnum);
 extern char *influxdb_get_table_name(Relation rel);
-extern int influxdb_get_number_field_key_match(Oid relid, char *regex);
-extern int influxdb_get_number_tag_key(Oid relid);
+extern int	influxdb_get_number_field_key_match(Oid relid, char *regex);
+extern int	influxdb_get_number_tag_key(Oid relid);
 extern bool influxdb_is_builtin(Oid oid);
-extern bool influxdb_is_regex_argument(Const* node, char **extval);
-extern bool influxdb_need_star(char *in);
+extern bool influxdb_is_regex_argument(Const *node, char **extval);
+extern bool influxdb_is_star_func(Oid funcid, char *in);
 extern List *influxdb_pull_func_clause(Node *node);
 extern bool influxdb_is_grouping_target(TargetEntry *tle, Query *query);
 #endif							/* InfluxDB_FDW_H */

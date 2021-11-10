@@ -1,8 +1,7 @@
 # InfluxDB Foreign Data Wrapper for PostgreSQL
 This PostgreSQL extension is a Foreign Data Wrapper (FDW) for InfluxDB.
 
-The current version can work with PostgreSQL 9.6, 10, 11, 12 and 13.
-Currently this FDW supports InfluxDB 1.x series only.
+The current version can work with PostgreSQL 10, 11, 12, 13 and 14.
 
 Go version should be 1.10.4 or later.
 ## Installation
@@ -62,12 +61,31 @@ SELECT * FROM t1;
 </pre>
 
 ## Features
+### GROUP BY time intervals and fill()
 
+Support GROUP BY times() fill() syntax for influxdb.
+The fill() is supported by two stub function:
+- influx_fill_numeric(): use with numeric parameter for example: 100, 100.1111
+- influx_fill_option(): use with specified option such as: none, null, linear, previous.
+
+The influx_fill_numeric() and influx_fill_option() is embeded as last parameter of time() function. The table below illustrates the usage:
+
+| PostgreSQL syntax | Influxdb Syntax |
+|-------------------|-----------------|
+|influx_time(time, interval '2h')|time(2h)|
+|influx_time(time, interval '2h', interval '1h')|time(2h, 1h)|
+|influx_time(time, interval '2h', influx_fill_numeric(100))|time(2h) fill(100)|
+|influx_time(time, interval '2h', influx_fill_option('linear'))|time(2h) fill(linear)|
+|influx_time(time, interval '2h', interval '1h', influx_fill_numeric(100))|time(2h, 1h) fill(100)|
+|influx_time(time, interval '2h', interval '1h', influx_fill_option('linear'))|time(2h,1h) fill(linear)|
+
+### Others
 - InfluxDB FDW supports pushed down some aggregate functions: count, stddev, sum, max, min.
 - InfluxDB FDW supports INSERT, DELETE statements.
   - `time` and `time_text` column can used for INSERT, DELETE statements.
   - `time` column can express timestamp with precision down to microseconds.
   - `time_text` column can express timestamp with precision down to nanoseconds.
+- InfluxDB FDW supports bulk INSERT by using batch_size option from PostgreSQL version 14 or later.
 - WHERE clauses including timestamp, interval and `now()` functions are pushed down.
 - LIMIT...OFFSET clauses are pushed down when there is LIMIT clause only or both LIMIT and OFFSET.<br>
 

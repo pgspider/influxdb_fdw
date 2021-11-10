@@ -2,10 +2,10 @@
  *
  * InfluxDB Foreign Data Wrapper for PostgreSQL
  *
- * Portions Copyright (c) 2020, TOSHIBA CORPORATION
+ * Portions Copyright (c) 2021, TOSHIBA CORPORATION
  *
  * IDENTIFICATION
- *        influxdb_fdw--1.0.sql
+ *        influxdb_fdw--1.2.sql
  *
  *-------------------------------------------------------------------------
  */
@@ -19,6 +19,10 @@ CREATE FUNCTION influxdb_fdw_validator(text[], oid)
 RETURNS void
 AS 'MODULE_PATHNAME'
 LANGUAGE C STRICT;
+
+CREATE OR REPLACE FUNCTION influxdb_fdw_version()
+  RETURNS pg_catalog.int4 STRICT
+  AS 'MODULE_PATHNAME' LANGUAGE C;
 
 CREATE FOREIGN DATA WRAPPER influxdb_fdw
   HANDLER influxdb_fdw_handler

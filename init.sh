@@ -3,7 +3,6 @@ influx -import -path=init/selectfunc.txt -precision=s
 
 influx -import -path=init/others.txt -precision=ns
 influx -import -path=init/join.txt -precision=ns
-influx -import -path=init/select_having.txt -precision=ns
 influx -import -path=init/select.txt -precision=ns
 influx -import -path=init/onek.txt -precision=ns
 influx -import -path=init/tenk.txt -precision=ns
