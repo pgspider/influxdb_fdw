@@ -59,6 +59,7 @@ import "C"
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"time"
 	"unsafe"
@@ -372,6 +373,7 @@ func InfluxDBQuery(cquery *C.char, addr *C.char, port C.int,
 
 	fieldLen := len(rows[0].Columns)
 	tagLen := len(rows[0].Tags)
+
 	result := C.InfluxDBResult{
 		ncol:    C.int(fieldLen + tagLen),
 		nrow:    C.int(nrow),
@@ -380,7 +382,9 @@ func InfluxDBQuery(cquery *C.char, addr *C.char, port C.int,
 		ntag:    C.int(tagLen),
 		tagkeys: allocCStringArray(tagLen),
 	}
+
 	ctagkeys := cStringArrayToSlice(result.tagkeys, tagLen)
+
 	tagkeys := make([]string, tagLen)
 	i := 0
 	for key := range rows[0].Tags {
@@ -394,7 +398,7 @@ func InfluxDBQuery(cquery *C.char, addr *C.char, port C.int,
 	ntuple := cStringArrayToSlice(result.columns, fieldLen)
 	for _, row := range rows[0].Columns {
 		ntuple[i] = C.CString(row)
-		i ++
+		i++
 	}
 
 	resultRows := (*[1 << 30]C.struct_InfluxDBRow)(unsafe.Pointer(result.rows))[:nrow:nrow]
@@ -429,6 +433,10 @@ func InfluxDBQuery(cquery *C.char, addr *C.char, port C.int,
 			}
 		}
 	}
+
+	//Clear tagkeys
+	tagkeys = nil
+
 	return result, nil
 }
 
@@ -438,11 +446,23 @@ func InfluxDBFreeResult(result *C.struct_InfluxDBResult) {
 	if result == nil {
 		return
 	}
+
 	nrow := int(result.nrow)
 	ncol := int(result.ncol)
+	ntag := int(result.ntag)
+
 	if nrow == 0 {
 		return
 	}
+
+	//Free column
+	resultCols := cStringArrayToSlice(result.columns, ncol - ntag)
+	for _, col := range resultCols {
+		C.free(unsafe.Pointer(col))
+	}
+	C.free(unsafe.Pointer(result.columns))
+
+	//Free tuple
 	resultRows := (*[1 << 30]C.struct_InfluxDBRow)(unsafe.Pointer(result.rows))[:nrow:nrow]
 	for _, r := range resultRows {
 		row := cStringArrayToSlice(r.tuple, ncol)
@@ -454,13 +474,25 @@ func InfluxDBFreeResult(result *C.struct_InfluxDBResult) {
 		C.free(unsafe.Pointer(r.tuple))
 	}
 	C.free(unsafe.Pointer(result.rows))
+
+	//Free tagkey
+	resultTagKeys := cStringArrayToSlice(result.tagkeys, ntag)
+	for _, tagkey := range resultTagKeys {
+		C.free(unsafe.Pointer(tagkey))
+	}
+	C.free(unsafe.Pointer(result.tagkeys))
 }
 
-func makeColumnValue(ccolumns *C.struct_InfluxDBColumnInfo, ctypes *C.InfluxDBType,
-	cvalues *C.InfluxDBValue, cparamNum C.int) (map[string]string, map[string]interface{}, time.Time, error) {
+func makeBatchPoint(db *C.char, tablename *C.char, ccolumns *C.struct_InfluxDBColumnInfo, ctypes *C.InfluxDBType,
+	cvalues *C.InfluxDBValue, cparamNum C.int, cnumSlots C.int) (client.BatchPoints, error) {
+	//Create a new point batch
+	bp, _ := client.NewBatchPoints(client.BatchPointsConfig{
+		Database: C.GoString(db),
+	})
 
 	//Initialize tags, fields and time value
-	paramNum := int(cparamNum)
+	paramNum := int(cparamNum) * int(cnumSlots)
+	endOfPoint := float64(cparamNum - 1)
 	fields := make(map[string]interface{})
 	tags := make(map[string]string)
 	timecol, _ := time.Parse(timestamptzFormat, time.Now().Format(timestamptzFormat))
@@ -495,7 +527,7 @@ func makeColumnValue(ccolumns *C.struct_InfluxDBColumnInfo, ctypes *C.InfluxDBTy
 					times, err := parseTime(timeString)
 					if err != nil {
 						//Parse time value unsuccessful
-						return tags, fields, timecol, err
+						return bp, err
 					}
 					timecol = times
 					break
@@ -513,7 +545,7 @@ func makeColumnValue(ccolumns *C.struct_InfluxDBColumnInfo, ctypes *C.InfluxDBTy
 				times, err := parseTime(timeString)
 				if err != nil {
 					//Parse time value unsuccessful
-					return tags, fields, timecol, err
+					return bp, err
 				}
 				timecol = times
 				break
@@ -521,18 +553,35 @@ func makeColumnValue(ccolumns *C.struct_InfluxDBColumnInfo, ctypes *C.InfluxDBTy
 				//We do not need append null value when execute INSERT
 				break
 			default:
-				return tags, fields, timecol, fmt.Errorf("unexpected type: %v", types[i])
+				return bp, fmt.Errorf("unexpected type: %v", types[i])
+			}
+
+			//Make Point and add Point into BatchPoint
+			if math.Mod(float64(i), float64(cparamNum)) == endOfPoint {
+				//Create a point and add to batch
+				pt, err := client.NewPoint(C.GoString(tablename), tags, fields, timecol)
+				if err != nil {
+					return bp, err
+				}
+
+				bp.AddPoint(pt)
+
+				//Reset value of record
+				fields = make(map[string]interface{})
+				tags = make(map[string]string)
+				timecol, _ = time.Parse(timestamptzFormat, time.Now().Format(timestamptzFormat))
 			}
 		}
 	}
-	return tags, fields, timecol, nil
+
+	return bp, nil
 }
 
 //InfluxDBInsert returns nil if success
 //export InfluxDBInsert
-func InfluxDBInsert(addr *C.char, port C.int, user *C.char, pass *C.char,
-	db *C.char, ccolumns *C.struct_InfluxDBColumnInfo, tablename *C.char,
-	ctypes *C.InfluxDBType, cvalues *C.InfluxDBValue, cparamNum C.int) *C.char {
+func InfluxDBInsert(addr *C.char, port C.int, user *C.char, pass *C.char, db *C.char,
+	tablename *C.char, ccolumns *C.struct_InfluxDBColumnInfo, ctypes *C.InfluxDBType,
+	cvalues *C.InfluxDBValue, cparamNum C.int, cnumSlots C.int) *C.char {
 
 	//Create a new HTTPClient
 	cl, err := client.NewHTTPClient(client.HTTPConfig{
@@ -545,24 +594,11 @@ func InfluxDBInsert(addr *C.char, port C.int, user *C.char, pass *C.char,
 	}
 	defer cl.Close()
 
-	//Create a new point batch
-	bp, _ := client.NewBatchPoints(client.BatchPointsConfig{
-		Database: C.GoString(db),
-	})
-
-	//Create tags, fields and time data
-	tags, fields, timecol, err := makeColumnValue(ccolumns, ctypes, cvalues, cparamNum)
+	//Make the batch point
+	bp, err := makeBatchPoint(db, tablename, ccolumns, ctypes, cvalues, cparamNum, cnumSlots)
 	if err != nil {
 		return C.CString(err.Error())
 	}
-
-	//Create a point and add to batch
-	pt, err := client.NewPoint(C.GoString(tablename), tags, fields, timecol)
-	if err != nil {
-		return C.CString(err.Error())
-	}
-
-	bp.AddPoint(pt)
 
 	//Write the batch
 	err = cl.Write(bp)

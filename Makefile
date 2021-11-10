@@ -2,7 +2,7 @@
 #
 # InfluxDB Foreign Data Wrapper for PostgreSQL
 #
-# Portions Copyright (c) 2020, TOSHIBA CORPORATION
+# Portions Copyright (c) 2021, TOSHIBA CORPORATION
 #
 # IDENTIFICATION
 # 		Makefile
@@ -13,7 +13,7 @@ MODULE_big = influxdb_fdw
 OBJS = option.o deparse.o influxdb_query.o influxdb_fdw.o query.a
 
 EXTENSION = influxdb_fdw
-DATA = influxdb_fdw--1.0.sql influxdb_fdw--1.1.sql influxdb_fdw--1.2.sql
+DATA = influxdb_fdw--1.0.sql influxdb_fdw--1.1.sql influxdb_fdw--1.1--1.2.sql influxdb_fdw--1.2.sql influxdb_fdw--1.3.sql
 
 REGRESS = aggregate influxdb_fdw selectfunc extra/join extra/limit extra/aggregates extra/insert extra/prepare extra/select_having extra/select extra/influxdb_fdw_post
 
@@ -21,7 +21,6 @@ UNAME = uname
 OS := $(shell $(UNAME))
 ifeq ($(OS), Darwin)
 DLSUFFIX = .dylib
-PG_LDFLAGS = -framework CoreFoundation -framework Security
 else
 DLSUFFIX = .so
 endif
@@ -44,8 +43,8 @@ MAJORVERSION := $(basename $(VERSION))
 endif
 endif
 
-ifeq (,$(findstring $(MAJORVERSION), 9.6 10 11 12 13))
-$(error PostgreSQL 9.6, 10, 11, 12 or 13 is required to compile this extension)
+ifeq (,$(findstring $(MAJORVERSION), 10 11 12 13 14))
+$(error PostgreSQL 10, 11, 12, 13 or 14 is required to compile this extension)
 endif
 
 ifdef REGRESS_PREFIX
