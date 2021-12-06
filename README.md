@@ -1,5 +1,5 @@
 # InfluxDB Foreign Data Wrapper for PostgreSQL
-This PostgreSQL extension is a Foreign Data Wrapper (FDW) for InfluxDB.
+This PostgreSQL extension is a Foreign Data Wrapper (FDW) for InfluxDB (version 1.x series).
 
 The current version can work with PostgreSQL 10, 11, 12, 13 and 14.
 
