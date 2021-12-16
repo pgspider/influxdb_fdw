@@ -2652,38 +2652,38 @@ SELECT top(value1, 1), top(value2, 1), top(value3, 1), top(value4, 1) FROM s3;
 -- select acos (builtin function, explain)
 --Testcase 608:
 EXPLAIN VERBOSE
-SELECT acos(value1), acos(value2), acos(value3), acos(value4) FROM s3;
+SELECT acos(value1), acos(value3) FROM s3;
 
 -- select acos (builtin function, result)
 --Testcase 609:
-SELECT acos(value1), acos(value2), acos(value3), acos(value4) FROM s3;
+SELECT acos(value1), acos(value3) FROM s3;
 
 -- select acos (builtin function, not pushdown constraints, explain)
 --Testcase 610:
 EXPLAIN VERBOSE
-SELECT acos(value1), acos(value2), acos(value3), acos(value4) FROM s3 WHERE to_hex(value2) = '64';
+SELECT acos(value1), acos(value3) FROM s3 WHERE to_hex(value2) = '64';
 
 -- select acos (builtin function, not pushdown constraints, result)
 --Testcase 611:
-SELECT acos(value1), acos(value2), acos(value3), acos(value4) FROM s3 WHERE to_hex(value2) = '64';
+SELECT acos(value1), acos(value3) FROM s3 WHERE to_hex(value2) = '64';
 
 -- select acos (builtin function, pushdown constraints, explain)
 --Testcase 612:
 EXPLAIN VERBOSE
-SELECT acos(value1), acos(value2), acos(value3), acos(value4) FROM s3 WHERE value2 != 200;
+SELECT acos(value1), acos(value3) FROM s3 WHERE value2 != 200;
 
 -- select acos (builtin function, pushdown constraints, result)
 --Testcase 613:
-SELECT acos(value1), acos(value2), acos(value3), acos(value4) FROM s3 WHERE value2 != 200;
+SELECT acos(value1), acos(value3) FROM s3 WHERE value2 != 200;
 
 -- select acos as nest function with agg (pushdown, explain)
 --Testcase 614:
 EXPLAIN VERBOSE
-SELECT sum(value3),acos(sum(value3)) FROM s3;
+SELECT sum(value3), acos(sum(value3)) FROM s3 WHERE value2 != 200;
 
 -- select acos as nest function with agg (pushdown, result)
 --Testcase 615:
-SELECT sum(value3),acos(sum(value3)) FROM s3;
+SELECT sum(value3), acos(sum(value3)) FROM s3 WHERE value2 != 200;
 
 -- select acos as nest with log2 (pushdown, explain)
 --Testcase 616:
@@ -2697,32 +2697,32 @@ SELECT acos(log2(value1)),acos(log2(1/value1)) FROM s3;
 -- select acos with non pushdown func and explicit constant (explain)
 --Testcase 618:
 EXPLAIN VERBOSE
-SELECT acos(value3), pi(), 4.1 FROM s3;
+SELECT acos(value3), pi(), 4.1 FROM s3 WHERE value2 != 200;
 
 -- select acos with non pushdown func and explicit constant (result)
 --Testcase 619:
-SELECT acos(value3), pi(), 4.1 FROM s3;
+SELECT acos(value3), pi(), 4.1 FROM s3 WHERE value2 != 200;
 
 -- select acos with order by (explain)
 --Testcase 620:
 EXPLAIN VERBOSE
-SELECT value1, acos(1-value1) FROM s3 ORDER BY acos(1-value1);
+SELECT value1, acos(1-value1) FROM s3 WHERE value2 != 200 ORDER BY acos(1-value1);
 
 -- select acos with order by (result)
 --Testcase 621:
-SELECT value1, acos(1-value1) FROM s3 ORDER BY acos(1-value1);
+SELECT value1, acos(1-value1) FROM s3 WHERE value2 != 200 ORDER BY acos(1-value1);
 
 -- select acos with order by index (result)
 --Testcase 622:
-SELECT value1, acos(1-value1) FROM s3 ORDER BY 2,1;
+SELECT value1, acos(1-value1) FROM s3 WHERE value2 != 200 ORDER BY 2,1;
 
 -- select acos with order by index (result)
 --Testcase 623:
-SELECT value1, acos(1-value1) FROM s3 ORDER BY 1,2;
+SELECT value1, acos(1-value1) FROM s3 WHERE value2 != 200 ORDER BY 1,2;
 
 -- select acos and as
 --Testcase 624:
-SELECT acos(value3) as acos1 FROM s3;
+SELECT acos(value3) as acos1 FROM s3 WHERE value2 != 200;
 
 -- select acos(*) (stub agg function, explain)
 --Testcase 625:
@@ -2754,38 +2754,38 @@ SELECT (acos_all()::s3).* from s3;
 -- select asin (builtin function, explain)
 --Testcase 631:
 EXPLAIN VERBOSE
-SELECT asin(value1), asin(value2), asin(value3), asin(value4) FROM s3;
+SELECT asin(value1), asin(value3) FROM s3;
 
 -- select asin (builtin function, result)
 --Testcase 632:
-SELECT asin(value1), asin(value2), asin(value3), asin(value4) FROM s3;
+SELECT asin(value1), asin(value3) FROM s3;
 
 -- select asin (builtin function, not pushdown constraints, explain)
 --Testcase 633:
 EXPLAIN VERBOSE
-SELECT asin(value1), asin(value2), asin(value3), asin(value4) FROM s3 WHERE to_hex(value2) = '64';
+SELECT asin(value1), asin(value3) FROM s3 WHERE to_hex(value2) = '64';
 
 -- select asin (builtin function, not pushdown constraints, result)
 --Testcase 634:
-SELECT asin(value1), asin(value2), asin(value3), asin(value4) FROM s3 WHERE to_hex(value2) = '64';
+SELECT asin(value1), asin(value3) FROM s3 WHERE to_hex(value2) = '64';
 
 -- select asin (builtin function, pushdown constraints, explain)
 --Testcase 635:
 EXPLAIN VERBOSE
-SELECT asin(value1), asin(value2), asin(value3), asin(value4) FROM s3 WHERE value2 != 200;
+SELECT asin(value1), asin(value3) FROM s3 WHERE value2 != 200;
 
 -- select asin (builtin function, pushdown constraints, result)
 --Testcase 636:
-SELECT asin(value1), asin(value2), asin(value3), asin(value4) FROM s3 WHERE value2 != 200;
+SELECT asin(value1), asin(value3) FROM s3 WHERE value2 != 200;
 
 -- select asin as nest function with agg (pushdown, explain)
 --Testcase 637:
 EXPLAIN VERBOSE
-SELECT sum(value3), asin(sum(value3)) FROM s3;
+SELECT sum(value3), asin(sum(value3)) FROM s3 WHERE value2 != 200;
 
 -- select asin as nest function with agg (pushdown, result)
 --Testcase 638:
-SELECT sum(value3), asin(sum(value3)) FROM s3;
+SELECT sum(value3), asin(sum(value3)) FROM s3 WHERE value2 != 200;
 
 -- select asin as nest with log2 (pushdown, explain)
 --Testcase 639:
@@ -2799,32 +2799,32 @@ SELECT asin(log2(value1)),asin(log2(1/value1)) FROM s3;
 -- select asin with non pushdown func and explicit constant (explain)
 --Testcase 641:
 EXPLAIN VERBOSE
-SELECT asin(value3), pi(), 4.1 FROM s3;
+SELECT asin(value3), pi(), 4.1 FROM s3 WHERE value2 != 200;
 
 -- select asin with non pushdown func and explicit constant (result)
 --Testcase 642:
-SELECT asin(value3), pi(), 4.1 FROM s3;
+SELECT asin(value3), pi(), 4.1 FROM s3 WHERE value2 != 200;
 
 -- select asin with order by (explain)
 --Testcase 643:
 EXPLAIN VERBOSE
-SELECT value1, asin(1-value1) FROM s3 ORDER BY asin(1-value1);
+SELECT value1, asin(1-value1) FROM s3 WHERE value2 != 200 ORDER BY asin(1-value1);
 
 -- select asin with order by (result)
 --Testcase 644:
-SELECT value1, asin(1-value1) FROM s3 ORDER BY asin(1-value1);
+SELECT value1, asin(1-value1) FROM s3 WHERE value2 != 200 ORDER BY asin(1-value1);
 
 -- select asin with order by index (result)
 --Testcase 645:
-SELECT value1, asin(1-value1) FROM s3 ORDER BY 2,1;
+SELECT value1, asin(1-value1) FROM s3 WHERE value2 != 200 ORDER BY 2,1;
 
 -- select asin with order by index (result)
 --Testcase 646:
-SELECT value1, asin(1-value1) FROM s3 ORDER BY 1,2;
+SELECT value1, asin(1-value1) FROM s3 WHERE value2 != 200 ORDER BY 1,2;
 
 -- select asin and as
 --Testcase 647:
-SELECT asin(value3) as asin1 FROM s3;
+SELECT asin(value3) as asin1 FROM s3 WHERE value2 != 200;
 
 -- select asin(*) (stub agg function, explain)
 --Testcase 648:
@@ -3436,29 +3436,29 @@ SELECT (floor_all()::s3).* from s3;
 -- select ln (builtin function, explain)
 --Testcase 785:
 EXPLAIN VERBOSE
-SELECT ln(value1), ln(value2), ln(value3), ln(value4) FROM s3;
+SELECT ln(value1), ln(value2) FROM s3;
 
 -- select ln (builtin function, result)
 --Testcase 786:
-SELECT ln(value1), ln(value2), ln(value3), ln(value4) FROM s3;
+SELECT ln(value1), ln(value2) FROM s3;
 
 -- select ln (builtin function, not pushdown constraints, explain)
 --Testcase 787:
 EXPLAIN VERBOSE
-SELECT ln(value1), ln(value2), ln(value3), ln(value4) FROM s3 WHERE to_hex(value2) != '64';
+SELECT ln(value1), ln(value2) FROM s3 WHERE to_hex(value2) != '64';
 
 -- select ln (builtin function, not pushdown constraints, result)
 --Testcase 788:
-SELECT ln(value1), ln(value2), ln(value3), ln(value4) FROM s3 WHERE to_hex(value2) != '64';
+SELECT ln(value1), ln(value2) FROM s3 WHERE to_hex(value2) != '64';
 
 -- select ln (builtin function, pushdown constraints, explain)
 --Testcase 789:
 EXPLAIN VERBOSE
-SELECT ln(value1), ln(value2), ln(value3), ln(value4) FROM s3 WHERE value2 != 200;
+SELECT ln(value1), ln(value2) FROM s3 WHERE value2 != 200;
 
 -- select ln (builtin function, pushdown constraints, result)
 --Testcase 790:
-SELECT ln(value1), ln(value2), ln(value3), ln(value4) FROM s3 WHERE value2 != 200;
+SELECT ln(value1), ln(value2) FROM s3 WHERE value2 != 200;
 
 -- select ln as nest function with agg (pushdown, explain)
 --Testcase 791:

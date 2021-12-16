@@ -68,24 +68,6 @@
 
 #define CODE_VERSION 10100
 
-#if (PG_VERSION_NUM < 100000)
-/*
- * Is the given relation a simple relation i.e a base or "other" member
- * relation?
- */
-#define IS_SIMPLE_REL(rel) \
-	((rel)->reloptkind == RELOPT_BASEREL || \
-	 (rel)->reloptkind == RELOPT_OTHER_MEMBER_REL)
-
-/* Is the given relation a join relation? */
-#define IS_JOIN_REL(rel)	\
-	((rel)->reloptkind == RELOPT_JOINREL)
-
-/* Is the given relation an upper relation? */
-#define IS_UPPER_REL(rel)	\
-	((rel)->reloptkind == RELOPT_UPPER_REL)
-#endif
-
 /*
  * Options structure to store the InfluxDB
  * server information

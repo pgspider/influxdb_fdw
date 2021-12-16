@@ -804,7 +804,7 @@ set work_mem to '64kB';
 --Testcase 182:
 set enable_mergejoin to off;
 --Testcase 183:
-set enable_resultcache to off;
+set enable_memoize to off;
 
 --Testcase 184:
 explain (costs off)
@@ -819,7 +819,7 @@ reset work_mem;
 --Testcase 187:
 reset enable_mergejoin;
 --Testcase 188:
-reset enable_resultcache;
+reset enable_memoize;
 
 --
 -- regression test for 8.2 bug with improper re-ordering of left joins
@@ -1484,6 +1484,10 @@ select unique1 from tenk1, f_immutable_int4(1) x where x = unique1;
 --Testcase 303:
 explain (costs off)
 select unique1 from tenk1, lateral f_immutable_int4(1) x where x = unique1;
+
+--Testcase 569:
+explain (costs off)
+select unique1 from tenk1, lateral f_immutable_int4(1) x where x in (select 17);
 
 --Testcase 304:
 explain (costs off)
@@ -2230,6 +2234,28 @@ select i8.*, ss.v, t.unique2
     left join lateral (select i4.f1 + 1 as v) as ss on true
     left join tenk1 t on t.unique2 = ss.v
 where q2 = 456;
+
+-- InfluxDB does not support partition table, create local table for test
+-- and check a related issue where we miscompute required relids for
+-- a PHV that's been translated to a child rel
+--Testcase 570:
+create temp table parttbl (a integer primary key) partition by range (a);
+--Testcase 571:
+create temp table parttbl1 partition of parttbl for values from (1) to (100);
+--Testcase 572:
+insert into parttbl values (11), (12);
+--Testcase 573:
+explain (costs off)
+select * from
+  (select *, 12 as phv from parttbl) as ss
+  right join int4_tbl on true
+where ss.a = ss.phv and f1 = 0;
+
+--Testcase 574:
+select * from
+  (select *, 12 as phv from parttbl) as ss
+  right join int4_tbl on true
+where ss.a = ss.phv and f1 = 0;
 
 -- bug #8444: we've historically allowed duplicate aliases within aliased JOINs
 
