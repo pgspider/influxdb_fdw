@@ -645,13 +645,6 @@ influxdb_foreign_expr_walker(Node *node,
 				if (!(is_star_func || can_pushdown_func || is_cast_func))
 					return false;
 
-#if PG_VERSION_NUM < 100000
-				if (strcmp(opername, "influx_time") == 0)
-				{
-					return false;
-				}
-#endif
-
 				/* fill() must be inside influx_time() */
 				if (strcmp(opername, "influx_fill_numeric") == 0 ||
 					strcmp(opername, "influx_fill_option") == 0)
@@ -2556,7 +2549,7 @@ influxdb_deparse_func_expr(FuncExpr *node, deparse_expr_cxt *context)
 		return;
 	}
 
-	/*
+	/* -----
 	 * Convert time() function for influx
 	 * "influx_time(time, interval '2h')" => "time(2h)"
 	 * "influx_time(time, interval '2h', interval '1h')" => to "time(2h, 1h)"
@@ -2564,6 +2557,7 @@ influxdb_deparse_func_expr(FuncExpr *node, deparse_expr_cxt *context)
 	 * "influx_time(time, interval '2h', influx_fill_option('linear'))" => "time(2h) fill(linear)"
 	 * "influx_time(time, interval '2h', interval '1h', influx_fill_numeric(100))" => "time(2h, 1h) fill(100)"
 	 * "influx_time(time, interval '2h', interval '1h', influx_fill_option('linear'))" => "time(2h,1h) fill(linear)"
+	 * ------
 	 */
 	if (strcmp(proname, "influx_time") == 0)
 	{
