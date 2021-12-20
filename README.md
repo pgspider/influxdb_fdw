@@ -106,9 +106,8 @@ When a query to foreign tables fails, you can find why it fails by seeing a quer
 Opening issues and pull requests on GitHub are welcome.
 
 ## License
-Copyright (c) 2018 - 2021, TOSHIBA Corporation
-
-Copyright (c) 2011 - 2016, EnterpriseDB Corporation
+Portions Copyright (c) 2018-2021, TOSHIBA CORPORATION
+Portions Copyright (c) 2011-2016, EnterpriseDB Corporation
 
 Permission to use, copy, modify, and distribute this software and its documentation for any purpose, without fee, and without a written agreement is hereby granted, provided that the above copyright notice and this paragraph and the following two paragraphs appear in all copies.
 
