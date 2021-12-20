@@ -2,7 +2,7 @@
 #
 # InfluxDB Foreign Data Wrapper for PostgreSQL
 #
-# Portions Copyright (c) 2021, TOSHIBA CORPORATION
+# Portions Copyright (c) 2018-2021, TOSHIBA CORPORATION
 #
 # IDENTIFICATION
 # 		Makefile

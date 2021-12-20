@@ -2,7 +2,7 @@
  *
  * InfluxDB Foreign Data Wrapper for PostgreSQL
  *
- * Portions Copyright (c) 2021, TOSHIBA CORPORATION
+ * Portions Copyright (c) 2018-2021, TOSHIBA CORPORATION
  *
  * IDENTIFICATION
  *        influxdb_fdw.h
@@ -66,7 +66,7 @@
 #define INFLUXDB_TARGETS_MIXING_AGGREF_UNSAFE	(INFLUXDB_TARGETS_MARK_COLUMN | INFLUXDB_TARGETS_MARK_AGGREF)
 #define INFLUXDB_TARGETS_MIXING_AGGREF_SAFE		(0u)
 
-#define CODE_VERSION 10100
+#define CODE_VERSION 10101
 
 /*
  * Options structure to store the InfluxDB
