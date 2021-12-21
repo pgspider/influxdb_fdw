@@ -2,7 +2,7 @@
  *
  * InfluxDB Foreign Data Wrapper for PostgreSQL
  *
- * Portions Copyright (c) 2021, TOSHIBA CORPORATION
+ * Portions Copyright (c) 2018-2021, TOSHIBA CORPORATION
  *
  * IDENTIFICATION
  *        influxdb_fdw.h
@@ -66,25 +66,7 @@
 #define INFLUXDB_TARGETS_MIXING_AGGREF_UNSAFE	(INFLUXDB_TARGETS_MARK_COLUMN | INFLUXDB_TARGETS_MARK_AGGREF)
 #define INFLUXDB_TARGETS_MIXING_AGGREF_SAFE		(0u)
 
-#define CODE_VERSION 10100
-
-#if (PG_VERSION_NUM < 100000)
-/*
- * Is the given relation a simple relation i.e a base or "other" member
- * relation?
- */
-#define IS_SIMPLE_REL(rel) \
-	((rel)->reloptkind == RELOPT_BASEREL || \
-	 (rel)->reloptkind == RELOPT_OTHER_MEMBER_REL)
-
-/* Is the given relation a join relation? */
-#define IS_JOIN_REL(rel)	\
-	((rel)->reloptkind == RELOPT_JOINREL)
-
-/* Is the given relation an upper relation? */
-#define IS_UPPER_REL(rel)	\
-	((rel)->reloptkind == RELOPT_UPPER_REL)
-#endif
+#define CODE_VERSION 10101
 
 /*
  * Options structure to store the InfluxDB
