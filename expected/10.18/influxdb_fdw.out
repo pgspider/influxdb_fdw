@@ -1116,26 +1116,26 @@ SELECT * FROM t5;
 --get version
 --Testcase 144:
 \df influxdb_fdw*
-                                List of functions
- Schema |          Name          | Result data type | Argument data types | Type 
---------+------------------------+------------------+---------------------+------
- public | influxdb_fdw_handler   | fdw_handler      |                     | func
- public | influxdb_fdw_validator | void             | text[], oid         | func
- public | influxdb_fdw_version   | integer          |                     | func
+                                 List of functions
+ Schema |          Name          | Result data type | Argument data types |  Type  
+--------+------------------------+------------------+---------------------+--------
+ public | influxdb_fdw_handler   | fdw_handler      |                     | normal
+ public | influxdb_fdw_validator | void             | text[], oid         | normal
+ public | influxdb_fdw_version   | integer          |                     | normal
 (3 rows)
 
 --Testcase 145:
 SELECT * FROM public.influxdb_fdw_version();
  influxdb_fdw_version 
 ----------------------
-                10100
+                10101
 (1 row)
 
 --Testcase 146:
 SELECT influxdb_fdw_version();
  influxdb_fdw_version 
 ----------------------
-                10100
+                10101
 (1 row)
 
 --Test pushdown LIMIT...OFFSET

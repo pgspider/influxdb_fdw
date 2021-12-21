@@ -2,7 +2,7 @@
  *
  * InfluxDB Foreign Data Wrapper for PostgreSQL
  *
- * Portions Copyright (c) 2021, TOSHIBA CORPORATION
+ * Portions Copyright (c) 2018-2021, TOSHIBA CORPORATION
  *
  * IDENTIFICATION
  *        influxdb_fdw.c
@@ -399,10 +399,8 @@ influxdb_fdw_handler(PG_FUNCTION_ARGS)
 	/* support for IMPORT FOREIGN SCHEMA */
 	fdwroutine->ImportForeignSchema = influxdbImportForeignSchema;
 
-#if (PG_VERSION_NUM >= 100000)
 	/* Support functions for upper relation push-down */
 	fdwroutine->GetForeignUpperPaths = influxdbGetForeignUpperPaths;
-#endif
 	PG_RETURN_POINTER(fdwroutine);
 }
 
@@ -585,11 +583,7 @@ influxdbGetForeignRelSize(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntab
 	 * Identify which attributes will need to be retrieved from the remote
 	 * server.
 	 */
-#if (PG_VERSION_NUM >= 90600)
 	pull_varattnos((Node *) baserel->reltarget->exprs, baserel->relid, &fpinfo->attrs_used);
-#else
-	pull_varattnos((Node *) baserel->reltargetlist, baserel->relid, &fpinfo->attrs_used);
-#endif
 
 	foreach(lc, fpinfo->local_conds)
 	{
@@ -693,9 +687,7 @@ influxdbGetForeignPaths(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntable
 	/* Create a ForeignPath node and add it as only possible path */
 	add_path(baserel, (Path *)
 			 create_foreignscan_path(root, baserel,
-#if (PG_VERSION_NUM >= 90600)
 									 NULL,	/* default pathtarget */
-#endif
 									 baserel->rows,
 									 startup_cost,
 									 total_cost,
@@ -1953,7 +1945,9 @@ find_modifytable_subplan(PlannerInfo *root,
 		if (subplan_index < list_length(appendplan->appendplans))
 			subplan = (Plan *) list_nth(appendplan->appendplans, subplan_index);
 	}
-	else if (IsA(subplan, Result) && IsA(outerPlan(subplan), Append))
+	else if (IsA(subplan, Result) &&
+			 outerPlan(subplan) != NULL &&
+			 IsA(outerPlan(subplan), Append))
 	{
 		Append	   *appendplan = (Append *) outerPlan(subplan);
 
@@ -2884,11 +2878,10 @@ add_foreign_final_paths(PlannerInfo *root, RelOptInfo *input_rel,
 		)
 		return;
 
-#if (PG_VERSION_NUM >= 100000)
 	/* We don't support cases where there are any SRFs in the targetlist */
 	if (parse->hasTargetSRFs)
 		return;
-#endif
+
 	/* Save the input_rel as outerrel in fpinfo */
 	fpinfo->outerrel = input_rel;
 
@@ -3343,11 +3336,7 @@ prepare_query_params(PlanState *node,
 	 * benefit, and it'd require influxdb_fdw to know more than is desirable
 	 * about Param evaluation.)
 	 */
-#if (PG_VERSION_NUM >= 100000)
 	*param_exprs = (List *) ExecInitExprList(fdw_exprs, node);
-#else
-	*param_exprs = (List *) ExecInitExpr((Expr *) fdw_exprs, node);
-#endif
 	/* Allocate buffer for text form of query parameters. */
 	*param_values = (const char **) palloc0(numParams * sizeof(char *));
 }
@@ -3380,11 +3369,7 @@ process_query_params(ExprContext *econtext,
 		bool		isNull;
 
 		/* Evaluate the parameter expression */
-#if (PG_VERSION_NUM >= 100000)
 		expr_value = ExecEvalExpr(expr_state, econtext, &isNull);
-#else
-		expr_value = ExecEvalExpr(expr_state, econtext, &isNull, NULL);
-#endif
 		/* Bind parameters */
 		influxdb_bind_sql_var(param_types[i], i, expr_value, &isNull,
 							  param_influxdb_types, param_influxdb_values);
@@ -3650,7 +3635,7 @@ influxdb_get_batch_size_option(Relation rel)
 
 		if (strcmp(def->defname, "batch_size") == 0)
 		{
-			batch_size = strtol(defGetString(def), NULL, 10);
+			(void) parse_int(defGetString(def), &batch_size, 0, NULL);
 			break;
 		}
 	}

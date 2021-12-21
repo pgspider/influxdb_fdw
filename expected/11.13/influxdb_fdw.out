@@ -1128,26 +1128,28 @@ SELECT * FROM t5;
 SELECT * FROM public.influxdb_fdw_version();
  influxdb_fdw_version 
 ----------------------
-                10100
+                10101
 (1 row)
 
 --Testcase 146:
 SELECT influxdb_fdw_version();
  influxdb_fdw_version 
 ----------------------
-                10100
+                10101
 (1 row)
 
 --Test pushdown LIMIT...OFFSET
 --Testcase 147:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT tableoid::regclass, * FROM t1 LIMIT 1 OFFSET 0;
-                              QUERY PLAN                               
------------------------------------------------------------------------
- Foreign Scan on public.t1
-   Output: (tableoid)::regclass, "time", tag1, value1
-   InfluxDB query: SELECT "tag1", "value1" FROM "cpu" LIMIT 1 OFFSET 0
-(3 rows)
+                         QUERY PLAN                         
+------------------------------------------------------------
+ Limit
+   Output: ((tableoid)::regclass), "time", tag1, value1
+   ->  Foreign Scan on public.t1
+         Output: (tableoid)::regclass, "time", tag1, value1
+         InfluxDB query: SELECT "tag1", "value1" FROM "cpu"
+(5 rows)
 
 --Testcase 148:
 SELECT tableoid::regclass, * FROM t1 LIMIT 1 OFFSET 0;
@@ -1159,12 +1161,14 @@ SELECT tableoid::regclass, * FROM t1 LIMIT 1 OFFSET 0;
 --Testcase 149:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT tableoid::regclass, * FROM t1 LIMIT 1 OFFSET 1;
-                              QUERY PLAN                               
------------------------------------------------------------------------
- Foreign Scan on public.t1
-   Output: (tableoid)::regclass, "time", tag1, value1
-   InfluxDB query: SELECT "tag1", "value1" FROM "cpu" LIMIT 1 OFFSET 1
-(3 rows)
+                         QUERY PLAN                         
+------------------------------------------------------------
+ Limit
+   Output: ((tableoid)::regclass), "time", tag1, value1
+   ->  Foreign Scan on public.t1
+         Output: (tableoid)::regclass, "time", tag1, value1
+         InfluxDB query: SELECT "tag1", "value1" FROM "cpu"
+(5 rows)
 
 --Testcase 150:
 SELECT tableoid::regclass, * FROM t1 LIMIT 1 OFFSET 1;
@@ -1176,12 +1180,14 @@ SELECT tableoid::regclass, * FROM t1 LIMIT 1 OFFSET 1;
 --Testcase 151:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT ctid, * FROM t1 LIMIT 1 OFFSET 0;
-                              QUERY PLAN                               
------------------------------------------------------------------------
- Foreign Scan on public.t1
+                         QUERY PLAN                         
+------------------------------------------------------------
+ Limit
    Output: ctid, "time", tag1, value1
-   InfluxDB query: SELECT "tag1", "value1" FROM "cpu" LIMIT 1 OFFSET 0
-(3 rows)
+   ->  Foreign Scan on public.t1
+         Output: ctid, "time", tag1, value1
+         InfluxDB query: SELECT "tag1", "value1" FROM "cpu"
+(5 rows)
 
 --Testcase 152:
 SELECT ctid, * FROM t1 LIMIT 1 OFFSET 0;
@@ -1193,12 +1199,14 @@ SELECT ctid, * FROM t1 LIMIT 1 OFFSET 0;
 --Testcase 153:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT ctid, * FROM t2 LIMIT 10 OFFSET 20;
-                               QUERY PLAN                                
--------------------------------------------------------------------------
- Foreign Scan on public.t2
+                         QUERY PLAN                         
+------------------------------------------------------------
+ Limit
    Output: ctid, "time", tag1, value1
-   InfluxDB query: SELECT "tag1", "value1" FROM "cpu" LIMIT 10 OFFSET 20
-(3 rows)
+   ->  Foreign Scan on public.t2
+         Output: ctid, "time", tag1, value1
+         InfluxDB query: SELECT "tag1", "value1" FROM "cpu"
+(5 rows)
 
 --Testcase 154:
 SELECT ctid, * FROM t2 LIMIT 10 OFFSET 20;
@@ -1229,10 +1237,12 @@ WHERE t1.value1 = ss.value1;
                ->  Foreign Scan on public.t2
                      Output: t2."time", t2.tag1, t2.value1
                      InfluxDB query: SELECT "tag1", "value1" FROM "cpu" WHERE (("value1" = 123))
-   ->  Foreign Scan on public.t1 t1_1
-         Output: t2.value1, t1_1.tag1
-         InfluxDB query: SELECT "tag1" FROM "cpu" LIMIT 1 OFFSET 0
-(16 rows)
+   ->  Limit
+         Output: (t2.value1), t1_1.tag1
+         ->  Foreign Scan on public.t1 t1_1
+               Output: t2.value1, t1_1.tag1
+               InfluxDB query: SELECT "tag1" FROM "cpu"
+(18 rows)
 
 --Testcase 156:
 EXPLAIN (VERBOSE, COSTS OFF)
@@ -1260,13 +1270,17 @@ WHERE t1.value1 = ss2.value1;
                      ->  Foreign Scan on public.t2
                            Output: t2."time", t2.tag1, t2.value1
                            InfluxDB query: SELECT "tag1", "value1" FROM "cpu" WHERE (("value1" = 123))
-         ->  Foreign Scan on public.t1 t1_1
-               Output: t2.value1, t1_1.tag1
-               InfluxDB query: SELECT "tag1" FROM "cpu" LIMIT 1 OFFSET 0
-   ->  Foreign Scan on public.t3
-         Output: (t2.value1), t1_1.tag1
-         InfluxDB query: SELECT * FROM "t3" LIMIT 1 OFFSET 20
-(21 rows)
+         ->  Limit
+               Output: (t2.value1), t1_1.tag1
+               ->  Foreign Scan on public.t1 t1_1
+                     Output: t2.value1, t1_1.tag1
+                     InfluxDB query: SELECT "tag1" FROM "cpu"
+   ->  Limit
+         Output: ((t2.value1)), (t1_1.tag1)
+         ->  Foreign Scan on public.t3
+               Output: (t2.value1), t1_1.tag1
+               InfluxDB query: SELECT * FROM "t3"
+(25 rows)
 
 --Testcase 157:
 DROP FOREIGN TABLE cpu;
@@ -1298,11 +1312,10 @@ EXPLAIN VERBOSE
 INSERT INTO cpu(time, tag1, tag2, value1, value2, value3, value4) VALUES('2021-01-01 00:00:01+09', 'tag1_K', 'tag2_H', 200, 5.5, 'test1', true);
                                                                                  QUERY PLAN                                                                                  
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Insert on public.cpu  (cost=0.00..0.01 rows=0 width=0)
-   Batch Size: 1
+ Insert on public.cpu  (cost=0.00..0.01 rows=1 width=153)
    ->  Result  (cost=0.00..0.01 rows=1 width=153)
          Output: '2021-01-01 00:00:01+09'::timestamp with time zone, NULL::text, 'tag1_K'::text, 'tag2_H'::text, '200'::bigint, '5.5'::double precision, 'test1'::text, true
-(4 rows)
+(3 rows)
 
 --Testcase 166:
 INSERT INTO cpu(time, tag1, tag2, value1, value2, value3, value4) VALUES('2021-01-01 00:00:01+09', 'tag1_K', 'tag2_H', 200, 5.5, 'test', true);
@@ -1322,8 +1335,7 @@ INSERT INTO cpu(time, tag1, tag2, value1, value2, value3, value4) VALUES('2021-0
   ('2029-02-02 00:02:02+04', 'tag1_U', 'tag2_DZ', (SELECT 350), (SELECT i FROM (VALUES(6.9)) AS foo (i)), 'funny', true);
                                                                                QUERY PLAN                                                                               
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Insert on public.cpu  (cost=0.02..0.04 rows=0 width=0)
-   Batch Size: 1
+ Insert on public.cpu  (cost=0.02..0.04 rows=2 width=153)
    InitPlan 1 (returns $0)
      ->  Result  (cost=0.00..0.01 rows=1 width=4)
            Output: 350
@@ -1332,7 +1344,7 @@ INSERT INTO cpu(time, tag1, tag2, value1, value2, value3, value4) VALUES('2021-0
            Output: 6.9
    ->  Values Scan on "*VALUES*"  (cost=0.00..0.03 rows=2 width=153)
          Output: "*VALUES*".column1, NULL::text, "*VALUES*".column2, "*VALUES*".column3, "*VALUES*".column4, "*VALUES*".column5, "*VALUES*".column6, "*VALUES*".column7
-(10 rows)
+(9 rows)
 
 --Testcase 169:
 INSERT INTO cpu(time, tag1, tag2, value1, value2, value3, value4) VALUES('2021-01-02 00:00:02+05', 'tag1_I', 'tag2_E', 300, 15.5, 'test2', false),
@@ -1369,7 +1381,7 @@ EXPLAIN VERBOSE
 DELETE FROM cpu WHERE tag2 = 'tag2_KH';
                                QUERY PLAN                                
 -------------------------------------------------------------------------
- Delete on public.cpu  (cost=10.00..3.00 rows=0 width=0)
+ Delete on public.cpu  (cost=10.00..3.00 rows=3 width=104)
    ->  Foreign Delete on public.cpu  (cost=10.00..3.00 rows=3 width=104)
          InfluxDB query: DELETE FROM "cpu" WHERE (("tag2" = 'tag2_KH'))
 (3 rows)
@@ -1393,7 +1405,7 @@ EXPLAIN VERBOSE
 DELETE FROM cpu WHERE time = '2021-01-02 04:00:02+09';
                                     QUERY PLAN                                    
 ----------------------------------------------------------------------------------
- Delete on public.cpu  (cost=10.00..3.00 rows=0 width=0)
+ Delete on public.cpu  (cost=10.00..3.00 rows=3 width=104)
    ->  Foreign Delete on public.cpu  (cost=10.00..3.00 rows=3 width=104)
          InfluxDB query: DELETE FROM "cpu" WHERE ((time = '2021-01-01 19:00:02'))
 (3 rows)
@@ -1416,7 +1428,7 @@ EXPLAIN VERBOSE
 DELETE FROM cpu WHERE time < '2018-07-07' AND tag1 != 'tag1_B';
                                                  QUERY PLAN                                                  
 -------------------------------------------------------------------------------------------------------------
- Delete on public.cpu  (cost=10.00..212.00 rows=0 width=0)
+ Delete on public.cpu  (cost=10.00..212.00 rows=212 width=104)
    ->  Foreign Delete on public.cpu  (cost=10.00..212.00 rows=212 width=104)
          InfluxDB query: DELETE FROM "cpu" WHERE ((time < '2018-07-06 15:00:00')) AND (("tag1" <> 'tag1_B'))
 (3 rows)
@@ -1510,7 +1522,7 @@ EXPLAIN VERBOSE
 DELETE FROM cpu WHERE time_text = '2021-02-02T00:00:00.123456789Z';
                                          QUERY PLAN                                          
 ---------------------------------------------------------------------------------------------
- Delete on public.cpu  (cost=10.00..3.00 rows=0 width=0)
+ Delete on public.cpu  (cost=10.00..3.00 rows=3 width=104)
    ->  Foreign Delete on public.cpu  (cost=10.00..3.00 rows=3 width=104)
          InfluxDB query: DELETE FROM "cpu" WHERE ((time = '2021-02-02T00:00:00.123456789Z'))
 (3 rows)
@@ -1535,7 +1547,7 @@ EXPLAIN VERBOSE
 DELETE FROM cpu WHERE time_text = '2021-02-02T00:00:01Z' AND tag1 = 'tag1_J';
                                                  QUERY PLAN                                                  
 -------------------------------------------------------------------------------------------------------------
- Delete on public.cpu  (cost=10.00..1.00 rows=0 width=0)
+ Delete on public.cpu  (cost=10.00..1.00 rows=1 width=104)
    ->  Foreign Delete on public.cpu  (cost=10.00..1.00 rows=1 width=104)
          InfluxDB query: DELETE FROM "cpu" WHERE ((time = '2021-02-02T00:00:01Z')) AND (("tag1" = 'tag1_J'))
 (3 rows)
@@ -1559,7 +1571,7 @@ EXPLAIN VERBOSE
 DELETE FROM cpu WHERE time_text = '2021-02-02 00:00:00' OR time ='2029-02-02 05:02:02+09';
                                                               QUERY PLAN                                                              
 --------------------------------------------------------------------------------------------------------------------------------------
- Delete on public.cpu  (cost=10.00..6.00 rows=0 width=0)
+ Delete on public.cpu  (cost=10.00..6.00 rows=6 width=104)
    ->  Foreign Scan on public.cpu  (cost=10.00..6.00 rows=6 width=104)
          Output: "time", time_text, tag1, tag2
          Filter: ((cpu.time_text = '2021-02-02 00:00:00'::text) OR (cpu."time" = '2029-02-02 05:02:02+09'::timestamp with time zone))
