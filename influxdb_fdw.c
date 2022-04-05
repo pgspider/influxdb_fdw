@@ -2925,7 +2925,11 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel)
 	 * different from those in the plan's targetlist. Use a copy of path
 	 * target to record the new sortgrouprefs.
 	 */
+#if (PG_VERSION_NUM <= 110000)
 	grouping_target = copy_pathtarget(root->upper_targets[UPPERREL_GROUP_AGG]);
+#else
+	grouping_target = copy_pathtarget(grouped_rel->reltarget);
+#endif
 
 	/*
 	 * Evaluate grouping targets and check whether they are safe to push down
