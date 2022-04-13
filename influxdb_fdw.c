@@ -237,6 +237,7 @@ static bool influxdb_contain_regex_star_functions(Node *clause);
 #if (PG_VERSION_NUM >= 140000)
 static int	influxdb_get_batch_size_option(Relation rel);
 #endif
+static void influxdb_extract_slcols(InfluxDBFdwRelationInfo *fpinfo, PlannerInfo *root, RelOptInfo *baserel, List *tlist);
 
 /*
  * This enum describes what's kept in the fdw_private list for a ForeignPath.
@@ -547,17 +548,58 @@ estimate_path_cost_size(PlannerInfo *root,
 }
 
 /*
+ * influxdb_extract_slcols: Extract actual remote InfluxDB columns that being fetched.
+ */
+static void
+influxdb_extract_slcols(InfluxDBFdwRelationInfo *fpinfo, PlannerInfo *root, RelOptInfo *baserel, List *tlist)
+{
+	RangeTblEntry *rte;
+	List *input_tlist = (tlist) ? tlist : baserel->reltarget->exprs;
+	ListCell *lc = NULL;
+
+	if (!fpinfo->slinfo.schemaless)
+		return;
+
+	rte = planner_rt_fetch(baserel->relid, root);
+	fpinfo->all_fieldtag = influxdb_is_select_all(rte, input_tlist, &fpinfo->slinfo);
+
+	/* All actual column is required to be selected */
+	if (fpinfo->all_fieldtag)
+		return;
+
+	/* Extract jsonb schemaless variable names from tlist */
+	fpinfo->slcols = NIL;
+	fpinfo->slcols = influxdb_pull_slvars((Expr *)input_tlist, baserel->relid,
+												fpinfo->slcols, false, NULL, &(fpinfo->slinfo));
+
+	/* Append josnb schemaless variable names from local_conds. */
+	foreach(lc, fpinfo->local_conds)
+	{
+		RestrictInfo *ri = (RestrictInfo *) lfirst(lc);
+
+		fpinfo->slcols = influxdb_pull_slvars(ri->clause, baserel->relid,
+													fpinfo->slcols, false, NULL, &(fpinfo->slinfo));
+	}
+}
+
+/*
  * influxdbGetForeignRelSize: Create a FdwPlan for a scan on the foreign table
  */
 static void
 influxdbGetForeignRelSize(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
 {
 	InfluxDBFdwRelationInfo *fpinfo;
+	influxdb_opt *options;
 	ListCell   *lc;
 
 	elog(DEBUG1, "influxdb_fdw : %s", __func__);
 	fpinfo = (InfluxDBFdwRelationInfo *) palloc0(sizeof(InfluxDBFdwRelationInfo));
 	baserel->fdw_private = (void *) fpinfo;
+
+	/* Fetch the options */
+	options = influxdb_get_options(foreigntableid);
+
+	influxdb_get_schemaless_info(&(fpinfo->slinfo), options->schemaless, foreigntableid);
 
 	/* Base foreign tables need to be pushed down always. */
 	fpinfo->pushdown_safe = true;
@@ -773,6 +815,9 @@ influxdbGetForeignPlan(PlannerInfo *root,
 		 baserel->reloptkind == RELOPT_OTHER_MEMBER_REL) &&
 		fpinfo->is_tlist_func_pushdown == false)
 	{
+		/* Extract actual remote InfluxDB columns that being fetched. */
+		influxdb_extract_slcols(fpinfo, root, baserel, tlist);
+
 		foreach(lc, scan_clauses)
 		{
 			RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
@@ -865,10 +910,16 @@ influxdbGetForeignPlan(PlannerInfo *root,
 			foreach(lc, fpinfo->local_conds)
 			{
 				RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
+				List *varlist = NIL;
 
-				fdw_scan_tlist = add_to_flat_tlist(fdw_scan_tlist,
-												   pull_var_clause((Node *) rinfo->clause,
-																   PVC_RECURSE_PLACEHOLDERS));
+				varlist = influxdb_pull_slvars(rinfo->clause, baserel->relid,
+													  varlist, true, NULL, &(fpinfo->slinfo));
+
+				if (varlist == NIL)
+					varlist = pull_var_clause((Node *) rinfo->clause,
+											  PVC_RECURSE_PLACEHOLDERS);
+
+				fdw_scan_tlist = add_to_flat_tlist(fdw_scan_tlist, varlist);
 			}
 		}
 		else
@@ -942,6 +993,7 @@ influxdbGetForeignPlan(PlannerInfo *root,
 	fdw_private = list_make3(makeString(sql.data), retrieved_attrs, makeInteger(for_update));
 	fdw_private = lappend(fdw_private, fdw_scan_tlist);
 	fdw_private = lappend(fdw_private, makeInteger(fpinfo->is_tlist_func_pushdown));
+	fdw_private = lappend(fdw_private, makeInteger(fpinfo->slinfo.schemaless));
 
 	/*
 	 * Create the ForeignScan node from target list, local filtering
@@ -968,8 +1020,12 @@ static void
 influxdbBeginForeignScan(ForeignScanState *node, int eflags)
 {
 	InfluxDBFdwExecState *festate = NULL;
+	EState	   *estate = node->ss.ps.state;
 	ForeignScan *fsplan = (ForeignScan *) node->ss.ps.plan;
+	RangeTblEntry *rte;
 	int			numParams;
+	int			rtindex;
+	bool		schemaless;
 
 	elog(DEBUG1, "influxdb_fdw : %s", __func__);
 
@@ -986,8 +1042,23 @@ influxdbBeginForeignScan(ForeignScanState *node, int eflags)
 	festate->for_update = intVal(list_nth(fsplan->fdw_private, 2)) ? true : false;
 	festate->tlist = (List *) list_nth(fsplan->fdw_private, 3);
 	festate->is_tlist_func_pushdown = intVal(list_nth(fsplan->fdw_private, 4)) ? true : false;
+	schemaless = intVal(list_nth(fsplan->fdw_private, 5)) ? true : false;
 
 	festate->cursor_exists = false;
+
+	/*
+	 * Identify which user to do the remote access as.  This should match what
+	 * ExecCheckRTEPerms() does.  In case of a join or aggregate, use the
+	 * lowest-numbered member RTE as a representative; we would get the same
+	 * result from any.
+	 */
+	if (fsplan->scan.scanrelid > 0)
+		rtindex = fsplan->scan.scanrelid;
+	else
+		rtindex = bms_next_member(fsplan->fs_relids, -1);
+	rte = exec_rt_fetch(rtindex, estate);
+
+	influxdb_get_schemaless_info(&(festate->slinfo), schemaless, rte->relid);
 
 	/* Prepare for output conversion of parameters used in remote query. */
 	numParams = list_length(fsplan->fdw_exprs);
@@ -1002,6 +1073,77 @@ influxdbBeginForeignScan(ForeignScanState *node, int eflags)
 							 &festate->param_types,
 							 &festate->param_influxdb_types,
 							 &festate->param_influxdb_values);
+}
+
+/*
+ * influxdb_get_json_string_from_result: Construct jsonb string value from query result
+ */
+static void
+influxdb_get_json_string_from_result(InfluxDBRow * result_row,
+								InfluxDBResult * result,
+								Oid relid, bool is_target_tags, bool is_target_fields,
+								char **tags, char **fields)
+{
+	StringInfo	buffer;
+	int i = 0;
+	bool is_first = true;
+	bool has_jsstr = false;
+
+	buffer = makeStringInfo();
+
+	appendStringInfoChar(buffer, '{');
+
+	for (i=0;i<result->ncol;i++)
+	{
+		char *escaped_key = NULL;
+		char *escaped_value = NULL;
+		bool is_tag = false;
+
+		if (INFLUXDB_IS_TIME_COLUMN(result->columns[i]))
+			continue;
+
+		is_tag = influxdb_is_tag_key(result->columns[i], relid);
+
+		/* We won't contruct json string value if returned column is not belonged to tags or fields that being fetched */
+		if (!(is_target_tags && is_tag) &&
+			!(is_target_fields && !is_tag))
+			continue;
+
+		if (!is_first)
+			appendStringInfoChar(buffer, ',');
+
+		escaped_key = influxdb_escape_json_string(result->columns[i]);
+		if (escaped_key == NULL)
+			elog(ERROR, "Cannot escape json column key");
+
+		escaped_value = influxdb_escape_json_string(result_row->tuple[i]);
+
+		appendStringInfo(buffer, "\"%s\" : ", escaped_key); /* \"key\" : */
+		if (escaped_value)
+			appendStringInfo(buffer, "\"%s\"", escaped_value); /* \"value\" */
+		else
+			appendStringInfoString(buffer, "null"); /* null */
+
+		if (escaped_key != NULL)
+			pfree(escaped_key);
+		if (escaped_value != NULL)
+			pfree(escaped_value);
+
+		has_jsstr = true;
+		is_first = false;
+	}
+
+	appendStringInfoChar(buffer, '}');
+
+	if (has_jsstr)
+	{
+		if (is_target_tags)
+			*tags = buffer->data;
+		else if (is_target_fields)
+			*fields = buffer->data;
+	}
+
+	return;
 }
 
 static void
@@ -1035,6 +1177,12 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 		bool		is_regex = false;
 		int			ntags = 0;
 		int			nfields = 0;
+		bool		is_tags = false;
+		bool		is_fields = false;
+		bool		is_tagfields = false;
+		char	   *value = NULL;
+		char	   *tags_value = NULL;
+		char	   *fields_value = NULL;
 
 		if (is_agg)
 		{
@@ -1046,10 +1194,18 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 			 */
 
 			Expr	   *target = ((TargetEntry *) lfirst(targetc))->expr;
+			char	   *slvar_name;
 
-			if (festate->is_tlist_func_pushdown && IsA(target, Var))
+			slvar_name = influxdb_get_slvar(target, &(festate->slinfo));
+
+			if (festate->is_tlist_func_pushdown && (IsA(target, Var) || slvar_name))
 			{
-				char	   *name = influxdb_get_column_name(relid, ((Var *) target)->varattno);
+				char	   *name;
+
+				if (slvar_name)
+					name = slvar_name;
+				else
+					name = influxdb_get_column_name(relid, ((Var *) target)->varattno);
 
 				if (INFLUXDB_IS_TIME_COLUMN(name))
 				{
@@ -1060,13 +1216,24 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 					attid++;
 					result_idx = attid;
 				}
+
+				if (IsA(target, Var) &&
+					influxdb_is_slvar(((Var *) target)->vartype,((Var *) target)->varattno, &(festate->slinfo), &is_tags, &is_fields))
+				{
+					is_tagfields = true;
+				}
 			}
-			else if (IsA(target, Var))
+			else if (IsA(target, Var) || slvar_name)
 			{
 				/* GROUP BY target variable */
 				int			i;
-				char	   *name = influxdb_get_column_name(relid, ((Var *) target)->varattno);
+				char	   *name;
 				int			nfield = result->ncol - result->ntag;
+
+				if (slvar_name)
+					name = slvar_name;
+				else
+					name = influxdb_get_column_name(relid, ((Var *) target)->varattno);
 
 				/*
 				 * If target is tag, we get its value from GROUP BY tag
@@ -1158,7 +1325,7 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 					{
 						is_agg_star = true;
 						nfields = influxdb_get_number_field_key_match(relid, NULL);
-						ntags = influxdb_get_number_tag_key(relid);
+						ntags = influxdb_get_number_tag_key(relid, &(festate->slinfo));
 						attid = attid + nfields - 1;
 					}
 					else
@@ -1197,7 +1364,7 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 									extval[strlen(extval) - 1] = 0;
 
 									nfields = influxdb_get_number_field_key_match(relid, extval);
-									ntags = influxdb_get_number_tag_key(relid);
+									ntags = influxdb_get_number_tag_key(relid, &(festate->slinfo));
 									attid = attid + nfields - 1;
 								}
 							}
@@ -1242,22 +1409,148 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 				attid++;
 				result_idx = attid;
 			}
+
+			if (influxdb_is_slvar(pgtype, attnum + 1, &(festate->slinfo), &is_tags, &is_fields))
+			{
+				is_tagfields = true;
+			}
 		}
+
+		if (is_tagfields)
+		{
+			if (!tags_value && !fields_value)
+				influxdb_get_json_string_from_result(result_row, result, relid,
+												is_tags, is_fields, &tags_value,
+												&fields_value);
+			if (is_tags)
+				value = tags_value;
+			else if (is_fields)
+				value = fields_value;
+		}
+		else
+			value = result_row->tuple[result_idx];
 
 		if (is_agg_star || is_regex)
 		{
 			is_null[attnum] = false;
 			row[attnum] = influxdb_convert_record_to_datum(pgtype, pgtypmod, result_row->tuple,
 														   result_idx, ntags, nfields, result->columns,
-														   opername, relid, result->ncol - result->ntag);
+														   opername, relid, result->ncol - result->ntag,
+														   festate->slinfo.schemaless);
 		}
-		else if (result_row->tuple[result_idx] != NULL)
+		else if (value)
 		{
 			is_null[attnum] = false;
-			row[attnum] = influxdb_convert_to_pg(pgtype, pgtypmod,
-												 result_row->tuple, result_idx);
+			row[attnum] = influxdb_convert_to_pg(pgtype, pgtypmod, value);
 		}
 	}
+}
+
+static void
+copyInfluxDBResult(InfluxDBFdwExecState *festate, struct InfluxDBResult volatile *result)
+{
+	int i;
+	InfluxDBResult *r = NULL;
+
+	r = (InfluxDBResult *)palloc(sizeof(InfluxDBResult));
+
+	r->ncol = result->ncol;
+	r->nrow = result->nrow;
+	r->ntag = result->ntag;
+	r->tagkeys = NULL;
+	if (r->ntag > 0) {
+		r->tagkeys = (char **)palloc(sizeof(char *) * r->ntag);
+		for (i = 0; i < r->ntag; i++)
+		{
+			if (result->tagkeys[i] != NULL)
+				r->tagkeys[i] = pstrdup(result->tagkeys[i]);
+			else
+				r->tagkeys[i] = NULL;
+		}
+	}
+	if (r->ncol > 0) {
+		r->columns = (char **)palloc(sizeof(char *) * (r->ncol - r->ntag));
+		for (i = 0; i < r->ncol - r->ntag; i++)
+		{
+			if (result->columns[i] != NULL)
+				r->columns[i] = pstrdup(result->columns[i]);
+			else
+				r->columns[i] = NULL;
+		}
+	}
+	r->rows = (InfluxDBRow *)palloc(sizeof(InfluxDBRow) * r->nrow);
+	for (i = 0; i < r->nrow; i++)
+	{
+		int j;
+		r->rows[i].tuple = (char **)palloc(sizeof(char *) * r->ncol);
+		for (j = 0; j < r->ncol; j++)
+		{
+			if (result->rows[i].tuple[j] != NULL)
+				r->rows[i].tuple[j] = pstrdup(result->rows[i].tuple[j]);
+			else
+				r->rows[i].tuple[j] = NULL;
+		}
+	}
+
+	festate->temp_result = r;
+}
+
+static void
+freeInfluxDBResultRow(InfluxDBFdwExecState *festate, int index)
+{
+	int j;
+	InfluxDBResult *r = festate->temp_result;
+
+	if (r == NULL)
+		return;
+
+	for (j = 0; j < r->ncol; j++)
+	{
+		if (r->rows[index].tuple[j] != NULL)
+		{
+			pfree(r->rows[index].tuple[j]);
+			r->rows[index].tuple[j] = NULL;
+		}
+	}
+}
+
+static void
+freeInfluxDBResult(InfluxDBFdwExecState *festate)
+{
+	int i;
+	InfluxDBResult *r = festate->temp_result;
+
+	if (r == NULL)
+		return;
+	for (i = 0; i < r->nrow; i++)
+	{
+		int j;
+		for (j = 0; j < r->ncol; j++)
+		{
+			if (r->rows[i].tuple[j] != NULL)
+				pfree(r->rows[i].tuple[j]);
+		}
+		pfree(r->rows[i].tuple);
+	}
+	pfree(r->rows);
+	if (r->ncol > 0) {
+		for (i = 0; i < r->ncol - r->ntag; i++)
+		{
+			if (r->columns[i] != NULL)
+				pfree(r->columns[i]);
+		}
+		pfree(r->columns);
+	}
+	if (r->ntag > 0) {
+		for (i = 0; i < r->ntag; i++)
+		{
+			if (r->tagkeys[i] != NULL)
+				pfree(r->tagkeys[i]);
+		}
+		pfree(r->tagkeys);
+	}
+	pfree(r);
+	festate->temp_result = NULL;
 }
 
 /*
@@ -1316,7 +1609,6 @@ influxdbIterateForeignScan(ForeignScanState *node)
 	if (festate->rowidx == 0)
 	{
 		MemoryContext oldcontext = NULL;
-		int			i;
 
 		PG_TRY();
 		{
@@ -1340,21 +1632,9 @@ influxdbIterateForeignScan(ForeignScanState *node)
 			oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
 
 			festate->row_nums = result->nrow;
-			festate->rows = palloc(sizeof(Datum *) * result->nrow);
-			festate->rows_isnull = palloc(sizeof(bool *) * result->nrow);
-			for (i = 0; i < result->nrow; i++)
-			{
-				festate->rows[i] = palloc(sizeof(Datum) * tupleDescriptor->natts);
-				festate->rows_isnull[i] = palloc(sizeof(bool) * tupleDescriptor->natts);
-				make_tuple_from_result_row(&(result->rows[i]),
-										   (struct InfluxDBResult *) result,
-										   tupleDescriptor,
-										   festate->rows[i],
-										   festate->rows_isnull[i],
-										   rte->relid,
-										   festate,
-										   is_agg);
-			}
+
+			copyInfluxDBResult(festate, result);
+
 			MemoryContextSwitchTo(oldcontext);
 			InfluxDBFreeResult((InfluxDBResult *) result);
 		}
@@ -1375,11 +1655,27 @@ influxdbIterateForeignScan(ForeignScanState *node)
 
 	if (festate->rowidx < festate->row_nums)
 	{
-		memcpy(tupleSlot->tts_values, festate->rows[festate->rowidx], sizeof(Datum) * tupleDescriptor->natts);
-		memcpy(tupleSlot->tts_isnull, festate->rows_isnull[festate->rowidx], sizeof(bool) * tupleDescriptor->natts);
+		MemoryContext oldcontext = NULL;
 
-		pfree(festate->rows[festate->rowidx]);
-		pfree(festate->rows_isnull[festate->rowidx]);
+		result = (InfluxDBResult *)festate->temp_result;
+		make_tuple_from_result_row(&(result->rows[festate->rowidx]),
+								   (InfluxDBResult *)result,
+								   tupleDescriptor,
+								   tupleSlot->tts_values,
+								   tupleSlot->tts_isnull,
+								   rte->relid,
+								   festate,
+								   is_agg);
+		oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
+
+		freeInfluxDBResultRow(festate, festate->rowidx);
+
+		if (festate->rowidx == (festate->row_nums-1))
+		{
+			freeInfluxDBResult(festate);
+		}
+
+		MemoryContextSwitchTo(oldcontext);
 
 		ExecStoreVirtualTuple(tupleSlot);
 		festate->rowidx++;
@@ -2361,6 +2657,7 @@ influxdbImportForeignSchema(ImportForeignSchemaStmt *stmt,
 	struct TableInfo volatile *info;
 	int volatile info_len;
 	bool		import_time_text = false;
+	bool		schemaless = false;
 	struct InfluxDBSchemaInfo_return ret;
 
 	elog(DEBUG1, "influxdb_fdw : %s", __func__);
@@ -2371,6 +2668,8 @@ influxdbImportForeignSchema(ImportForeignSchemaStmt *stmt,
 
 		if (strcmp(def->defname, "import_time_text") == 0)
 			import_time_text = defGetBoolean(def);
+		else if (strcmp(def->defname, "schemaless") == 0)
+			schemaless = defGetBoolean(def);
 		else
 			ereport(ERROR,
 					(errcode(ERRCODE_FDW_INVALID_OPTION_NAME),
@@ -2437,22 +2736,32 @@ influxdbImportForeignSchema(ImportForeignSchemaStmt *stmt,
 			if (import_time_text)
 				appendStringInfo(&buf, ",\n%s text", INFLUXDB_TIME_TEXT_COLUMN);
 
-			for (col_idx = 0; col_idx < info[table_idx].tag_len; col_idx++)
+			if (!schemaless)
 			{
-				appendStringInfo(&buf, ",\n%s ", quote_identifier(info[table_idx].tag[col_idx]));
-				/* tag is always string type */
-				influxdb_to_pg_type(&buf, "string");
-			}
+				for (col_idx = 0; col_idx < info[table_idx].tag_len; col_idx++)
+				{
+					appendStringInfo(&buf, ",\n%s ", quote_identifier(info[table_idx].tag[col_idx]));
+					/* tag is always string type */
+					influxdb_to_pg_type(&buf, "string");
+				}
 
-			for (col_idx = 0; col_idx < info[table_idx].field_len; col_idx++)
+				for (col_idx = 0; col_idx < info[table_idx].field_len; col_idx++)
+				{
+					appendStringInfo(&buf, ",\n%s ", quote_identifier(info[table_idx].field[col_idx]));
+					influxdb_to_pg_type(&buf, info[table_idx].field_type[col_idx]);
+				}
+			}
+			else
 			{
-				appendStringInfo(&buf, ",\n%s ", quote_identifier(info[table_idx].field[col_idx]));
-				influxdb_to_pg_type(&buf, info[table_idx].field_type[col_idx]);
+				appendStringInfo(&buf, ",\n%s %s OPTIONS (tags 'true')", quote_identifier(INFLUXDB_TAGS_COLUMN), INFLUXDB_TAGS_PGTYPE);
+				appendStringInfo(&buf, ",\n%s %s OPTIONS (fields 'true')", quote_identifier(INFLUXDB_FIELDS_COLUMN), INFLUXDB_FIELDS_PGTYPE);
 			}
 
 			appendStringInfo(&buf, "\n) SERVER %s\nOPTIONS (table ",
 							 quote_identifier(stmt->server_name));
 			influxdb_deparse_string_literal(&buf, info[table_idx].measurement);
+			if (schemaless)
+				appendStringInfo(&buf, ", schemaless \'%s\'", schemaless ? "true" : "false");
 			if (info[table_idx].tag_len > 0)
 			{
 				bool		is_first = true;
@@ -2637,6 +2946,7 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel)
 		{
 			TargetEntry *tle;
 			ListCell   *tmplc;
+			char	   *slvar_name;
 
 			/*
 			 * If any of the GROUP BY expression is not shippable we can not
@@ -2644,6 +2954,17 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel)
 			 */
 			if (!influxdb_is_foreign_expr(root, grouped_rel, expr, true))
 				return false;
+
+			/*
+			 * In schema-less mode, remote key name should be extracted
+			 * from target for later use.
+			 */
+			slvar_name = influxdb_get_slvar(expr, &(ofpinfo->slinfo));
+			if (slvar_name)
+			{
+				if (!influxdb_is_tag_key(slvar_name, ofpinfo->table->relid))
+					return false;
+			}
 
 			/*
 			 * If any of grouping target expression is not tag key, we can not
@@ -2662,8 +2983,16 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel)
 			 * intervals, we can not push down any expression that other than
 			 * Var and FuncExpr nodes.
 			 */
-			if (!(IsA(expr, Var) || IsA(expr, FuncExpr)))
-				return false;
+			if (!ofpinfo->slinfo.schemaless)
+			{
+				if (!(IsA(expr, Var) || IsA(expr, FuncExpr)))
+					return false;
+			}
+			else
+			{
+				if (!(slvar_name || IsA(expr, FuncExpr)))
+					return false;
+			}
 
 			/* Pushable, add to tlist */
 			tlist = add_to_flat_tlist(tlist, list_make1(expr));
@@ -2732,18 +3061,28 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel)
 	{
 		TargetEntry *tle = lfirst_node(TargetEntry, lc);
 		bool		is_col_grouping_target = false;
+		bool		is_slvar = false;
 
 		if (IsA((Expr *) tle->expr, Var) || IsA((Expr *) tle->expr, FuncExpr))
 		{
 			is_col_grouping_target = influxdb_is_grouping_target(tle, query);
 		}
+
+		if (influxdb_is_slvar_fetch((Node *)tle->expr, &(fpinfo->slinfo)))
+			is_slvar = true;
+
+		if (is_slvar)
+		{
+			is_col_grouping_target = influxdb_is_grouping_target(tle, query);
+		}
+
 		if (influxdb_contain_regex_star_functions((Node *) tle->expr))
 			is_regex_star = true;
 
 		if (IsA((Expr *) tle->expr, Aggref)
-			|| IsA((Expr *) tle->expr, OpExpr)
+			|| (IsA((Expr *) tle->expr, OpExpr) && !is_slvar)
 			|| (IsA((Expr *) tle->expr, FuncExpr) && !is_col_grouping_target)
-			|| (IsA((Expr *) tle->expr, Var) && !is_col_grouping_target))
+			|| ((IsA((Expr *) tle->expr, Var) || is_slvar) && !is_col_grouping_target))
 			nSelect++;
 	}
 	if (is_regex_star && nSelect > 1)
@@ -3175,6 +3514,8 @@ add_foreign_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel,
 	fpinfo->server = ifpinfo->server;
 
 	fpinfo->shippable_extensions = ifpinfo->shippable_extensions;
+
+	influxdb_get_schemaless_info(&(fpinfo->slinfo), ifpinfo->slinfo.schemaless, fpinfo->table->relid);
 
 	/* Assess if it is safe to push down aggregation and grouping. */
 	if (!foreign_grouping_ok(root, grouped_rel))

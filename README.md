@@ -79,6 +79,159 @@ The influx_fill_numeric() and influx_fill_option() is embeded as last parameter 
 |influx_time(time, interval '2h', interval '1h', influx_fill_numeric(100))|time(2h, 1h) fill(100)|
 |influx_time(time, interval '2h', interval '1h', influx_fill_option('linear'))|time(2h,1h) fill(linear)|
 
+### Schemaless feature
+- The feature enables user to utilize schema-less feature of InfluxDB.
+- For example, without schemaless feature if a tag-key or field-key is added to InfluxDB measurement, user have to create corresponding foreign
+table in PostgreSQL. This feature eliminates this re-creation of foreign table.
+- `schemaless` foreign table option in influxdb_fdw:
+  - schemaless `true` enable schemaless mode.
+  - schemaless `false` disable schemaless mode.
+- `schemaless` option is supported in `IMPORT FOREIGN SCHEMA`.
+- If schemaless option is not configured, default value is `false`.
+- If schemaless is `false` or not configured, influxdb_fdw works as non-schemaless mode.
+
+Columns of foreign table in schemaless mode
+- The columns are fixed with names and types as below:
+  <pre>
+    (time timestamp with time zone, tags jsonb, fields jsonb)
+  </pre>
+- The tag and/or field keys of InfluxDB are represented by key-value column in PostgreSQL's `jsonb` type.
+- The columns are created with `tags` or `fields` foreign column options:
+  - tags `true` indicates this column as containing values of tags in InfluxDB measurement.
+  - fields `true` indicates this column as containing values of fields in InfluxDB measurement.
+- Creation of foreign table in schemaless mode, for example:
+  <pre>
+  -- Create foreign table
+  CREATE FOREIGN TABLE sc1(
+      time timestamp with time zone,
+      tags jsonb OPTIONS(tags 'true'),
+      fields jsonb OPTIONS (fields 'true')
+  )SERVER influxdb_svr OPTIONS(table 'sc1', tags 'device_id', schemaless 'true');
+
+  -- import foreign schema
+  IMPORT FOREIGN SCHEMA public FROM SERVER influxdb_svr INTO public OPTIONS (schemaless 'true');
+  </pre>
+
+Querying foreign tables:
+- Initialize data in InfluxDB.
+  <pre>
+  sc1,device_id=dev1 sig1=1i,sig2="a",sig3=1.1,sig4=true 0
+  sc1,device_id=dev2 sig1=2i,sig2="b",sig3=1.2,sig4=false 0
+  sc1,device_id=dev3 sig1=3i,sig2="c",sig3=1.3,sig4=false 0
+  sc1,device_id=dev1 sig1=4i,sig2="d",sig3=2.4,sig4=true 1
+  sc1,device_id=dev2 sig1=5i,sig2="e",sig3=2.5,sig4=false 1
+  sc1,device_id=dev3 sig1=6i,sig2="f",sig3=2.6,sig4=false 1
+  sc1,device_id=dev1 sig1=7i,sig2="g",sig3=3.7,sig4=true 2
+  sc1,device_id=dev2 sig1=8i,sig2="h",sig3=3.8,sig4=false 2
+  sc1,device_id=dev3 sig1=9i,sig2="i",sig3=3.9,sig4=false 2
+  </pre>
+
+- Get data through schemaless foreign table:
+  <pre>
+  
+  EXPLAIN VERBOSE
+  SELECT * FROM sc1;
+                              QUERY PLAN                             
+  --------------------------------------------------------------------
+  Foreign Scan on public.sc1  (cost=10.00..853.00 rows=853 width=72)
+    Output: "time", tags, fields
+    InfluxDB query: SELECT * FROM "sc1"
+  (3 rows)
+
+  SELECT * FROM sc1;
+            time          |         tags          |                           fields                           
+  ------------------------+-----------------------+------------------------------------------------------------
+  1970-01-01 09:00:00+09 | {"device_id": "dev1"} | {"sig1": "1", "sig2": "a", "sig3": "1.1", "sig4": "true"}
+  1970-01-01 09:00:00+09 | {"device_id": "dev2"} | {"sig1": "2", "sig2": "b", "sig3": "1.2", "sig4": "false"}
+  1970-01-01 09:00:00+09 | {"device_id": "dev3"} | {"sig1": "3", "sig2": "c", "sig3": "1.3", "sig4": "false"}
+  1970-01-01 09:00:00+09 | {"device_id": "dev1"} | {"sig1": "4", "sig2": "d", "sig3": "2.4", "sig4": "true"}
+  1970-01-01 09:00:00+09 | {"device_id": "dev2"} | {"sig1": "5", "sig2": "e", "sig3": "2.5", "sig4": "false"}
+  1970-01-01 09:00:00+09 | {"device_id": "dev3"} | {"sig1": "6", "sig2": "f", "sig3": "2.6", "sig4": "false"}
+  1970-01-01 09:00:00+09 | {"device_id": "dev1"} | {"sig1": "7", "sig2": "g", "sig3": "3.7", "sig4": "true"}
+  1970-01-01 09:00:00+09 | {"device_id": "dev2"} | {"sig1": "8", "sig2": "h", "sig3": "3.8", "sig4": "false"}
+  1970-01-01 09:00:00+09 | {"device_id": "dev3"} | {"sig1": "9", "sig2": "i", "sig3": "3.9", "sig4": "false"}
+  (9 rows)
+  </pre>
+
+Fetch values in jsonb expression:
+- Using `->>` jsonb arrow operator to fetch actual remote InfluxDB tag or fields keys from foreign schemaless columns.
+  User may cast type of the jsonb expression to get corresponding data representation.
+- For example, `fields->>'sig1'` expression of fetch value `sig1` is actual field key `sig1` in remote data source InfluxDB.
+- The jsonb expression can be pushed down in WHERE, GROUP BY, ORDER BY and aggregation.
+
+For examples:
+- Fetch all column based on all actual columns:
+  <pre>
+  
+  EXPLAIN VERBOSE
+  SELECT time,tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1;
+                                                                                              QUERY PLAN                                                                                              
+  -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  Foreign Scan on public.sc1  (cost=10.00..876.46 rows=853 width=89)
+    Output: "time", (tags ->> 'device_id'::text), ((fields ->> 'sig1'::text))::bigint, (fields ->> 'sig2'::text), ((fields ->> 'sig3'::text))::double precision, ((fields ->> 'sig4'::text))::boolean
+    InfluxDB query: SELECT "device_id", "sig1", "sig2", "sig3", "sig4" FROM "sc1"
+  (3 rows)
+
+  SELECT time,tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1;
+            time          | device_id | sig1 | sig2 | sig3 | sig4 
+  ------------------------+-----------+------+------+------+------
+  1970-01-01 09:00:00+09 | dev1      |    1 | a    |  1.1 | t
+  1970-01-01 09:00:00+09 | dev2      |    2 | b    |  1.2 | f
+  1970-01-01 09:00:00+09 | dev3      |    3 | c    |  1.3 | f
+  1970-01-01 09:00:00+09 | dev1      |    4 | d    |  2.4 | t
+  1970-01-01 09:00:00+09 | dev2      |    5 | e    |  2.5 | f
+  1970-01-01 09:00:00+09 | dev3      |    6 | f    |  2.6 | f
+  1970-01-01 09:00:00+09 | dev1      |    7 | g    |  3.7 | t
+  1970-01-01 09:00:00+09 | dev2      |    8 | h    |  3.8 | f
+  1970-01-01 09:00:00+09 | dev3      |    9 | i    |  3.9 | f
+  (9 rows)
+  </pre>
+
+- jsonb expression is pushed down in WHERE.
+  <pre>
+  
+  EXPLAIN VERBOSE
+  SELECT * FROM sc1 WHERE (fields->>'sig3')::double precision > 2;
+                              QUERY PLAN                             
+  --------------------------------------------------------------------
+  Foreign Scan on public.sc1  (cost=10.00..284.00 rows=284 width=72)
+    Output: "time", tags, fields
+    InfluxDB query: SELECT * FROM "sc1" WHERE (("sig3" > 2))
+  (3 rows)
+
+  SELECT * FROM sc1 WHERE (fields->>'sig3')::double precision > 2;
+            time          |         tags          |                           fields                           
+  ------------------------+-----------------------+------------------------------------------------------------
+  1970-01-01 09:00:00+09 | {"device_id": "dev1"} | {"sig1": "4", "sig2": "d", "sig3": "2.4", "sig4": "true"}
+  1970-01-01 09:00:00+09 | {"device_id": "dev2"} | {"sig1": "5", "sig2": "e", "sig3": "2.5", "sig4": "false"}
+  1970-01-01 09:00:00+09 | {"device_id": "dev3"} | {"sig1": "6", "sig2": "f", "sig3": "2.6", "sig4": "false"}
+  1970-01-01 09:00:00+09 | {"device_id": "dev1"} | {"sig1": "7", "sig2": "g", "sig3": "3.7", "sig4": "true"}
+  1970-01-01 09:00:00+09 | {"device_id": "dev2"} | {"sig1": "8", "sig2": "h", "sig3": "3.8", "sig4": "false"}
+  1970-01-01 09:00:00+09 | {"device_id": "dev3"} | {"sig1": "9", "sig2": "i", "sig3": "3.9", "sig4": "false"}
+  (6 rows)
+  </pre>
+
+- jsonb expression is pushed down in aggregate sum (remote) + tag + group by
+  <pre>
+  
+  EXPLAIN VERBOSE
+  SELECT sum((fields->>'sig1')::bigint),tags->>'device_id' device_id FROM sc1 GROUP BY tags->>'device_id';
+                                        QUERY PLAN                                      
+  --------------------------------------------------------------------------------------
+  Foreign Scan  (cost=1.00..1.00 rows=1 width=64)
+    Output: (sum(((fields ->> 'sig1'::text))::bigint)), ((tags ->> 'device_id'::text))
+    InfluxDB query: SELECT sum("sig1") FROM "sc1" GROUP BY ("device_id")
+  (3 rows)
+
+  SELECT sum((fields->>'sig1')::bigint),tags->>'device_id' device_id FROM sc1 GROUP BY tags->>'device_id';
+  sum | device_id 
+  -----+-----------
+    12 | dev1
+    15 | dev2
+    18 | dev3
+  (3 rows)
+  </pre>
+
 ### Others
 - InfluxDB FDW supports pushed down some aggregate functions: count, stddev, sum, max, min.
 - InfluxDB FDW supports INSERT, DELETE statements.
@@ -101,6 +254,68 @@ the number of points with field1 and field2 are different in InfluxDB database.
 - Conditions like `WHERE time + interval '1 day' < now()` do not work. Please use `WHERE time < now() - interval '1 day'`.
 
 When a query to foreign tables fails, you can find why it fails by seeing a query executed in InfluxDB with `EXPLAIN VERBOSE`.
+
+### The existence of null values depends on the target list in remote query in InfluxDB
+- If specific field keys are selected, InfluxDB does not return null values for any row that has null value.
+- In InfluxDB, `SELECT tag_keys` - selecting only tag keys does not return values, so some field keys are required to be selected.
+Current implementation of non-schemaless need arbitrary on field key added to remote select query. And this is a limitation of current influxdb_fdw, e.g. remote query: `SELECT tag_keys, field_key`. 
+Even though the field key has null values, this InfluxDB query does not return null values.
+- If all field key is selected by `SELECT *` in remote query, null values are returned by InfluxDB.
+
+For example:
+- Initialize data: 8 records are inserted.
+  <pre>
+  CREATE FOREIGN TABLE J2_TBL (
+    i integer,
+    k integer
+  ) SERVER influxdb_svr;
+
+  -- Insert data with some null values
+  INSERT INTO J2_TBL VALUES (1, -1);
+  INSERT INTO J2_TBL VALUES (2, 2);
+  INSERT INTO J2_TBL VALUES (3, -3);
+  INSERT INTO J2_TBL VALUES (2, 4);
+  INSERT INTO J2_TBL VALUES (5, -5);
+  INSERT INTO J2_TBL VALUES (5, -5);
+  INSERT INTO J2_TBL VALUES (0, NULL);
+  INSERT INTO J2_TBL VALUES (NULL, 0);
+  </pre>
+- Query in InfluxDB server by selecting specific field keys: 7 records are returned without null value.
+  <pre>
+  > SELECT k FROM j2_tbl;
+  name: j2_tbl
+  time k
+  ---- -
+  1    -1
+  2    2
+  3    -3
+  4    4
+  5    -5
+  6    -5
+  10   0
+  </pre>
+- Query in InfluxDB server by selecting all field key: 8 records are returned with null value.
+  <pre>
+  > SELECT * FROM j2_tbl;
+  name: j2_tbl
+  time i k
+  ---- - -
+  1    1 -1
+  2    2 2
+  3    3 -3
+  4    2 4
+  5    5 -5
+  6    5 -5
+  7    0 
+  10     0
+  </pre>
+
+### The targets list contains both functions and `fields` schemaless jsonb column
+- If the targets list contains both functions and `fields` schemaless jsonb column, the function is not pushed down.
+- For examples, if the target list contains:
+  - `fields, fields->>'c2', sqrt((fields->>'c1')::int)`: function `sqrt()` is not pushed down.
+  - `fields, sqrt((fields->>'c1')::int)`: function `sqrt()` is not pushed down.
+  - `fields->>'c2', sqrt((fields->>'c1')::int)`: there is no fields jsonb column, so function `sqrt()` is pushed down.
 
 ## Contributing
 Opening issues and pull requests on GitHub are welcome.

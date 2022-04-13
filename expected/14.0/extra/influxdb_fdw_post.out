@@ -3114,6 +3114,7 @@ RESET enable_nestloop;
 --Testcase 206:
 RESET enable_hashjoin;
 --Testcase 207:
+DELETE FROM local_tbl;
 DROP FOREIGN TABLE local_tbl;
 -- check join pushdown in situations where multiple userids are involved
 --Testcase 208:
@@ -7080,6 +7081,7 @@ SELECT * FROM foreign_tbl;
 --UPDATE rw_view SET b = b + 15; -- ok
 --SELECT * FROM foreign_tbl;
 --Testcase 506:
+DELETE FROM foreign_tbl;
 DROP FOREIGN TABLE foreign_tbl CASCADE;
 --Testcase 507:
 DROP TRIGGER row_before_insupd_trigger ON base_tbl;
@@ -8809,21 +8811,19 @@ CREATE SCHEMA import_influx1;
 IMPORT FOREIGN SCHEMA public FROM SERVER influxdb_svr INTO import_influx1;
 --Testcase 687:
 \det+ import_influx1.*
-                               List of foreign tables
-     Schema     |   Table   |    Server    |        FDW options        | Description 
-----------------+-----------+--------------+---------------------------+-------------
- import_influx1 | T1        | influxdb_svr | ("table" 'T1', tags 'c3') | 
- import_influx1 | T2        | influxdb_svr | ("table" 'T2', tags 'c2') | 
- import_influx1 | T3        | influxdb_svr | ("table" 'T3', tags 'c3') | 
- import_influx1 | T4        | influxdb_svr | ("table" 'T4', tags 'c3') | 
- import_influx1 | bar       | influxdb_svr | ("table" 'bar')           | 
- import_influx1 | base_tbl  | influxdb_svr | ("table" 'base_tbl')      | 
- import_influx1 | foo       | influxdb_svr | ("table" 'foo')           | 
- import_influx1 | loc1      | influxdb_svr | ("table" 'loc1')          | 
- import_influx1 | local_tbl | influxdb_svr | ("table" 'local_tbl')     | 
- import_influx1 | loct1     | influxdb_svr | ("table" 'loct1')         | 
- import_influx1 | loct2     | influxdb_svr | ("table" 'loct2')         | 
-(11 rows)
+                             List of foreign tables
+     Schema     | Table |    Server    |        FDW options        | Description 
+----------------+-------+--------------+---------------------------+-------------
+ import_influx1 | T1    | influxdb_svr | ("table" 'T1', tags 'c3') | 
+ import_influx1 | T2    | influxdb_svr | ("table" 'T2', tags 'c2') | 
+ import_influx1 | T3    | influxdb_svr | ("table" 'T3', tags 'c3') | 
+ import_influx1 | T4    | influxdb_svr | ("table" 'T4', tags 'c3') | 
+ import_influx1 | bar   | influxdb_svr | ("table" 'bar')           | 
+ import_influx1 | foo   | influxdb_svr | ("table" 'foo')           | 
+ import_influx1 | loc1  | influxdb_svr | ("table" 'loc1')          | 
+ import_influx1 | loct1 | influxdb_svr | ("table" 'loct1')         | 
+ import_influx1 | loct2 | influxdb_svr | ("table" 'loct2')         | 
+(9 rows)
 
 --Testcase 688:
 \d import_influx1.*
@@ -8878,15 +8878,6 @@ FDW options: ("table" 'T4', tags 'c3')
 Server: influxdb_svr
 FDW options: ("table" 'bar')
 
-                     Foreign table "import_influx1.base_tbl"
- Column |           Type           | Collation | Nullable | Default | FDW options 
---------+--------------------------+-----------+----------+---------+-------------
- time   | timestamp with time zone |           |          |         | 
- a      | bigint                   |           |          |         | 
- b      | bigint                   |           |          |         | 
-Server: influxdb_svr
-FDW options: ("table" 'base_tbl')
-
                         Foreign table "import_influx1.foo"
  Column |           Type           | Collation | Nullable | Default | FDW options 
 --------+--------------------------+-----------+----------+---------+-------------
@@ -8904,16 +8895,6 @@ FDW options: ("table" 'foo')
  f2     | text                     |           |          |         | 
 Server: influxdb_svr
 FDW options: ("table" 'loc1')
-
-                     Foreign table "import_influx1.local_tbl"
- Column |           Type           | Collation | Nullable | Default | FDW options 
---------+--------------------------+-----------+----------+---------+-------------
- time   | timestamp with time zone |           |          |         | 
- c1     | bigint                   |           |          |         | 
- c2     | bigint                   |           |          |         | 
- c3     | text                     |           |          |         | 
-Server: influxdb_svr
-FDW options: ("table" 'local_tbl')
 
                        Foreign table "import_influx1.loct1"
  Column |           Type           | Collation | Nullable | Default | FDW options 
@@ -8981,21 +8962,19 @@ IMPORT FOREIGN SCHEMA public EXCEPT ("T1", loct, nonesuch)
   FROM SERVER influxdb_svr INTO import_influx4;
 --Testcase 697:
 \det+ import_influx4.*
-                               List of foreign tables
-     Schema     |   Table   |    Server    |        FDW options        | Description 
-----------------+-----------+--------------+---------------------------+-------------
- import_influx4 | T1        | influxdb_svr | ("table" 'T1', tags 'c3') | 
- import_influx4 | T2        | influxdb_svr | ("table" 'T2', tags 'c2') | 
- import_influx4 | T3        | influxdb_svr | ("table" 'T3', tags 'c3') | 
- import_influx4 | T4        | influxdb_svr | ("table" 'T4', tags 'c3') | 
- import_influx4 | bar       | influxdb_svr | ("table" 'bar')           | 
- import_influx4 | base_tbl  | influxdb_svr | ("table" 'base_tbl')      | 
- import_influx4 | foo       | influxdb_svr | ("table" 'foo')           | 
- import_influx4 | loc1      | influxdb_svr | ("table" 'loc1')          | 
- import_influx4 | local_tbl | influxdb_svr | ("table" 'local_tbl')     | 
- import_influx4 | loct1     | influxdb_svr | ("table" 'loct1')         | 
- import_influx4 | loct2     | influxdb_svr | ("table" 'loct2')         | 
-(11 rows)
+                             List of foreign tables
+     Schema     | Table |    Server    |        FDW options        | Description 
+----------------+-------+--------------+---------------------------+-------------
+ import_influx4 | T1    | influxdb_svr | ("table" 'T1', tags 'c3') | 
+ import_influx4 | T2    | influxdb_svr | ("table" 'T2', tags 'c2') | 
+ import_influx4 | T3    | influxdb_svr | ("table" 'T3', tags 'c3') | 
+ import_influx4 | T4    | influxdb_svr | ("table" 'T4', tags 'c3') | 
+ import_influx4 | bar   | influxdb_svr | ("table" 'bar')           | 
+ import_influx4 | foo   | influxdb_svr | ("table" 'foo')           | 
+ import_influx4 | loc1  | influxdb_svr | ("table" 'loc1')          | 
+ import_influx4 | loct1 | influxdb_svr | ("table" 'loct1')         | 
+ import_influx4 | loct2 | influxdb_svr | ("table" 'loct2')         | 
+(9 rows)
 
 -- Assorted error cases
 IMPORT FOREIGN SCHEMA public FROM SERVER influxdb_svr INTO import_influx4;
@@ -9597,6 +9576,7 @@ SELECT COUNT(*) FROM ftable;
 --Testcase 728:
 DROP FOREIGN TABLE ftable;
 --Testcase 729:
+DELETE FROM batch_table;
 DROP FOREIGN TABLE batch_table;
 -- influxdb_fdw does not support partition insert
 -- Use partitioning
@@ -9964,6 +9944,62 @@ CREATE FOREIGN TABLE inv_bsz (c1 int )
 	SERVER influxdb_svr OPTIONS (batch_size '100$%$#$#');
 ERROR:  invalid value for integer option "batch_size": 100$%$#$#
 -- Clean-up
+delete from ft1;
+delete from ft2;
+delete from ft4;
+delete from ft5;
+delete from foo;
+delete from bar;
+delete from loct1;
+delete from loct2;
+delete from rem1;
+drop foreign table foo cascade;
+NOTICE:  drop cascades to foreign table foo2
+drop foreign table bar cascade;
+NOTICE:  drop cascades to foreign table bar2
+drop foreign table loct1;
+drop foreign table loct2;
+drop foreign table ft1;
+drop foreign table ft2;
+drop foreign table ft4;
+drop foreign table ft5;
+DROP TYPE IF EXISTS user_enum;
+DROP SCHEMA IF EXISTS "S 1" CASCADE;
+NOTICE:  drop cascades to 6 other objects
+DETAIL:  drop cascades to foreign table "S 1"."T 0"
+drop cascades to foreign table "S 1"."T 1"
+drop cascades to foreign table "S 1"."T 2"
+drop cascades to foreign table "S 1"."T 3"
+drop cascades to foreign table "S 1"."T 4"
+drop cascades to function "S 1".f_brtrig()
+DROP FUNCTION IF EXISTS trigger_func();
+DROP FUNCTION IF EXISTS trig_row_before_insupdate();
+DROP FUNCTION IF EXISTS trig_null();
+DROP SCHEMA IF EXISTS import_influx1 CASCADE;
+NOTICE:  drop cascades to 9 other objects
+DETAIL:  drop cascades to foreign table import_influx1."T1"
+drop cascades to foreign table import_influx1."T2"
+drop cascades to foreign table import_influx1."T3"
+drop cascades to foreign table import_influx1."T4"
+drop cascades to foreign table import_influx1.bar
+drop cascades to foreign table import_influx1.foo
+drop cascades to foreign table import_influx1.loc1
+drop cascades to foreign table import_influx1.loct1
+drop cascades to foreign table import_influx1.loct2
+DROP SCHEMA IF EXISTS import_influx2 CASCADE;
+DROP SCHEMA IF EXISTS import_influx3 CASCADE;
+DROP SCHEMA IF EXISTS import_influx4 CASCADE;
+NOTICE:  drop cascades to 9 other objects
+DETAIL:  drop cascades to foreign table import_influx4."T1"
+drop cascades to foreign table import_influx4."T2"
+drop cascades to foreign table import_influx4."T3"
+drop cascades to foreign table import_influx4."T4"
+drop cascades to foreign table import_influx4.bar
+drop cascades to foreign table import_influx4.foo
+drop cascades to foreign table import_influx4.loc1
+drop cascades to foreign table import_influx4.loct1
+drop cascades to foreign table import_influx4.loct2
+DROP TABLE IF EXISTS batch_cp_upd_test1;
 --Testcase 758:
 DROP USER MAPPING FOR public SERVER testserver1;
 --Testcase 759:
@@ -9974,17 +10010,8 @@ DROP USER MAPPING FOR CURRENT_USER SERVER influxdb_svr2;
 DROP SERVER testserver1 CASCADE;
 --Testcase 762:
 DROP SERVER influxdb_svr CASCADE;
-NOTICE:  drop cascades to 45 other objects
-DETAIL:  drop cascades to foreign table "S 1"."T 0"
-drop cascades to foreign table "S 1"."T 1"
-drop cascades to foreign table "S 1"."T 2"
-drop cascades to foreign table "S 1"."T 3"
-drop cascades to foreign table "S 1"."T 4"
-drop cascades to foreign table ft1
-drop cascades to foreign table ft2
-drop cascades to foreign table ft4
-drop cascades to foreign table ft5
-drop cascades to foreign table loct_empty
+NOTICE:  drop cascades to 8 other objects
+DETAIL:  drop cascades to foreign table loct_empty
 drop cascades to foreign table ft_empty
 drop cascades to foreign table loct3
 drop cascades to foreign table ft3
@@ -9992,34 +10019,6 @@ drop cascades to foreign table loc1
 drop cascades to foreign table rem1
 drop cascades to foreign table gloc1
 drop cascades to foreign table grem1
-drop cascades to foreign table loct1
-drop cascades to foreign table loct2
-drop cascades to foreign table foo
-drop cascades to foreign table foo2
-drop cascades to foreign table bar
-drop cascades to foreign table bar2
-drop cascades to foreign table import_influx1."T1"
-drop cascades to foreign table import_influx1."T2"
-drop cascades to foreign table import_influx1."T3"
-drop cascades to foreign table import_influx1."T4"
-drop cascades to foreign table import_influx1.bar
-drop cascades to foreign table import_influx1.base_tbl
-drop cascades to foreign table import_influx1.foo
-drop cascades to foreign table import_influx1.loc1
-drop cascades to foreign table import_influx1.local_tbl
-drop cascades to foreign table import_influx1.loct1
-drop cascades to foreign table import_influx1.loct2
-drop cascades to foreign table import_influx4."T1"
-drop cascades to foreign table import_influx4."T2"
-drop cascades to foreign table import_influx4."T3"
-drop cascades to foreign table import_influx4."T4"
-drop cascades to foreign table import_influx4.bar
-drop cascades to foreign table import_influx4.base_tbl
-drop cascades to foreign table import_influx4.foo
-drop cascades to foreign table import_influx4.loc1
-drop cascades to foreign table import_influx4.local_tbl
-drop cascades to foreign table import_influx4.loct1
-drop cascades to foreign table import_influx4.loct2
 --Testcase 763:
 DROP SERVER influxdb_svr2 CASCADE;
 NOTICE:  drop cascades to foreign table ft6
