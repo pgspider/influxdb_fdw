@@ -795,6 +795,7 @@ RESET enable_nestloop;
 --Testcase 206:
 RESET enable_hashjoin;
 --Testcase 207:
+DELETE FROM local_tbl;
 DROP FOREIGN TABLE local_tbl;
 
 -- check join pushdown in situations where multiple userids are involved
@@ -1916,6 +1917,7 @@ SELECT * FROM foreign_tbl;
 --SELECT * FROM foreign_tbl;
 
 --Testcase 506:
+DELETE FROM foreign_tbl;
 DROP FOREIGN TABLE foreign_tbl CASCADE;
 --Testcase 507:
 DROP TRIGGER row_before_insupd_trigger ON base_tbl;
@@ -3814,6 +3816,7 @@ SELECT COUNT(*) FROM ftable;
 --Testcase 728:
 DROP FOREIGN TABLE ftable;
 --Testcase 729:
+DELETE FROM batch_table;
 DROP FOREIGN TABLE batch_table;
 
 -- influxdb_fdw does not support partition insert
@@ -4176,6 +4179,35 @@ CREATE FOREIGN TABLE inv_bsz (c1 int )
 	SERVER influxdb_svr OPTIONS (batch_size '100$%$#$#');
 
 -- Clean-up
+delete from ft1;
+delete from ft2;
+delete from ft4;
+delete from ft5;
+delete from foo;
+delete from bar;
+delete from loct1;
+delete from loct2;
+delete from rem1;
+drop foreign table foo cascade;
+drop foreign table bar cascade;
+drop foreign table loct1;
+drop foreign table loct2;
+drop foreign table ft1;
+drop foreign table ft2;
+drop foreign table ft4;
+drop foreign table ft5;
+
+DROP TYPE IF EXISTS user_enum;
+DROP SCHEMA IF EXISTS "S 1" CASCADE;
+DROP FUNCTION IF EXISTS trigger_func();
+DROP FUNCTION IF EXISTS trig_row_before_insupdate();
+DROP FUNCTION IF EXISTS trig_null();
+DROP SCHEMA IF EXISTS import_influx1 CASCADE;
+DROP SCHEMA IF EXISTS import_influx2 CASCADE;
+DROP SCHEMA IF EXISTS import_influx3 CASCADE;
+DROP SCHEMA IF EXISTS import_influx4 CASCADE;
+DROP TABLE IF EXISTS batch_cp_upd_test1;
+
 --Testcase 758:
 DROP USER MAPPING FOR public SERVER testserver1;
 --Testcase 759:

@@ -1,0 +1,3359 @@
+\set ECHO none
+--Testcase 1:
+CREATE EXTENSION influxdb_fdw;
+--Testcase 2:
+CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw
+  OPTIONS (dbname 'coredb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
+--Testcase 3:
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
+--Testcase 4:
+CREATE FOREIGN TABLE onek (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 5:
+CREATE FOREIGN TABLE aggtest (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (table 'agg', schemaless 'true');
+--Testcase 6:
+CREATE FOREIGN TABLE student (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 7:
+CREATE FOREIGN TABLE tenk1 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (table 'tenk', schemaless 'true');
+--Testcase 8:
+CREATE FOREIGN TABLE INT8_TBL (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 9:
+CREATE FOREIGN TABLE INT8_TBL2 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 10:
+CREATE FOREIGN TABLE INT4_TBL (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 11:
+CREATE FOREIGN TABLE INT4_TBL2 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 12:
+CREATE FOREIGN TABLE INT4_TBL3 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 13:
+CREATE FOREIGN TABLE INT4_TBL4 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 14:
+CREATE FOREIGN TABLE multi_arg_agg (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 15:
+CREATE FOREIGN TABLE multi_arg_agg2 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 16:
+CREATE FOREIGN TABLE multi_arg_agg3 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 17:
+CREATE FOREIGN TABLE VARCHAR_TBL (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 18:
+CREATE FOREIGN TABLE FLOAT8_TBL (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--
+-- AGGREGATES
+--
+-- avoid bit-exact output here because operations may not be bit-exact.
+--Testcase 19:
+SET extra_float_digits = 0;
+--Testcase 20:
+SELECT avg((fields->>'four')::int4) AS avg_1 FROM onek;
+       avg_1        
+--------------------
+ 1.5000000000000000
+(1 row)
+
+--Testcase 21:
+SELECT avg((fields->>'a')::int2) AS avg_32 FROM aggtest WHERE (fields->>'a')::int2 < 100;
+       avg_32        
+---------------------
+ 32.6666666666666667
+(1 row)
+
+-- In 7.1, avg(float4) is computed using float8 arithmetic.
+-- Round the result to 3 digits to avoid platform-specific results.
+--Testcase 22:
+SELECT avg((fields->>'b')::float4)::numeric(10,3) AS avg_107_943 FROM aggtest;
+ avg_107_943 
+-------------
+     107.943
+(1 row)
+
+--Testcase 23:
+SELECT avg((fields->>'gpa')::float8) AS avg_3_4 FROM ONLY student;
+ avg_3_4 
+---------
+     3.4
+(1 row)
+
+--Testcase 24:
+SELECT sum((fields->>'four')::int4) AS sum_1500 FROM onek;
+ sum_1500 
+----------
+     1500
+(1 row)
+
+--Testcase 25:
+SELECT sum((fields->>'a')::int2) AS sum_198 FROM aggtest;
+ sum_198 
+---------
+     198
+(1 row)
+
+--Testcase 26:
+SELECT sum((fields->>'b')::float4) AS avg_431_773 FROM aggtest;
+ avg_431_773 
+-------------
+     431.773
+(1 row)
+
+--Testcase 27:
+SELECT sum((fields->>'gpa')::float8) AS avg_6_8 FROM ONLY student;
+ avg_6_8 
+---------
+     6.8
+(1 row)
+
+--Testcase 28:
+SELECT max((fields->>'four')::int4) AS max_3 FROM onek;
+ max_3 
+-------
+     3
+(1 row)
+
+--Testcase 29:
+SELECT max((fields->>'a')::int2) AS max_100 FROM aggtest;
+ max_100 
+---------
+     100
+(1 row)
+
+--Testcase 30:
+SELECT max((aggtest.fields->>'b')::float4) AS max_324_78 FROM aggtest;
+ max_324_78 
+------------
+     324.78
+(1 row)
+
+--Testcase 31:
+SELECT max((student.fields->>'gpa')::float8) AS max_3_7 FROM student;
+ max_3_7 
+---------
+     3.7
+(1 row)
+
+--Testcase 32:
+SELECT stddev_pop((fields->>'b')::float4) FROM aggtest;
+   stddev_pop    
+-----------------
+ 131.10703231895
+(1 row)
+
+--Testcase 33:
+SELECT stddev_samp((fields->>'b')::float4) FROM aggtest;
+   stddev_samp    
+------------------
+ 151.389360803998
+(1 row)
+
+--Testcase 34:
+SELECT var_pop((fields->>'b')::float4) FROM aggtest;
+     var_pop      
+------------------
+ 17189.0539234823
+(1 row)
+
+--Testcase 35:
+SELECT var_samp((fields->>'b')::float4) FROM aggtest;
+     var_samp     
+------------------
+ 22918.7385646431
+(1 row)
+
+--Testcase 36:
+SELECT stddev_pop((fields->>'b')::numeric) FROM aggtest;
+    stddev_pop    
+------------------
+ 131.107032862199
+(1 row)
+
+--Testcase 37:
+SELECT stddev_samp((fields->>'b')::numeric) FROM aggtest;
+   stddev_samp    
+------------------
+ 151.389361431288
+(1 row)
+
+--Testcase 38:
+SELECT var_pop((fields->>'b')::numeric) FROM aggtest;
+      var_pop       
+--------------------
+ 17189.054065929769
+(1 row)
+
+--Testcase 39:
+SELECT var_samp((fields->>'b')::numeric) FROM aggtest;
+      var_samp      
+--------------------
+ 22918.738754573025
+(1 row)
+
+-- population variance is defined for a single tuple, sample variance
+-- is not
+--Testcase 40:
+CREATE FOREIGN TABLE agg_t5 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 41:
+SELECT var_pop((fields->>'a')::float8), var_samp((fields->>'b')::float8) FROM agg_t5 WHERE (fields->>'id')::int = 1;
+ var_pop | var_samp 
+---------+----------
+       0 |         
+(1 row)
+
+--Testcase 42:
+SELECT stddev_pop((fields->>'a')::float8), stddev_samp((fields->>'b')::float8) FROM agg_t5 WHERE (fields->>'id')::int = 2;
+ stddev_pop | stddev_samp 
+------------+-------------
+          0 |            
+(1 row)
+
+--Testcase 43:
+SELECT var_pop((fields->>'a')::float8), var_samp((fields->>'b')::float8) FROM agg_t5 WHERE (fields->>'id')::int = 3;
+ var_pop | var_samp 
+---------+----------
+     NaN |         
+(1 row)
+
+--Testcase 44:
+SELECT stddev_pop((fields->>'a')::float8), stddev_samp((fields->>'b')::float8) FROM agg_t5 WHERE (fields->>'id')::int = 3;
+ stddev_pop | stddev_samp 
+------------+-------------
+        NaN |            
+(1 row)
+
+--Testcase 45:
+SELECT var_pop((fields->>'a')::float8), var_samp((fields->>'b')::float8) FROM agg_t5 WHERE (fields->>'id')::int = 4;
+ var_pop | var_samp 
+---------+----------
+     NaN |         
+(1 row)
+
+--Testcase 46:
+SELECT stddev_pop((fields->>'a')::float8), stddev_samp((fields->>'b')::float8) FROM agg_t5 WHERE (fields->>'id')::int = 4;
+ stddev_pop | stddev_samp 
+------------+-------------
+        NaN |            
+(1 row)
+
+--Testcase 47:
+SELECT var_pop((fields->>'a')::float4), var_samp((fields->>'b')::float4) FROM agg_t5 WHERE (fields->>'id')::int = 1;
+ var_pop | var_samp 
+---------+----------
+       0 |         
+(1 row)
+
+--Testcase 48:
+SELECT stddev_pop((fields->>'a')::float4), stddev_samp((fields->>'b')::float4) FROM agg_t5 WHERE (fields->>'id')::int = 2;
+ stddev_pop | stddev_samp 
+------------+-------------
+          0 |            
+(1 row)
+
+--Testcase 49:
+SELECT var_pop((fields->>'a')::float4), var_samp((fields->>'b')::float4) FROM agg_t5 WHERE (fields->>'id')::int = 3;
+ var_pop | var_samp 
+---------+----------
+     NaN |         
+(1 row)
+
+--Testcase 50:
+SELECT stddev_pop((fields->>'a')::float4), stddev_samp((fields->>'b')::float4) FROM agg_t5 WHERE (fields->>'id')::int = 3;
+ stddev_pop | stddev_samp 
+------------+-------------
+        NaN |            
+(1 row)
+
+--Testcase 51:
+SELECT var_pop((fields->>'a')::float4), var_samp((fields->>'b')::float4) FROM agg_t5 WHERE (fields->>'id')::int = 4;
+ var_pop | var_samp 
+---------+----------
+     NaN |         
+(1 row)
+
+--Testcase 52:
+SELECT stddev_pop((fields->>'a')::float4), stddev_samp((fields->>'b')::float4) FROM agg_t5 WHERE (fields->>'id')::int = 4;
+ stddev_pop | stddev_samp 
+------------+-------------
+        NaN |            
+(1 row)
+
+--Testcase 53:
+SELECT var_pop((fields->>'a')::numeric), var_samp((fields->>'b')::numeric) FROM agg_t5 WHERE (fields->>'id')::int = 1;
+ var_pop | var_samp 
+---------+----------
+       0 |         
+(1 row)
+
+--Testcase 54:
+SELECT stddev_pop((fields->>'a')::numeric), stddev_samp((fields->>'b')::numeric) FROM agg_t5 WHERE (fields->>'id')::int = 2;
+ stddev_pop | stddev_samp 
+------------+-------------
+          0 |            
+(1 row)
+
+--Testcase 55:
+SELECT var_pop((fields->>'a')::numeric), var_samp((fields->>'b')::numeric) FROM agg_t5 WHERE (fields->>'id')::int = 3;
+ var_pop | var_samp 
+---------+----------
+     NaN |         
+(1 row)
+
+--Testcase 56:
+SELECT stddev_pop((fields->>'a')::numeric), stddev_samp((fields->>'b')::numeric) FROM agg_t5 WHERE (fields->>'id')::int = 3;
+ stddev_pop | stddev_samp 
+------------+-------------
+        NaN |            
+(1 row)
+
+--Testcase 57:
+SELECT var_pop((fields->>'a')::numeric), var_samp((fields->>'b')::numeric) FROM agg_t5 WHERE (fields->>'id')::int = 4;
+ var_pop | var_samp 
+---------+----------
+     NaN |         
+(1 row)
+
+--Testcase 58:
+SELECT stddev_pop((fields->>'a')::numeric), stddev_samp((fields->>'b')::numeric) FROM agg_t5 WHERE (fields->>'id')::int = 4;
+ stddev_pop | stddev_samp 
+------------+-------------
+        NaN |            
+(1 row)
+
+-- verify correct results for null and NaN inputs
+--Testcase 59:
+create foreign table generate_series1 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 60:
+select sum(null::int4) from generate_series1;
+ sum 
+-----
+    
+(1 row)
+
+--Testcase 61:
+select sum(null::int8) from generate_series1;
+ sum 
+-----
+    
+(1 row)
+
+--Testcase 62:
+select sum(null::numeric) from generate_series1;
+ sum 
+-----
+    
+(1 row)
+
+--Testcase 63:
+select sum(null::float8) from generate_series1;
+ sum 
+-----
+    
+(1 row)
+
+--Testcase 64:
+select avg(null::int4) from generate_series1;
+ avg 
+-----
+    
+(1 row)
+
+--Testcase 65:
+select avg(null::int8) from generate_series1;
+ avg 
+-----
+    
+(1 row)
+
+--Testcase 66:
+select avg(null::numeric) from generate_series1;
+ avg 
+-----
+    
+(1 row)
+
+--Testcase 67:
+select avg(null::float8) from generate_series1;
+ avg 
+-----
+    
+(1 row)
+
+--Testcase 68:
+select sum('NaN'::numeric) from generate_series1;
+ sum 
+-----
+ NaN
+(1 row)
+
+--Testcase 69:
+select avg('NaN'::numeric) from generate_series1;
+ avg 
+-----
+ NaN
+(1 row)
+
+-- verify correct results for infinite inputs
+--Testcase 70:
+create foreign table infinite1 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 71:
+SELECT sum((fields->>'x')::float8), avg((fields->>'x')::float8), var_pop((fields->>'x')::float8)
+FROM infinite1 WHERE (fields->>'id')::int = 1;
+   sum    |   avg    | var_pop 
+----------+----------+---------
+ Infinity | Infinity |     NaN
+(1 row)
+
+--Testcase 72:
+SELECT sum((fields->>'x')::float8), avg((fields->>'x')::float8), var_pop((fields->>'x')::float8)
+FROM infinite1 WHERE (fields->>'id')::int = 2;
+   sum    |   avg    | var_pop 
+----------+----------+---------
+ Infinity | Infinity |     NaN
+(1 row)
+
+--Testcase 73:
+SELECT sum((fields->>'x')::float8), avg((fields->>'x')::float8), var_pop((fields->>'x')::float8)
+FROM infinite1 WHERE (fields->>'id')::int = 3;
+   sum    |   avg    | var_pop 
+----------+----------+---------
+ Infinity | Infinity |     NaN
+(1 row)
+
+--Testcase 74:
+SELECT sum((fields->>'x')::float8), avg((fields->>'x')::float8), var_pop((fields->>'x')::float8)
+FROM infinite1 WHERE (fields->>'id')::int = 4;
+ sum | avg | var_pop 
+-----+-----+---------
+ NaN | NaN |     NaN
+(1 row)
+
+--Testcase 75:
+SELECT sum((fields->>'x')::float8), avg((fields->>'x')::float8), var_pop((fields->>'x')::float8)
+FROM infinite1 WHERE (fields->>'id')::int = 5;
+    sum    |    avg    | var_pop 
+-----------+-----------+---------
+ -Infinity | -Infinity |     NaN
+(1 row)
+
+--Testcase 76:
+SELECT sum((fields->>'x')::numeric), avg((fields->>'x')::numeric), var_pop((fields->>'x')::numeric)
+FROM infinite1 WHERE (fields->>'id')::int = 1;
+   sum    |   avg    | var_pop 
+----------+----------+---------
+ Infinity | Infinity |     NaN
+(1 row)
+
+--Testcase 77:
+SELECT sum((fields->>'x')::numeric), avg((fields->>'x')::numeric), var_pop((fields->>'x')::numeric)
+FROM infinite1 WHERE (fields->>'id')::int = 2;
+   sum    |   avg    | var_pop 
+----------+----------+---------
+ Infinity | Infinity |     NaN
+(1 row)
+
+--Testcase 78:
+SELECT sum((fields->>'x')::numeric), avg((fields->>'x')::numeric), var_pop((fields->>'x')::numeric)
+FROM infinite1 WHERE (fields->>'id')::int = 3;
+   sum    |   avg    | var_pop 
+----------+----------+---------
+ Infinity | Infinity |     NaN
+(1 row)
+
+--Testcase 79:
+SELECT sum((fields->>'x')::numeric), avg((fields->>'x')::numeric), var_pop((fields->>'x')::numeric)
+FROM infinite1 WHERE (fields->>'id')::int = 4;
+ sum | avg | var_pop 
+-----+-----+---------
+ NaN | NaN |     NaN
+(1 row)
+
+--Testcase 80:
+SELECT sum((fields->>'x')::numeric), avg((fields->>'x')::numeric), var_pop((fields->>'x')::numeric)
+FROM infinite1 WHERE (fields->>'id')::int = 5;
+    sum    |    avg    | var_pop 
+-----------+-----------+---------
+ -Infinity | -Infinity |     NaN
+(1 row)
+
+-- test accuracy with a large input offset
+--Testcase 81:
+create foreign table large_input1 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 82:
+SELECT avg((fields->>'x')::float8), var_pop((fields->>'x')::float8)
+FROM large_input1 WHERE (fields->>'id')::int=1;
+    avg    | var_pop 
+-----------+---------
+ 100000005 |     2.5
+(1 row)
+
+--Testcase 83:
+SELECT avg((fields->>'x')::float8), var_pop((fields->>'x')::float8)
+FROM large_input1 WHERE (fields->>'id')::int=2;
+      avg      | var_pop 
+---------------+---------
+ 7000000000006 |       1
+(1 row)
+
+-- SQL2003 binary aggregates
+--Testcase 84:
+SELECT regr_count((fields->>'b')::float4, (fields->>'a')::int2) FROM aggtest;
+ regr_count 
+------------
+          4
+(1 row)
+
+--Testcase 85:
+SELECT regr_sxx((fields->>'b')::float4, (fields->>'a')::int2) FROM aggtest;
+ regr_sxx 
+----------
+     5099
+(1 row)
+
+--Testcase 86:
+SELECT regr_syy((fields->>'b')::float4, (fields->>'a')::int2) FROM aggtest;
+     regr_syy     
+------------------
+ 68756.2156939293
+(1 row)
+
+--Testcase 87:
+SELECT regr_sxy((fields->>'b')::float4, (fields->>'a')::int2) FROM aggtest;
+     regr_sxy     
+------------------
+ 2614.51582155004
+(1 row)
+
+--Testcase 88:
+SELECT regr_avgx((fields->>'b')::float4, (fields->>'a')::int2), regr_avgy((fields->>'b')::float4, (fields->>'a')::int2) FROM aggtest;
+ regr_avgx |    regr_avgy     
+-----------+------------------
+      49.5 | 107.943152273074
+(1 row)
+
+--Testcase 89:
+SELECT regr_r2((fields->>'b')::float4, (fields->>'a')::int2) FROM aggtest;
+      regr_r2       
+--------------------
+ 0.0194977982031803
+(1 row)
+
+--Testcase 90:
+SELECT regr_slope((fields->>'b')::float4, (fields->>'a')::int2), regr_intercept((fields->>'b')::float4, (fields->>'a')::int2) FROM aggtest;
+    regr_slope     |  regr_intercept  
+-------------------+------------------
+ 0.512750700441271 | 82.5619926012309
+(1 row)
+
+--Testcase 91:
+SELECT covar_pop((fields->>'b')::float4, (fields->>'a')::int2), covar_samp((fields->>'b')::float4, (fields->>'a')::int2) FROM aggtest;
+    covar_pop    |    covar_samp    
+-----------------+------------------
+ 653.62895538751 | 871.505273850014
+(1 row)
+
+--Testcase 92:
+SELECT corr((fields->>'b')::float4, (fields->>'a')::int2) FROM aggtest;
+       corr        
+-------------------
+ 0.139634516517873
+(1 row)
+
+-- check single-tuple behavior
+--Testcase 93:
+create foreign table agg_t4 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 94:
+SELECT covar_pop((fields->>'a')::float8,(fields->>'b')::float8), covar_samp((fields->>'c')::float8,(fields->>'d')::float8) FROM agg_t4 WHERE (fields->>'id')::int = 1;
+ covar_pop | covar_samp 
+-----------+------------
+         0 |           
+(1 row)
+
+--Testcase 95:
+SELECT covar_pop((fields->>'a')::float8,(fields->>'b')::float8), covar_samp((fields->>'c')::float8,(fields->>'d')::float8) FROM agg_t4 WHERE (fields->>'id')::int = 2;
+ covar_pop | covar_samp 
+-----------+------------
+       NaN |           
+(1 row)
+
+--Testcase 96:
+SELECT covar_pop((fields->>'a')::float8,(fields->>'b')::float8), covar_samp((fields->>'c')::float8,(fields->>'d')::float8) FROM agg_t4 WHERE (fields->>'id')::int = 3;
+ covar_pop | covar_samp 
+-----------+------------
+       NaN |           
+(1 row)
+
+-- test accum and combine functions directly
+--Testcase 97:
+CREATE FOREIGN TABLE regr_test (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 98:
+SELECT count(*), sum((fields->>'x')::float8), regr_sxx((fields->>'y')::float8,(fields->>'x')::float8), sum((fields->>'y')::float8),regr_syy((fields->>'y')::float8,(fields->>'x')::float8), regr_sxy((fields->>'y')::float8,(fields->>'x')::float8)
+FROM regr_test WHERE (fields->>'x')::int IN (10,20,30,80);
+ count | sum | regr_sxx | sum  | regr_syy | regr_sxy 
+-------+-----+----------+------+----------+----------
+     4 | 140 |     2900 | 1290 |    83075 |    15050
+(1 row)
+
+--Testcase 99:
+SELECT count(*), sum((fields->>'x')::float8), regr_sxx((fields->>'y')::float8,(fields->>'x')::float8), sum((fields->>'y')::float8),regr_syy((fields->>'y')::float8,(fields->>'x')::float8), regr_sxy((fields->>'y')::float8,(fields->>'x')::float8)
+FROM regr_test;
+ count | sum | regr_sxx | sum  | regr_syy | regr_sxy 
+-------+-----+----------+------+----------+----------
+     5 | 240 |     6280 | 1490 |    95080 |     8680
+(1 row)
+
+--Testcase 100:
+CREATE FOREIGN TABLE float8_arr (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 101:
+SELECT float8_accum((fields->>'x')::float8[], 100) FROM float8_arr WHERE (fields->>'id')::int=1;
+ float8_accum 
+--------------
+ {5,240,6280}
+(1 row)
+
+--Testcase 102:
+SELECT float8_regr_accum((fields->>'x')::float8[], 200, 100) FROM float8_arr WHERE (fields->>'id')::int=2;
+      float8_regr_accum       
+------------------------------
+ {5,240,6280,1490,95080,8680}
+(1 row)
+
+--Testcase 103:
+SELECT count(*), sum((fields->>'x')::float8), regr_sxx((fields->>'y')::float8,(fields->>'x')::float8), sum((fields->>'y')::float8),regr_syy((fields->>'y')::float8,(fields->>'x')::float8), regr_sxy((fields->>'y')::float8,(fields->>'x')::float8)
+FROM regr_test WHERE (fields->>'x')::int IN (10,20,30);
+ count | sum | regr_sxx | sum | regr_syy | regr_sxy 
+-------+-----+----------+-----+----------+----------
+     3 |  60 |      200 | 750 |    20000 |     2000
+(1 row)
+
+--Testcase 104:
+SELECT count(*), sum((fields->>'x')::float8), regr_sxx((fields->>'y')::float8,(fields->>'x')::float8), sum((fields->>'y')::float8),regr_syy((fields->>'y')::float8,(fields->>'x')::float8), regr_sxy((fields->>'y')::float8,(fields->>'x')::float8)
+FROM regr_test WHERE (fields->>'x')::int IN (80,100);
+ count | sum | regr_sxx | sum | regr_syy | regr_sxy 
+-------+-----+----------+-----+----------+----------
+     2 | 180 |      200 | 740 |    57800 |    -3400
+(1 row)
+
+--Testcase 105:
+SELECT float8_combine((fields->>'x')::float8[], (fields->>'y')::float8[]) FROM float8_arr WHERE (fields->>'id')::int=3;
+ float8_combine 
+----------------
+ {3,60,200}
+(1 row)
+
+--Testcase 106:
+SELECT float8_combine((fields->>'x')::float8[], (fields->>'y')::float8[]) FROM float8_arr WHERE (fields->>'id')::int=4;
+ float8_combine 
+----------------
+ {2,180,200}
+(1 row)
+
+--Testcase 107:
+SELECT float8_combine((fields->>'x')::float8[], (fields->>'y')::float8[]) FROM float8_arr WHERE (fields->>'id')::int=5;
+ float8_combine 
+----------------
+ {5,240,6280}
+(1 row)
+
+--Testcase 108:
+SELECT float8_regr_combine((fields->>'x')::float8[],(fields->>'y')::float8[]) FROM float8_arr WHERE (fields->>'id')::int=6;
+    float8_regr_combine    
+---------------------------
+ {3,60,200,750,20000,2000}
+(1 row)
+
+--Testcase 109:
+SELECT float8_regr_combine((fields->>'x')::float8[],(fields->>'y')::float8[]) FROM float8_arr WHERE (fields->>'id')::int=7;
+     float8_regr_combine     
+-----------------------------
+ {2,180,200,740,57800,-3400}
+(1 row)
+
+--Testcase 110:
+SELECT float8_regr_combine((fields->>'x')::float8[],(fields->>'y')::float8[]) FROM float8_arr WHERE (fields->>'id')::int=8;
+     float8_regr_combine      
+------------------------------
+ {5,240,6280,1490,95080,8680}
+(1 row)
+
+--Testcase 111:
+DROP FOREIGN TABLE regr_test;
+-- test count, distinct
+--Testcase 112:
+SELECT count((fields->>'four')::int4) AS cnt_1000 FROM onek;
+ cnt_1000 
+----------
+     1000
+(1 row)
+
+--Testcase 113:
+SELECT count(DISTINCT (fields->>'four')::int4) AS cnt_4 FROM onek;
+ cnt_4 
+-------
+     4
+(1 row)
+
+--Testcase 114:
+select (fields->>'ten')::int4 ten, count(*), sum((fields->>'four')::int4) from onek
+group by fields->>'ten' order by fields->>'ten';
+ ten | count | sum 
+-----+-------+-----
+   0 |   100 | 100
+   1 |   100 | 200
+   2 |   100 | 100
+   3 |   100 | 200
+   4 |   100 | 100
+   5 |   100 | 200
+   6 |   100 | 100
+   7 |   100 | 200
+   8 |   100 | 100
+   9 |   100 | 200
+(10 rows)
+
+--Testcase 115:
+select (fields->>'ten')::int4 ten, count((fields->>'four')::int4), sum(DISTINCT (fields->>'four')::int4) from onek
+group by fields->>'ten' order by fields->>'ten';
+ ten | count | sum 
+-----+-------+-----
+   0 |   100 |   2
+   1 |   100 |   4
+   2 |   100 |   2
+   3 |   100 |   4
+   4 |   100 |   2
+   5 |   100 |   4
+   6 |   100 |   2
+   7 |   100 |   4
+   8 |   100 |   2
+   9 |   100 |   4
+(10 rows)
+
+-- user-defined aggregates
+--Testcase 116:
+CREATE AGGREGATE newavg (
+  sfunc = int4_avg_accum, basetype = int4, stype = _int8,
+  finalfunc = int8_avg,
+  initcond1 = '{0,0}'
+);
+-- without finalfunc; test obsolete spellings 'sfunc1' etc
+--Testcase 117:
+CREATE AGGREGATE newsum (
+  sfunc1 = int4pl, basetype = int4, stype1 = int4,
+  initcond1 = '0'
+);
+-- zero-argument aggregate
+--Testcase 118:
+CREATE AGGREGATE newcnt (*) (
+  sfunc = int8inc, stype = int8,
+  initcond = '0', parallel = safe
+);
+-- old-style spelling of same (except without parallel-safe; that's too new)
+--Testcase 119:
+CREATE AGGREGATE oldcnt (
+  sfunc = int8inc, basetype = 'ANY', stype = int8,
+  initcond = '0'
+);
+-- aggregate that only cares about null/nonnull input
+--Testcase 120:
+CREATE AGGREGATE newcnt ("any") (
+  sfunc = int8inc_any, stype = int8,
+  initcond = '0'
+);
+-- multi-argument aggregate
+--Testcase 121:
+create function sum3(int8,int8,int8) returns int8 as
+'select $1 + $2 + $3' language sql strict immutable;
+--Testcase 122:
+create aggregate sum2(int8,int8) (
+  sfunc = sum3, stype = int8,
+  initcond = '0'
+);
+--Testcase 123:
+SELECT newavg((fields->>'four')::int4) AS avg_1 FROM onek;
+       avg_1        
+--------------------
+ 1.5000000000000000
+(1 row)
+
+--Testcase 124:
+SELECT newsum((fields->>'four')::int4) AS sum_1500 FROM onek;
+ sum_1500 
+----------
+     1500
+(1 row)
+
+--Testcase 125:
+SELECT newcnt((fields->>'four')::int4) AS cnt_1000 FROM onek;
+ cnt_1000 
+----------
+     1000
+(1 row)
+
+--Testcase 126:
+SELECT newcnt(*) AS cnt_1000 FROM onek;
+ cnt_1000 
+----------
+     1000
+(1 row)
+
+--Testcase 127:
+SELECT oldcnt(*) AS cnt_1000 FROM onek;
+ cnt_1000 
+----------
+     1000
+(1 row)
+
+--Testcase 128:
+SELECT sum2((fields->>'q1')::int8,(fields->>'q2')::int8) FROM int8_tbl;
+       sum2        
+-------------------
+ 18271560493827981
+(1 row)
+
+-- test for outer-level aggregates
+-- this should work
+--Testcase 129:
+select (fields->>'ten')::int4 ten, sum(distinct (fields->>'four')::int4) from onek a
+group by fields->>'ten'
+having exists (select 1 from onek b where sum(distinct (a.fields->>'four')::int4) = (b.fields->>'four')::int4);
+ ten | sum 
+-----+-----
+   0 |   2
+   2 |   2
+   4 |   2
+   6 |   2
+   8 |   2
+(5 rows)
+
+-- this should fail because subquery has an agg of its own in WHERE
+--Testcase 130:
+select (fields->>'ten')::int4 ten, sum(distinct (fields->>'four')::int4) from onek a
+group by fields->>'ten'
+having exists (select 1 from onek b
+               where sum(distinct (a.fields->>'four')::int4 + (b.fields->>'four')::int4) = (b.fields->>'four')::int4);
+ERROR:  aggregate functions are not allowed in WHERE
+LINE 4:                where sum(distinct (a.fields->>'four')::int4 ...
+                             ^
+-- Test handling of sublinks within outer-level aggregates.
+-- Per bug report from Daniel Grace.
+--Testcase 131:
+select
+  (select max((select (i.fields->>'unique2')::int4 from tenk1 i where (i.fields->>'unique1')::int = (o.fields->>'unique1')::int)))
+from tenk1 o;
+ max  
+------
+ 9999
+(1 row)
+
+-- Test handling of Params within aggregate arguments in hashed aggregation.
+-- Per bug report from Jeevan Chalke.
+--Testcase 132:
+explain (verbose, costs off)
+select (s1.fields->>'a')::int a, ss.a, sm
+from generate_series1 s1,
+     lateral (select (s2.fields->>'a')::int a, sum((s1.fields->>'a')::int + (s2.fields->>'a')::int) sm
+              from generate_series1 s2 group by s2.fields->>'a') ss
+order by 1, 2;
+                                                                                       QUERY PLAN                                                                                       
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: (((s1.fields ->> 'a'::text))::integer), ((((s2.fields ->> 'a'::text)))::integer), (sum((((s1.fields ->> 'a'::text))::integer + (((s2.fields ->> 'a'::text)))::integer)))
+   Sort Key: (((s1.fields ->> 'a'::text))::integer), ((((s2.fields ->> 'a'::text)))::integer)
+   ->  Nested Loop
+         Output: ((s1.fields ->> 'a'::text))::integer, ((((s2.fields ->> 'a'::text)))::integer), (sum((((s1.fields ->> 'a'::text))::integer + (((s2.fields ->> 'a'::text)))::integer)))
+         ->  Foreign Scan on public.generate_series1 s1
+               Output: s1.fields
+               InfluxDB query: SELECT * FROM "generate_series1"
+         ->  HashAggregate
+               Output: (((s2.fields ->> 'a'::text)))::integer, sum((((s1.fields ->> 'a'::text))::integer + (((s2.fields ->> 'a'::text)))::integer)), ((s2.fields ->> 'a'::text))
+               Group Key: (s2.fields ->> 'a'::text)
+               ->  Foreign Scan on public.generate_series1 s2
+                     Output: (s2.fields ->> 'a'::text), s2.fields
+                     InfluxDB query: SELECT * FROM "generate_series1"
+(14 rows)
+
+--Testcase 133:
+select (s1.fields->>'a')::int as s1, ss.a as s2, sm
+from generate_series1 s1,
+     lateral (select (s2.fields->>'a')::int a, sum((s1.fields->>'a')::int + (s2.fields->>'a')::int) sm
+              from generate_series1 s2 group by s2.fields->>'a') ss
+order by 1, 2;
+ s1 | s2 | sm 
+----+----+----
+  1 |  1 |  2
+  1 |  2 |  3
+  1 |  3 |  4
+  2 |  1 |  3
+  2 |  2 |  4
+  2 |  3 |  5
+  3 |  1 |  4
+  3 |  2 |  5
+  3 |  3 |  6
+(9 rows)
+
+--Testcase 134:
+explain (verbose, costs off)
+select array(select sum((x.fields->>'a')::int+(y.fields->>'a')::int) s
+            from generate_series1 y group by y.fields->>'a' order by s)
+  from generate_series1 x;
+                                                               QUERY PLAN                                                               
+----------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.generate_series1 x
+   Output: (SubPlan 1)
+   InfluxDB query: SELECT * FROM "generate_series1"
+   SubPlan 1
+     ->  Sort
+           Output: (sum((((x.fields ->> 'a'::text))::integer + (((y.fields ->> 'a'::text)))::integer))), ((y.fields ->> 'a'::text))
+           Sort Key: (sum((((x.fields ->> 'a'::text))::integer + (((y.fields ->> 'a'::text)))::integer)))
+           ->  HashAggregate
+                 Output: sum((((x.fields ->> 'a'::text))::integer + (((y.fields ->> 'a'::text)))::integer)), ((y.fields ->> 'a'::text))
+                 Group Key: (y.fields ->> 'a'::text)
+                 ->  Foreign Scan on public.generate_series1 y
+                       Output: (y.fields ->> 'a'::text), y.fields
+                       InfluxDB query: SELECT * FROM "generate_series1"
+(13 rows)
+
+--Testcase 135:
+select array(select sum((x.fields->>'a')::int+(y.fields->>'a')::int) s
+            from generate_series1 y group by y.fields->>'a' order by s)
+  from generate_series1 x;
+  array  
+---------
+ {2,3,4}
+ {3,4,5}
+ {4,5,6}
+(3 rows)
+
+--
+-- test for bitwise integer aggregates
+--
+--Testcase 136:
+CREATE FOREIGN TABLE bitwise_test_empty (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+-- empty case
+--Testcase 137:
+SELECT
+  BIT_AND((fields->>'i2')::INT2) AS "?",
+  BIT_OR((fields->>'i4')::INT4)  AS "?",
+  BIT_XOR((fields->>'i8')::INT8) AS "?"
+FROM bitwise_test_empty;
+ ? | ? | ? 
+---+---+---
+   |   |  
+(1 row)
+
+--Testcase 138:
+CREATE FOREIGN TABLE bitwise_test (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 139:
+SELECT
+  BIT_AND((fields->>'i2')::INT2) AS "1",
+  BIT_AND((fields->>'i4')::INT4) AS "1",
+  BIT_AND((fields->>'i8')::INT8) AS "1",
+  BIT_AND((fields->>'i')::INT)  AS "?",
+  BIT_AND((fields->>'x')::INT2)  AS "0",
+  BIT_AND((fields->>'y')::BIT(4))  AS "0100",
+  BIT_OR((fields->>'i2')::INT2)  AS "7",
+  BIT_OR((fields->>'i4')::INT4)  AS "7",
+  BIT_OR((fields->>'i8')::INT8)  AS "7",
+  BIT_OR((fields->>'i')::INT)   AS "?",
+  BIT_OR((fields->>'x')::INT2)   AS "7",
+  BIT_OR((fields->>'y')::BIT(4))   AS "1101",
+  BIT_XOR((fields->>'i2')::INT2) AS "5",
+  BIT_XOR((fields->>'i4')::INT4) AS "5",
+  BIT_XOR((fields->>'i8')::INT8) AS "5",
+  BIT_XOR((fields->>'i')::INT)  AS "?",
+  BIT_XOR((fields->>'x')::INT2)  AS "7",
+  BIT_XOR((fields->>'y')::BIT(4))  AS "1101"
+FROM bitwise_test;
+ 1 | 1 | 1 | ? | 0 | 0100 | 7 | 7 | 7 | ? | 7 | 1101 | 5 | 5 | 5 | ? | 7 | 1101 
+---+---+---+---+---+------+---+---+---+---+---+------+---+---+---+---+---+------
+ 1 | 1 | 1 | 1 | 0 | 0100 | 7 | 7 | 7 | 3 | 7 | 1101 | 5 | 5 | 5 | 2 | 7 | 1101
+(1 row)
+
+--
+-- test boolean aggregates
+--
+-- first test all possible transition and final states
+--Testcase 140:
+CREATE FOREIGN TABLE boolean1 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 141:
+SELECT
+  -- boolean and transitions
+  -- null because strict
+  booland_statefunc((fields->>'x1')::boolean, (fields->>'y1')::boolean)  IS NULL AS "t",
+  booland_statefunc((fields->>'x2')::boolean, (fields->>'y2')::boolean)  IS NULL AS "t",
+  booland_statefunc((fields->>'x3')::boolean, (fields->>'y3')::boolean) IS NULL AS "t",
+  booland_statefunc((fields->>'x4')::boolean, (fields->>'y4')::boolean)  IS NULL AS "t",
+  booland_statefunc((fields->>'x5')::boolean, (fields->>'y5')::boolean) IS NULL AS "t",
+  -- and actual computations
+  booland_statefunc((fields->>'x6')::boolean, (fields->>'y6')::boolean) AS "t",
+  NOT booland_statefunc((fields->>'x7')::boolean, (fields->>'y7')::boolean) AS "t",
+  NOT booland_statefunc((fields->>'x8')::boolean, (fields->>'y8')::boolean) AS "t",
+  NOT booland_statefunc((fields->>'x9')::boolean, (fields->>'y9')::boolean) AS "t" FROM boolean1;
+ t | t | t | t | t | t | t | t | t 
+---+---+---+---+---+---+---+---+---
+ t | t | t | t | t | t | t | t | t
+(1 row)
+
+--Testcase 142:
+SELECT
+  -- boolean or transitions
+  -- null because strict
+  boolor_statefunc((fields->>'x1')::boolean, (fields->>'y1')::boolean)  IS NULL AS "t",
+  boolor_statefunc((fields->>'x2')::boolean, (fields->>'y2')::boolean)  IS NULL AS "t",
+  boolor_statefunc((fields->>'x3')::boolean, (fields->>'y3')::boolean) IS NULL AS "t",
+  boolor_statefunc((fields->>'x4')::boolean, (fields->>'y4')::boolean)  IS NULL AS "t",
+  boolor_statefunc((fields->>'x5')::boolean, (fields->>'y5')::boolean) IS NULL AS "t",
+  -- actual computations
+  boolor_statefunc((fields->>'x6')::boolean, (fields->>'y6')::boolean) AS "t",
+  boolor_statefunc((fields->>'x7')::boolean, (fields->>'y7')::boolean) AS "t",
+  boolor_statefunc((fields->>'x8')::boolean, (fields->>'y8')::boolean) AS "t",
+  NOT boolor_statefunc((fields->>'x9')::boolean, (fields->>'y9')::boolean) AS "t" FROM boolean1;
+ t | t | t | t | t | t | t | t | t 
+---+---+---+---+---+---+---+---+---
+ t | t | t | t | t | t | t | t | t
+(1 row)
+
+--Testcase 143:
+CREATE FOREIGN TABLE bool_test_empty (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+-- empty case
+--Testcase 144:
+SELECT
+  BOOL_AND((fields->>'b1')::boolean)   AS "n",
+  BOOL_OR((fields->>'b3')::boolean)    AS "n"
+FROM bool_test_empty;
+ n | n 
+---+---
+   | 
+(1 row)
+
+--Testcase 145:
+CREATE FOREIGN TABLE bool_test (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 146:
+SELECT
+  BOOL_AND((fields->>'b1')::boolean)     AS "f",
+  BOOL_AND((fields->>'b2')::boolean)     AS "t",
+  BOOL_AND((fields->>'b3')::boolean)     AS "f",
+  BOOL_AND((fields->>'b4')::boolean)     AS "n",
+  BOOL_AND(NOT (fields->>'b2')::boolean) AS "f",
+  BOOL_AND(NOT (fields->>'b3')::boolean) AS "t"
+FROM bool_test;
+ f | t | f | n | f | t 
+---+---+---+---+---+---
+ f | t | f |   | f | t
+(1 row)
+
+--Testcase 147:
+SELECT
+  EVERY((fields->>'b1')::boolean)     AS "f",
+  EVERY((fields->>'b2')::boolean)     AS "t",
+  EVERY((fields->>'b3')::boolean)     AS "f",
+  EVERY((fields->>'b4')::boolean)     AS "n",
+  EVERY(NOT (fields->>'b2')::boolean) AS "f",
+  EVERY(NOT (fields->>'b3')::boolean) AS "t"
+FROM bool_test;
+ f | t | f | n | f | t 
+---+---+---+---+---+---
+ f | t | f |   | f | t
+(1 row)
+
+--Testcase 148:
+SELECT
+  BOOL_OR((fields->>'b1')::boolean)      AS "t",
+  BOOL_OR((fields->>'b2')::boolean)      AS "t",
+  BOOL_OR((fields->>'b3')::boolean)      AS "f",
+  BOOL_OR((fields->>'b4')::boolean)      AS "n",
+  BOOL_OR(NOT (fields->>'b2')::boolean)  AS "f",
+  BOOL_OR(NOT (fields->>'b3')::boolean)  AS "t"
+FROM bool_test;
+ t | t | f | n | f | t 
+---+---+---+---+---+---
+ t | t | f |   | f | t
+(1 row)
+
+--
+-- Test cases that should be optimized into indexscans instead of
+-- the generic aggregate implementation.
+--
+-- Basic cases
+--Testcase 149:
+explain (costs off)
+  select min((fields->>'unique1')::int4) from tenk1;
+  QUERY PLAN  
+--------------
+ Foreign Scan
+(1 row)
+
+--Testcase 150:
+select min((fields->>'unique1')::int4) from tenk1;
+ min 
+-----
+   0
+(1 row)
+
+--Testcase 151:
+explain (costs off)
+  select max((fields->>'unique1')::int4) from tenk1;
+  QUERY PLAN  
+--------------
+ Foreign Scan
+(1 row)
+
+--Testcase 152:
+select max((fields->>'unique1')::int4) from tenk1;
+ max  
+------
+ 9999
+(1 row)
+
+--Testcase 153:
+explain (costs off)
+  select max((fields->>'unique1')::int4) from tenk1 where (fields->>'unique1')::int4 < 42;
+  QUERY PLAN  
+--------------
+ Foreign Scan
+(1 row)
+
+--Testcase 154:
+select max((fields->>'unique1')::int4) from tenk1 where (fields->>'unique1')::int4 < 42;
+ max 
+-----
+  41
+(1 row)
+
+--Testcase 155:
+explain (costs off)
+  select max((fields->>'unique1')::int4) from tenk1 where (fields->>'unique1')::int4 > 42;
+  QUERY PLAN  
+--------------
+ Foreign Scan
+(1 row)
+
+--Testcase 156:
+select max((fields->>'unique1')::int4) from tenk1 where (fields->>'unique1')::int4 > 42;
+ max  
+------
+ 9999
+(1 row)
+
+-- the planner may choose a generic aggregate here if parallel query is
+-- enabled, since that plan will be parallel safe and the "optimized"
+-- plan, which has almost identical cost, will not be.  we want to test
+-- the optimized plan, so temporarily disable parallel query.
+begin;
+--Testcase 157:
+set local max_parallel_workers_per_gather = 0;
+--Testcase 158:
+explain (costs off)
+  select max((fields->>'unique1')::int4) from tenk1 where (fields->>'unique1')::int4 > 42000;
+  QUERY PLAN  
+--------------
+ Foreign Scan
+(1 row)
+
+--Testcase 159:
+select max((fields->>'unique1')::int4) from tenk1 where (fields->>'unique1')::int4 > 42000;
+ max 
+-----
+(0 rows)
+
+rollback;
+-- multi-column index (uses tenk1_thous_tenthous)
+--Testcase 160:
+explain (costs off)
+  select max((fields->>'tenthous')::int4) from tenk1 where (fields->>'thousand')::int4 = 33;
+  QUERY PLAN  
+--------------
+ Foreign Scan
+(1 row)
+
+--Testcase 161:
+select max((fields->>'tenthous')::int4) from tenk1 where (fields->>'thousand')::int4 = 33;
+ max  
+------
+ 9033
+(1 row)
+
+--Testcase 162:
+explain (costs off)
+  select min((fields->>'tenthous')::int4) from tenk1 where (fields->>'thousand')::int4 = 33;
+  QUERY PLAN  
+--------------
+ Foreign Scan
+(1 row)
+
+--Testcase 163:
+select min((fields->>'tenthous')::int4) from tenk1 where (fields->>'thousand')::int4 = 33;
+ min 
+-----
+  33
+(1 row)
+
+-- check parameter propagation into an indexscan subquery
+--Testcase 164:
+explain (costs off)
+  select (fields->>'f1')::int4 f1, (select min((fields->>'unique1')::int4) from tenk1 where (fields->>'unique1')::int4 > (int4_tbl.fields->>'f1')::int4) AS gt
+    from int4_tbl;
+        QUERY PLAN        
+--------------------------
+ Foreign Scan on int4_tbl
+   SubPlan 1
+     ->  Foreign Scan
+(3 rows)
+
+--Testcase 165:
+select (fields->>'f1')::int4 f1, (select min((fields->>'unique1')::int4) from tenk1 where (fields->>'unique1')::int4 > (int4_tbl.fields->>'f1')::int4) AS gt
+  from int4_tbl;
+     f1      | gt 
+-------------+----
+           0 |  1
+      123456 |   
+     -123456 |  0
+  2147483647 |   
+ -2147483647 |  0
+(5 rows)
+
+-- check some cases that were handled incorrectly in 8.3.0
+--Testcase 166:
+explain (costs off)
+  select distinct max((fields->>'unique2')::int4) from tenk1;
+                            QUERY PLAN                            
+------------------------------------------------------------------
+ Unique
+   ->  Sort
+         Sort Key: (max(((fields ->> 'unique2'::text))::integer))
+         ->  Foreign Scan
+(4 rows)
+
+--Testcase 167:
+select distinct max((fields->>'unique2')::int4) from tenk1;
+ max  
+------
+ 9999
+(1 row)
+
+--Testcase 168:
+explain (costs off)
+  select max((fields->>'unique2')::int4) from tenk1 order by 1;
+                         QUERY PLAN                         
+------------------------------------------------------------
+ Sort
+   Sort Key: (max(((fields ->> 'unique2'::text))::integer))
+   ->  Foreign Scan
+(3 rows)
+
+--Testcase 169:
+select max((fields->>'unique2')::int4) from tenk1 order by 1;
+ max  
+------
+ 9999
+(1 row)
+
+--Testcase 170:
+explain (costs off)
+  select max((fields->>'unique2')::int4) from tenk1 order by max((fields->>'unique2')::int4);
+                         QUERY PLAN                         
+------------------------------------------------------------
+ Sort
+   Sort Key: (max(((fields ->> 'unique2'::text))::integer))
+   ->  Foreign Scan
+(3 rows)
+
+--Testcase 171:
+select max((fields->>'unique2')::int4) from tenk1 order by max((fields->>'unique2')::int4);
+ max  
+------
+ 9999
+(1 row)
+
+--Testcase 172:
+explain (costs off)
+  select max((fields->>'unique2')::int4) from tenk1 order by max((fields->>'unique2')::int4)+1;
+                            QUERY PLAN                            
+------------------------------------------------------------------
+ Sort
+   Sort Key: ((max(((fields ->> 'unique2'::text))::integer) + 1))
+   ->  Foreign Scan
+(3 rows)
+
+--Testcase 173:
+select max((fields->>'unique2')::int4) from tenk1 order by max((fields->>'unique2')::int4)+1;
+ max  
+------
+ 9999
+(1 row)
+
+--Testcase 174:
+explain (costs off)
+  select max((fields->>'unique2')::int4), generate_series(1,3) as g from tenk1 order by g desc;
+                QUERY PLAN                
+------------------------------------------
+ Sort
+   Sort Key: (generate_series(1, 3)) DESC
+   ->  ProjectSet
+         ->  Foreign Scan
+(4 rows)
+
+--Testcase 175:
+select max((fields->>'unique2')::int4), generate_series(1,3) as g from tenk1 order by g desc;
+ max  | g 
+------+---
+ 9999 | 3
+ 9999 | 2
+ 9999 | 1
+(3 rows)
+
+-- interesting corner case: constant gets optimized into a seqscan
+--Testcase 176:
+explain (costs off)
+  select max(100) from tenk1;
+                     QUERY PLAN                     
+----------------------------------------------------
+ Result
+   InitPlan 1 (returns $0)
+     ->  Limit
+           ->  Result
+                 One-Time Filter: (100 IS NOT NULL)
+                 ->  Foreign Scan on tenk1
+(6 rows)
+
+--Testcase 177:
+select max(100) from tenk1;
+ max 
+-----
+ 100
+(1 row)
+
+-- try it on an inheritance tree
+--Testcase 178:
+create foreign table minmaxtest(fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+create foreign table minmaxtest_nsc(f1 int) server influxdb_svr OPTIONS (table 'minmaxtest');
+--Testcase 179:
+create table minmaxtest1() inherits (minmaxtest);
+--Testcase 180:
+create table minmaxtest2() inherits (minmaxtest);
+--Testcase 181:
+create table minmaxtest3() inherits (minmaxtest);
+--create index minmaxtesti on minmaxtest(f1);
+--Testcase 182:
+create index minmaxtest1i on minmaxtest1(((fields->>'f1')::int));
+--Testcase 183:
+create index minmaxtest2i on minmaxtest2(((fields->>'f1')::int) desc);
+--Testcase 184:
+create index minmaxtest3i on minmaxtest3(((fields->>'f1')::int)) where (fields->>'f1')::int is not null;
+--Insert data to InfluxDB through non-schemaless foreign table
+--Testcase 185:
+insert into minmaxtest_nsc values(11), (12);
+--Insert data to inherits schemaless tables
+--Testcase 186:
+insert into minmaxtest1 values('{"f1": "13"}'), ('{"f1": "14"}');
+--Testcase 187:
+insert into minmaxtest2 values('{"f1": "15"}'), ('{"f1": "16"}');
+--Testcase 188:
+insert into minmaxtest3 values('{"f1": "17"}'), ('{"f1": "18"}');
+--Testcase 189:
+explain (costs off)
+  select min((fields->>'f1')::int), max((fields->>'f1')::int) from minmaxtest;
+                     QUERY PLAN                      
+-----------------------------------------------------
+ Aggregate
+   ->  Append
+         ->  Foreign Scan on minmaxtest minmaxtest_1
+         ->  Seq Scan on minmaxtest1 minmaxtest_2
+         ->  Seq Scan on minmaxtest2 minmaxtest_3
+         ->  Seq Scan on minmaxtest3 minmaxtest_4
+(6 rows)
+
+--Testcase 190:
+select min((fields->>'f1')::int), max((fields->>'f1')::int) from minmaxtest;
+ min | max 
+-----+-----
+  11 |  18
+(1 row)
+
+-- DISTINCT doesn't do anything useful here, but it shouldn't fail
+--Testcase 191:
+explain (costs off)
+  select distinct min((fields->>'f1')::int), max((fields->>'f1')::int) from minmaxtest;
+                                                          QUERY PLAN                                                          
+------------------------------------------------------------------------------------------------------------------------------
+ Unique
+   ->  Sort
+         Sort Key: (min(((minmaxtest.fields ->> 'f1'::text))::integer)), (max(((minmaxtest.fields ->> 'f1'::text))::integer))
+         ->  Aggregate
+               ->  Append
+                     ->  Foreign Scan on minmaxtest minmaxtest_1
+                     ->  Seq Scan on minmaxtest1 minmaxtest_2
+                     ->  Seq Scan on minmaxtest2 minmaxtest_3
+                     ->  Seq Scan on minmaxtest3 minmaxtest_4
+(9 rows)
+
+--Testcase 192:
+select distinct min((fields->>'f1')::int), max((fields->>'f1')::int) from minmaxtest;
+ min | max 
+-----+-----
+  11 |  18
+(1 row)
+
+--Testcase 193:
+drop foreign table minmaxtest cascade;
+NOTICE:  drop cascades to 3 other objects
+DETAIL:  drop cascades to table minmaxtest1
+drop cascades to table minmaxtest2
+drop cascades to table minmaxtest3
+drop foreign table minmaxtest_nsc cascade;
+-- check for correct detection of nested-aggregate errors
+--Testcase 194:
+select max(min((fields->>'unique1')::int4)) from tenk1;
+ERROR:  aggregate function calls cannot be nested
+LINE 1: select max(min((fields->>'unique1')::int4)) from tenk1;
+                   ^
+--Testcase 195:
+select (select max(min((fields->>'unique1')::int4)) from int8_tbl) from tenk1;
+ERROR:  aggregate function calls cannot be nested
+LINE 1: select (select max(min((fields->>'unique1')::int4)) from int...
+                           ^
+--
+-- Test removal of redundant GROUP BY columns
+--
+--Testcase 196:
+create foreign table agg_t1 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 197:
+create foreign table agg_t2 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 198:
+create foreign table agg_t3 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+-- Non-primary-key columns can be removed from GROUP BY
+--Testcase 199:
+explain (costs off) select (fields->>'a')::int a,(fields->>'b')::int b,(fields->>'c')::int c,(fields->>'d')::int d from agg_t1 group by (fields->>'a')::int,(fields->>'b')::int,(fields->>'c')::int,(fields->>'d')::int;
+                                                                       QUERY PLAN                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate
+   Group Key: ((fields ->> 'a'::text))::integer, ((fields ->> 'b'::text))::integer, ((fields ->> 'c'::text))::integer, ((fields ->> 'd'::text))::integer
+   ->  Foreign Scan on agg_t1
+(3 rows)
+
+-- No removal can happen if the complete PK is not present in GROUP BY
+--Testcase 200:
+explain (costs off) select (fields->>'a')::int a,(fields->>'c')::int c from agg_t1 group by (fields->>'a')::int,(fields->>'c')::int,(fields->>'d')::int;
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ HashAggregate
+   Group Key: ((fields ->> 'a'::text))::integer, ((fields ->> 'c'::text))::integer, ((fields ->> 'd'::text))::integer
+   ->  Foreign Scan on agg_t1
+(3 rows)
+
+-- Test removal across multiple relations
+--Testcase 201:
+explain (costs off) select agg_t1.a, agg_t1.b, agg_t1.c, agg_t1.d, agg_t2.x, agg_t2.y, agg_t2.z 
+from (select (agg_t1.fields->>'a')::int a, (agg_t1.fields->>'b')::int b, (agg_t1.fields->>'c')::int c, (agg_t1.fields->>'d')::int d from agg_t1 agg_t1) agg_t1 inner join (select (agg_t2.fields->>'x')::int x, (agg_t2.fields->>'y')::int y, (agg_t2.fields->>'z')::int z from agg_t2 agg_t2) agg_t2 on (agg_t1.a)::int = (agg_t2.x)::int and (agg_t1.b)::int = (agg_t2.y)::int
+group by (agg_t1.a)::int,(agg_t1.b)::int,(agg_t1.c)::int,(agg_t1.d)::int,(agg_t2.x)::int,(agg_t2.y)::int,(agg_t2.z)::int;
+                                                                                                                                                           QUERY PLAN                                                                                                                                                            
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Group
+   Group Key: (((agg_t1.fields ->> 'a'::text))::integer), (((agg_t1.fields ->> 'b'::text))::integer), (((agg_t1.fields ->> 'c'::text))::integer), (((agg_t1.fields ->> 'd'::text))::integer), (((agg_t2.fields ->> 'x'::text))::integer), (((agg_t2.fields ->> 'y'::text))::integer), (((agg_t2.fields ->> 'z'::text))::integer)
+   ->  Incremental Sort
+         Sort Key: (((agg_t1.fields ->> 'a'::text))::integer), (((agg_t1.fields ->> 'b'::text))::integer), (((agg_t1.fields ->> 'c'::text))::integer), (((agg_t1.fields ->> 'd'::text))::integer), (((agg_t2.fields ->> 'z'::text))::integer)
+         Presorted Key: (((agg_t1.fields ->> 'a'::text))::integer), (((agg_t1.fields ->> 'b'::text))::integer)
+         ->  Merge Join
+               Merge Cond: (((((agg_t1.fields ->> 'a'::text))::integer) = (((agg_t2.fields ->> 'x'::text))::integer)) AND ((((agg_t1.fields ->> 'b'::text))::integer) = (((agg_t2.fields ->> 'y'::text))::integer)))
+               ->  Sort
+                     Sort Key: (((agg_t1.fields ->> 'a'::text))::integer), (((agg_t1.fields ->> 'b'::text))::integer)
+                     ->  Foreign Scan on agg_t1
+               ->  Sort
+                     Sort Key: (((agg_t2.fields ->> 'x'::text))::integer), (((agg_t2.fields ->> 'y'::text))::integer)
+                     ->  Foreign Scan on agg_t2
+(13 rows)
+
+-- Test case where agg_t1 can be optimized but not agg_t2
+--Testcase 202:
+explain (costs off) select agg_t1.*,agg_t2.x, agg_t2.z
+from (select (agg_t1.fields->>'a')::int a, (agg_t1.fields->>'b')::int b, (agg_t1.fields->>'c')::int c, (agg_t1.fields->>'d')::int d from agg_t1 agg_t1) agg_t1 inner join (select (agg_t2.fields->>'x')::int x, (agg_t2.fields->>'y')::int y, (agg_t2.fields->>'z')::int z from agg_t2 agg_t2) agg_t2 on (agg_t1.a)::int = (agg_t2.x)::int and (agg_t1.b)::int = (agg_t2.y)::int
+group by (agg_t1.a)::int,(agg_t1.b)::int,(agg_t1.c)::int,(agg_t1.d)::int,(agg_t2.x)::int,(agg_t2.z)::int;
+                                                                                                                                     QUERY PLAN                                                                                                                                      
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Group
+   Group Key: (((agg_t1.fields ->> 'a'::text))::integer), (((agg_t1.fields ->> 'b'::text))::integer), (((agg_t1.fields ->> 'c'::text))::integer), (((agg_t1.fields ->> 'd'::text))::integer), (((agg_t2.fields ->> 'x'::text))::integer), (((agg_t2.fields ->> 'z'::text))::integer)
+   ->  Incremental Sort
+         Sort Key: (((agg_t1.fields ->> 'a'::text))::integer), (((agg_t1.fields ->> 'b'::text))::integer), (((agg_t1.fields ->> 'c'::text))::integer), (((agg_t1.fields ->> 'd'::text))::integer), (((agg_t2.fields ->> 'z'::text))::integer)
+         Presorted Key: (((agg_t1.fields ->> 'a'::text))::integer), (((agg_t1.fields ->> 'b'::text))::integer)
+         ->  Merge Join
+               Merge Cond: (((((agg_t1.fields ->> 'a'::text))::integer) = (((agg_t2.fields ->> 'x'::text))::integer)) AND ((((agg_t1.fields ->> 'b'::text))::integer) = (((agg_t2.fields ->> 'y'::text))::integer)))
+               ->  Sort
+                     Sort Key: (((agg_t1.fields ->> 'a'::text))::integer), (((agg_t1.fields ->> 'b'::text))::integer)
+                     ->  Foreign Scan on agg_t1
+               ->  Sort
+                     Sort Key: (((agg_t2.fields ->> 'x'::text))::integer), (((agg_t2.fields ->> 'y'::text))::integer)
+                     ->  Foreign Scan on agg_t2
+(13 rows)
+
+-- Cannot optimize when PK is deferrable
+--Testcase 203:
+explain (costs off) select (fields->>'a')::int a,(fields->>'b')::int b,(fields->>'c')::int c from agg_t3 group by (fields->>'a')::int,(fields->>'b')::int,(fields->>'c')::int;
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ HashAggregate
+   Group Key: ((fields ->> 'a'::text))::integer, ((fields ->> 'b'::text))::integer, ((fields ->> 'c'::text))::integer
+   ->  Foreign Scan on agg_t3
+(3 rows)
+
+--Testcase 204:
+create temp table agg_t1c () inherits (agg_t1);
+-- Ensure we don't remove any columns when agg_t1 has a child table
+--Testcase 205:
+explain (costs off) select (fields->>'a')::int a,(fields->>'b')::int b,(fields->>'c')::int c,(fields->>'d')::int d from agg_t1 group by (fields->>'a')::int,(fields->>'b')::int,(fields->>'c')::int,(fields->>'d')::int;
+                                                                                     QUERY PLAN                                                                                      
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate
+   Group Key: ((agg_t1.fields ->> 'a'::text))::integer, ((agg_t1.fields ->> 'b'::text))::integer, ((agg_t1.fields ->> 'c'::text))::integer, ((agg_t1.fields ->> 'd'::text))::integer
+   ->  Result
+         ->  Append
+               ->  Foreign Scan on agg_t1 agg_t1_1
+               ->  Seq Scan on agg_t1c agg_t1_2
+(6 rows)
+
+-- Okay to remove columns if we're only querying the parent.
+--Testcase 206:
+explain (costs off) select (fields->>'a')::int a,(fields->>'b')::int b,(fields->>'c')::int c,(fields->>'d')::int d from only agg_t1 group by (fields->>'a')::int,(fields->>'b')::int,(fields->>'c')::int,(fields->>'d')::int;
+                                                                       QUERY PLAN                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate
+   Group Key: ((fields ->> 'a'::text))::integer, ((fields ->> 'b'::text))::integer, ((fields ->> 'c'::text))::integer, ((fields ->> 'd'::text))::integer
+   ->  Foreign Scan on agg_t1
+(3 rows)
+
+--Testcase 207:
+create temp table p_agg_t1 (
+  a int,
+  b int,
+  c int,
+  d int,
+  primary key(a,b)
+) partition by list(a);
+--Testcase 208:
+create temp table p_agg_t1_1 partition of p_agg_t1 for values in(1);
+--Testcase 209:
+create temp table p_agg_t1_2 partition of p_agg_t1 for values in(2);
+-- Ensure we can remove non-PK columns for partitioned tables.
+--Testcase 210:
+explain (costs off) select * from p_agg_t1 group by a,b,c,d;
+             QUERY PLAN              
+-------------------------------------
+ HashAggregate
+   Group Key: p_agg_t1.a, p_agg_t1.b
+   ->  Append
+         ->  Seq Scan on p_agg_t1_1
+         ->  Seq Scan on p_agg_t1_2
+(5 rows)
+
+--Testcase 211:
+drop foreign table agg_t1 cascade;
+NOTICE:  drop cascades to table agg_t1c
+--Testcase 212:
+drop foreign table agg_t2 cascade;
+--Testcase 213:
+drop foreign table agg_t3 cascade;
+--Testcase 214:
+drop table p_agg_t1;
+--
+-- Test GROUP BY matching of join columns that are type-coerced due to USING
+--
+--Testcase 215:
+create foreign table agg_t1 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 216:
+create foreign table agg_t2 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 217:
+select f1 from (select (fields->>'f1')::int f1, (fields->>'f2')::bigint f2 from agg_t1) agg_t1 left join (select (fields->>'f1')::bigint f1, (fields->>'f22')::bigint f22 from agg_t2) agg_t2 using (f1) group by f1;
+ f1 
+----
+(0 rows)
+
+--Testcase 218:
+select f1 from (select (fields->>'f1')::int f1, (fields->>'f2')::bigint f2 from agg_t1) agg_t1 left join (select (fields->>'f1')::bigint f1, (fields->>'f22')::bigint f22 from agg_t2) agg_t2 using (f1) group by agg_t1.f1;
+ f1 
+----
+(0 rows)
+
+--Testcase 219:
+select (agg_t1.fields->>'f1')::int f1 from agg_t1 left join (select (fields->>'f1')::bigint f1, (fields->>'f22')::bigint f22 from agg_t2) agg_t2 on (agg_t1.fields->>'f1')::bigint = (agg_t2.f1)::bigint group by (agg_t1.fields->>'f1')::int;
+ f1 
+----
+(0 rows)
+
+-- only this one should fail:
+--Testcase 220:
+select (agg_t1.fields->>'f1')::int f1 from agg_t1 left join (select (fields->>'f1')::bigint f1, (fields->>'f22')::bigint f22 from agg_t2) agg_t2 on (agg_t1.fields->>'f1')::bigint = (agg_t2.f1)::bigint group by f1;
+ERROR:  column "agg_t1.fields" must appear in the GROUP BY clause or be used in an aggregate function
+LINE 1: select (agg_t1.fields->>'f1')::int f1 from agg_t1 left join ...
+                ^
+--Testcase 221:
+drop foreign table agg_t1 cascade;
+--Testcase 222:
+drop foreign table agg_t2 cascade;
+--
+-- Test combinations of DISTINCT and/or ORDER BY
+--
+begin;
+--Testcase 223:
+select array_agg(fields->>'q1' order by (fields->>'q2')::int8)
+  from INT8_TBL2;
+ array_agg 
+-----------
+ {3,4,2,1}
+(1 row)
+
+--Testcase 224:
+select array_agg(fields->>'q1' order by (fields->>'q1')::int8)
+  from INT8_TBL2;
+ array_agg 
+-----------
+ {1,2,3,4}
+(1 row)
+
+--Testcase 225:
+select array_agg(fields->>'q1' order by (fields->>'q1')::int8 desc)
+  from INT8_TBL2;
+ array_agg 
+-----------
+ {4,3,2,1}
+(1 row)
+
+--Testcase 226:
+select array_agg(fields->>'q2' order by (fields->>'q1')::int8 desc)
+  from INT8_TBL2;
+ array_agg 
+-----------
+ {2,1,3,4}
+(1 row)
+
+--Testcase 227:
+select array_agg(distinct (fields->>'f1')::int4)
+  from INT4_TBL2;
+ array_agg 
+-----------
+ {1,2,3}
+(1 row)
+
+--Testcase 228:
+select array_agg(distinct (fields->>'f1')::int4 order by (fields->>'f1')::int4)
+  from INT4_TBL2;
+ array_agg 
+-----------
+ {1,2,3}
+(1 row)
+
+--Testcase 229:
+select array_agg(distinct (fields->>'f1')::int4 order by (fields->>'f1')::int4 desc)
+  from INT4_TBL2;
+ array_agg 
+-----------
+ {3,2,1}
+(1 row)
+
+--Testcase 230:
+select array_agg(distinct (fields->>'f1')::int4 order by (fields->>'f1')::int4 desc nulls last)
+  from INT4_TBL2;
+ array_agg 
+-----------
+ {3,2,1}
+(1 row)
+
+rollback;
+-- multi-arg aggs, strict/nonstrict, distinct/order by
+--Testcase 231:
+create type aggtype as (a integer, b integer, c text);
+--Testcase 232:
+create function aggf_trans(aggtype[],integer,integer,text) returns aggtype[]
+as 'select array_append($1,ROW($2,$3,$4)::aggtype)'
+language sql strict immutable;
+--Testcase 233:
+create function aggfns_trans(aggtype[],integer,integer,text) returns aggtype[]
+as 'select array_append($1,ROW($2,$3,$4)::aggtype)'
+language sql immutable;
+--Testcase 234:
+create aggregate aggfstr(integer,integer,text) (
+   sfunc = aggf_trans, stype = aggtype[],
+   initcond = '{}'
+);
+--Testcase 235:
+create aggregate aggfns(integer,integer,text) (
+   sfunc = aggfns_trans, stype = aggtype[], sspace = 10000,
+   initcond = '{}'
+);
+begin;
+--Testcase 236:
+select aggfstr((fields->>'a')::int,(fields->>'b')::int,fields->>'c')
+  from multi_arg_agg;
+                aggfstr                
+---------------------------------------
+ {"(1,3,foo)","(2,2,bar)","(3,1,baz)"}
+(1 row)
+
+--Testcase 237:
+select aggfns((fields->>'a')::int,(fields->>'b')::int,fields->>'c')
+  from multi_arg_agg;
+                    aggfns                     
+-----------------------------------------------
+ {"(1,3,foo)","(0,,)","(2,2,bar)","(3,1,baz)"}
+(1 row)
+
+--Testcase 238:
+select aggfstr(distinct (fields->>'a')::int,(fields->>'b')::int,fields->>'c')
+  from multi_arg_agg,
+       generate_series(1,3) i;
+                aggfstr                
+---------------------------------------
+ {"(1,3,foo)","(2,2,bar)","(3,1,baz)"}
+(1 row)
+
+--Testcase 239:
+select aggfns(distinct (fields->>'a')::int,(fields->>'b')::int,fields->>'c')
+  from multi_arg_agg,
+       generate_series(1,3) i;
+                    aggfns                     
+-----------------------------------------------
+ {"(0,,)","(1,3,foo)","(2,2,bar)","(3,1,baz)"}
+(1 row)
+
+--Testcase 240:
+select aggfstr(distinct (fields->>'a')::int,(fields->>'b')::int,fields->>'c' order by (fields->>'b')::int)
+  from multi_arg_agg, 
+       generate_series(1,3) i;
+                aggfstr                
+---------------------------------------
+ {"(3,1,baz)","(2,2,bar)","(1,3,foo)"}
+(1 row)
+
+--Testcase 241:
+select aggfns(distinct (fields->>'a')::int,(fields->>'b')::int,fields->>'c' order by (fields->>'b')::int)
+  from multi_arg_agg,
+       generate_series(1,3) i;
+                    aggfns                     
+-----------------------------------------------
+ {"(3,1,baz)","(2,2,bar)","(1,3,foo)","(0,,)"}
+(1 row)
+
+-- test specific code paths
+--Testcase 242:
+select aggfns(distinct (fields->>'a')::int,(fields->>'a')::int,fields->>'c' order by fields->>'c' using ~<~,(fields->>'a')::int)
+  from multi_arg_agg,
+       generate_series(1,2) i;
+                     aggfns                     
+------------------------------------------------
+ {"(2,2,bar)","(3,3,baz)","(1,1,foo)","(0,0,)"}
+(1 row)
+
+--Testcase 243:
+select aggfns(distinct (fields->>'a')::int,(fields->>'a')::int,fields->>'c' order by fields->>'c' using ~<~)
+  from multi_arg_agg,
+       generate_series(1,2) i;
+                     aggfns                     
+------------------------------------------------
+ {"(2,2,bar)","(3,3,baz)","(1,1,foo)","(0,0,)"}
+(1 row)
+
+--Testcase 244:
+select aggfns(distinct (fields->>'a')::int,(fields->>'a')::int,fields->>'c' order by (fields->>'a')::int)
+  from multi_arg_agg,
+       generate_series(1,2) i;
+                     aggfns                     
+------------------------------------------------
+ {"(0,0,)","(1,1,foo)","(2,2,bar)","(3,3,baz)"}
+(1 row)
+
+--Testcase 245:
+select aggfns(distinct (fields->>'a')::int,(fields->>'b')::int,fields->>'c' order by (fields->>'a')::int,fields->>'c' using ~<~,(fields->>'b')::int)
+  from multi_arg_agg,
+       generate_series(1,2) i;
+                    aggfns                     
+-----------------------------------------------
+ {"(0,,)","(1,3,foo)","(2,2,bar)","(3,1,baz)"}
+(1 row)
+
+-- check node I/O via view creation and usage, also deparsing logic
+--Testcase 246:
+create view agg_view1 as
+  select aggfns((fields->>'a')::int,(fields->>'b')::int,fields->>'c')
+    from multi_arg_agg;
+--Testcase 247:
+select * from agg_view1;
+                    aggfns                     
+-----------------------------------------------
+ {"(1,3,foo)","(0,,)","(2,2,bar)","(3,1,baz)"}
+(1 row)
+
+--Testcase 248:
+select pg_get_viewdef('agg_view1'::regclass);
+                                                                          pg_get_viewdef                                                                          
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT aggfns(((multi_arg_agg.fields ->> 'a'::text))::integer, ((multi_arg_agg.fields ->> 'b'::text))::integer, (multi_arg_agg.fields ->> 'c'::text)) AS aggfns+
+    FROM multi_arg_agg;
+(1 row)
+
+--Testcase 249:
+create or replace view agg_view1 as
+  select aggfns(distinct (fields->>'a')::int,(fields->>'b')::int,fields->>'c')
+    from multi_arg_agg,
+         generate_series(1,3) i;
+--Testcase 250:
+select * from agg_view1;
+                    aggfns                     
+-----------------------------------------------
+ {"(0,,)","(1,3,foo)","(2,2,bar)","(3,1,baz)"}
+(1 row)
+
+--Testcase 251:
+select pg_get_viewdef('agg_view1'::regclass);
+                                                                              pg_get_viewdef                                                                               
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT aggfns(DISTINCT ((multi_arg_agg.fields ->> 'a'::text))::integer, ((multi_arg_agg.fields ->> 'b'::text))::integer, (multi_arg_agg.fields ->> 'c'::text)) AS aggfns+
+    FROM multi_arg_agg,                                                                                                                                                   +
+     generate_series(1, 3) i(i);
+(1 row)
+
+--Testcase 252:
+create or replace view agg_view1 as
+  select aggfns(distinct (fields->>'a')::int,(fields->>'b')::int,fields->>'c' order by (fields->>'b')::int)
+    from multi_arg_agg,
+         generate_series(1,3) i;
+--Testcase 253:
+select * from agg_view1;
+                    aggfns                     
+-----------------------------------------------
+ {"(3,1,baz)","(2,2,bar)","(1,3,foo)","(0,,)"}
+(1 row)
+
+--Testcase 254:
+select pg_get_viewdef('agg_view1'::regclass);
+                                                                                                           pg_get_viewdef                                                                                                           
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT aggfns(DISTINCT ((multi_arg_agg.fields ->> 'a'::text))::integer, ((multi_arg_agg.fields ->> 'b'::text))::integer, (multi_arg_agg.fields ->> 'c'::text) ORDER BY ((multi_arg_agg.fields ->> 'b'::text))::integer) AS aggfns+
+    FROM multi_arg_agg,                                                                                                                                                                                                            +
+     generate_series(1, 3) i(i);
+(1 row)
+
+--Testcase 255:
+create or replace view agg_view1 as
+  select aggfns((fields->>'a')::int,(fields->>'b')::int,fields->>'c' order by (fields->>'b')::int+1)
+    from multi_arg_agg;
+--Testcase 256:
+select * from agg_view1;
+                    aggfns                     
+-----------------------------------------------
+ {"(3,1,baz)","(2,2,bar)","(1,3,foo)","(0,,)"}
+(1 row)
+
+--Testcase 257:
+select pg_get_viewdef('agg_view1'::regclass);
+                                                                                                         pg_get_viewdef                                                                                                          
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT aggfns(((multi_arg_agg.fields ->> 'a'::text))::integer, ((multi_arg_agg.fields ->> 'b'::text))::integer, (multi_arg_agg.fields ->> 'c'::text) ORDER BY (((multi_arg_agg.fields ->> 'b'::text))::integer + 1)) AS aggfns+
+    FROM multi_arg_agg;
+(1 row)
+
+--Testcase 258:
+create or replace view agg_view1 as
+  select aggfns((fields->>'a')::int,(fields->>'a')::int,fields->>'c' order by (fields->>'b')::int)
+    from multi_arg_agg;
+--Testcase 259:
+select * from agg_view1;
+                     aggfns                     
+------------------------------------------------
+ {"(3,3,baz)","(2,2,bar)","(1,1,foo)","(0,0,)"}
+(1 row)
+
+--Testcase 260:
+select pg_get_viewdef('agg_view1'::regclass);
+                                                                                                      pg_get_viewdef                                                                                                       
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT aggfns(((multi_arg_agg.fields ->> 'a'::text))::integer, ((multi_arg_agg.fields ->> 'a'::text))::integer, (multi_arg_agg.fields ->> 'c'::text) ORDER BY ((multi_arg_agg.fields ->> 'b'::text))::integer) AS aggfns+
+    FROM multi_arg_agg;
+(1 row)
+
+--Testcase 261:
+create or replace view agg_view1 as
+  select aggfns((fields->>'a')::int,(fields->>'b')::int,fields->>'c' order by fields->>'c' using ~<~)
+    from multi_arg_agg;
+--Testcase 262:
+select * from agg_view1;
+                    aggfns                     
+-----------------------------------------------
+ {"(2,2,bar)","(3,1,baz)","(1,3,foo)","(0,,)"}
+(1 row)
+
+--Testcase 263:
+select pg_get_viewdef('agg_view1'::regclass);
+                                                                                                           pg_get_viewdef                                                                                                            
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT aggfns(((multi_arg_agg.fields ->> 'a'::text))::integer, ((multi_arg_agg.fields ->> 'b'::text))::integer, (multi_arg_agg.fields ->> 'c'::text) ORDER BY (multi_arg_agg.fields ->> 'c'::text) USING ~<~ NULLS LAST) AS aggfns+
+    FROM multi_arg_agg;
+(1 row)
+
+--Testcase 264:
+create or replace view agg_view1 as
+  select aggfns(distinct (fields->>'a')::int,(fields->>'b')::int,fields->>'c' order by (fields->>'a')::int,fields->>'c' using ~<~,(fields->>'b')::int)
+    from multi_arg_agg,
+         generate_series(1,2) i;
+--Testcase 265:
+select * from agg_view1;
+                    aggfns                     
+-----------------------------------------------
+ {"(0,,)","(1,3,foo)","(2,2,bar)","(3,1,baz)"}
+(1 row)
+
+--Testcase 266:
+select pg_get_viewdef('agg_view1'::regclass);
+                                                                                                                                                                 pg_get_viewdef                                                                                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT aggfns(DISTINCT ((multi_arg_agg.fields ->> 'a'::text))::integer, ((multi_arg_agg.fields ->> 'b'::text))::integer, (multi_arg_agg.fields ->> 'c'::text) ORDER BY ((multi_arg_agg.fields ->> 'a'::text))::integer, (multi_arg_agg.fields ->> 'c'::text) USING ~<~ NULLS LAST, ((multi_arg_agg.fields ->> 'b'::text))::integer) AS aggfns+
+    FROM multi_arg_agg,                                                                                                                                                                                                                                                                                                                        +
+     generate_series(1, 2) i(i);
+(1 row)
+
+--Testcase 267:
+drop view agg_view1;
+rollback;
+-- incorrect DISTINCT usage errors
+--Testcase 268:
+select aggfns(distinct (fields->>'a')::int,(fields->>'b')::int,fields->>'c' order by i)
+  from multi_arg_agg2, generate_series(1,2) i;
+ERROR:  in an aggregate with DISTINCT, ORDER BY expressions must appear in argument list
+LINE 1: ...lds->>'a')::int,(fields->>'b')::int,fields->>'c' order by i)
+                                                                     ^
+--Testcase 269:
+select aggfns(distinct (fields->>'a')::int,(fields->>'b')::int,fields->>'c' order by (fields->>'a')::int,(fields->>'b')::int+1)
+  from multi_arg_agg2, generate_series(1,2) i;
+ERROR:  in an aggregate with DISTINCT, ORDER BY expressions must appear in argument list
+LINE 1: ...)::int,fields->>'c' order by (fields->>'a')::int,(fields->>'...
+                                                             ^
+--Testcase 270:
+select aggfns(distinct (fields->>'a')::int,(fields->>'b')::int,fields->>'c' order by (fields->>'a')::int,(fields->>'b')::int,i,fields->>'c')
+  from multi_arg_agg2, generate_series(1,2) i;
+ERROR:  in an aggregate with DISTINCT, ORDER BY expressions must appear in argument list
+LINE 1: ... order by (fields->>'a')::int,(fields->>'b')::int,i,fields->...
+                                                             ^
+--Testcase 271:
+select aggfns(distinct (fields->>'a')::int,(fields->>'a')::int,fields->>'c' order by (fields->>'a')::int,(fields->>'b')::int)
+  from multi_arg_agg2, generate_series(1,2) i;
+ERROR:  in an aggregate with DISTINCT, ORDER BY expressions must appear in argument list
+LINE 1: ...)::int,fields->>'c' order by (fields->>'a')::int,(fields->>'...
+                                                             ^
+-- string_agg tests
+--Testcase 272:
+create foreign table string_agg1 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 273:
+create foreign table string_agg2 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 274:
+create foreign table string_agg3 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 275:
+create foreign table string_agg4 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 276:
+select string_agg(fields->>'a1',',') from string_agg1;
+   string_agg   
+----------------
+ aaaa,bbbb,cccc
+(1 row)
+
+--Testcase 277:
+select string_agg(fields->>'a1',',') from string_agg2;
+   string_agg   
+----------------
+ aaaa,bbbb,cccc
+(1 row)
+
+--Testcase 278:
+select string_agg(fields->>'a1','AB') from string_agg3;
+ string_agg 
+------------
+ bbbbABcccc
+(1 row)
+
+--Testcase 279:
+select string_agg(fields->>'a1',',') from string_agg4;
+ string_agg 
+------------
+ 
+(1 row)
+
+-- check some implicit casting cases, as per bug #5564
+--Testcase 280:
+select string_agg(distinct (fields->>'f1')::varchar, ',' order by (fields->>'f1')::varchar) from varchar_tbl;  -- ok
+ string_agg 
+------------
+ a,ab,abcd
+(1 row)
+
+--Testcase 281:
+select string_agg(distinct (fields->>'f1')::text, ',' order by (fields->>'f1')::varchar) from varchar_tbl;  -- not ok
+ERROR:  in an aggregate with DISTINCT, ORDER BY expressions must appear in argument list
+LINE 1: ...agg(distinct (fields->>'f1')::text, ',' order by (fields->>'...
+                                                             ^
+--Testcase 282:
+select string_agg(distinct (fields->>'f1')::varchar, ',' order by (fields->>'f1')::text) from varchar_tbl;  -- not ok
+ERROR:  in an aggregate with DISTINCT, ORDER BY expressions must appear in argument list
+LINE 1: ...(distinct (fields->>'f1')::varchar, ',' order by (fields->>'...
+                                                             ^
+--Testcase 283:
+select string_agg(distinct (fields->>'f1')::text, ',' order by (fields->>'f1')::text) from varchar_tbl;  -- ok
+ string_agg 
+------------
+ a,ab,abcd
+(1 row)
+
+-- InfluxDB does not support binary data
+-- string_agg bytea tests
+/*
+create table bytea_test_table(v bytea);
+
+select string_agg(v, '') from bytea_test_table;
+
+insert into bytea_test_table values(decode('ff','hex'));
+
+select string_agg(v, '') from bytea_test_table;
+
+insert into bytea_test_table values(decode('aa','hex'));
+
+select string_agg(v, '') from bytea_test_table;
+select string_agg(v, NULL) from bytea_test_table;
+select string_agg(v, decode('ee', 'hex')) from bytea_test_table;
+
+drop table bytea_test_table;
+*/
+-- FILTER tests
+--Testcase 284:
+select min((fields->>'unique1')::int4) filter (where (fields->>'unique1')::int4 > 100) from tenk1;
+ min 
+-----
+ 101
+(1 row)
+
+--Testcase 285:
+select sum(1/(fields->>'ten')::int4) filter (where (fields->>'ten')::int4 > 0) from tenk1;
+ sum  
+------
+ 1000
+(1 row)
+
+--Testcase 286:
+select (fields->>'ten')::int4 ten, sum(distinct (fields->>'four')::int4) filter (where (fields->>'four')::text ~ '123') from onek a
+group by fields->>'ten';
+ ten | sum 
+-----+-----
+   0 |    
+   1 |    
+   2 |    
+   3 |    
+   4 |    
+   5 |    
+   6 |    
+   7 |    
+   8 |    
+   9 |    
+(10 rows)
+
+--Testcase 287:
+select (fields->>'ten')::int4 ten, sum(distinct (fields->>'four')::int4) filter (where (fields->>'four')::int4 > 10) from onek a
+group by fields->>'ten'
+having exists (select 1 from onek b where sum(distinct (a.fields->>'four')::int4) = (b.fields->>'four')::int4);
+ ten | sum 
+-----+-----
+   0 |    
+   2 |    
+   4 |    
+   6 |    
+   8 |    
+(5 rows)
+
+--Testcase 288:
+select max(foo COLLATE "C") filter (where (bar collate "POSIX") > '0')
+from (values ('a', 'b')) AS v(foo,bar);
+ max 
+-----
+ a
+(1 row)
+
+-- outer reference in FILTER (PostgreSQL extension)
+--Testcase 289:
+select (select count(*)
+        from (values (1)) t0(inner_c))
+from (values (2),(3)) t1(outer_c); -- inner query is aggregation query
+ count 
+-------
+     1
+     1
+(2 rows)
+
+--Testcase 290:
+select (select count(*) filter (where outer_c <> 0)
+        from (values (1)) t0(inner_c))
+from (values (2),(3)) t1(outer_c); -- outer query is aggregation query
+ count 
+-------
+     2
+(1 row)
+
+--Testcase 291:
+select (select count(inner_c) filter (where outer_c <> 0)
+        from (values (1)) t0(inner_c))
+from (values (2),(3)) t1(outer_c); -- inner query is aggregation query
+ count 
+-------
+     1
+     1
+(2 rows)
+
+--Testcase 292:
+select
+  (select max((select (i.fields->>'unique2')::int from tenk1 i where (i.fields->>'unique1')::int = (o.fields->>'unique1')::int))
+     filter (where (o.fields->>'unique1')::int < 10))
+from tenk1 o;					-- outer query is aggregation query
+ max  
+------
+ 9998
+(1 row)
+
+-- subquery in FILTER clause (PostgreSQL extension)
+--Testcase 293:
+select sum((fields->>'unique1')::int) FILTER (WHERE
+  (fields->>'unique1')::int IN (SELECT (fields->>'unique1')::int FROM onek where (fields->>'unique1')::int < 100)) FROM tenk1;
+ sum  
+------
+ 4950
+(1 row)
+
+-- exercise lots of aggregate parts with FILTER
+begin;
+--Testcase 294:
+select aggfns(distinct (fields->>'a')::int,(fields->>'b')::int,fields->>'c' order by (fields->>'a')::int,fields->>'c' using ~<~,(fields->>'b')::int) filter (where (fields->>'a')::int > 1)
+    from multi_arg_agg3,
+    generate_series(1,2) i;
+          aggfns           
+---------------------------
+ {"(2,2,bar)","(3,1,baz)"}
+(1 row)
+
+rollback;
+-- check handling of bare boolean Var in FILTER
+--Testcase 454:
+select max(0) filter (where (fields->>'b1')::boolean) from bool_test;
+ max 
+-----
+   0
+(1 row)
+
+--Testcase 455:
+select (select max(0) filter (where (fields->>'b1')::boolean)) from bool_test;
+ max 
+-----
+   0
+(1 row)
+
+-- check for correct detection of nested-aggregate errors in FILTER
+--Testcase 456:
+select max((fields->>'unique1')::int) filter (where sum((fields->>'ten')::int) > 0) from tenk1;
+ERROR:  aggregate functions are not allowed in FILTER
+LINE 1: ...lect max((fields->>'unique1')::int) filter (where sum((field...
+                                                             ^
+--Testcase 457:
+select (select max((fields->>'unique1')::int) filter (where sum((fields->>'ten')::int) > 0) from int8_tbl) from tenk1;
+ERROR:  aggregate functions are not allowed in FILTER
+LINE 1: ...lect max((fields->>'unique1')::int) filter (where sum((field...
+                                                             ^
+--Testcase 458:
+select max((fields->>'unique1')::int) filter (where bool_or((fields->>'ten')::int > 0)) from tenk1;
+ERROR:  aggregate functions are not allowed in FILTER
+LINE 1: ...lect max((fields->>'unique1')::int) filter (where bool_or((f...
+                                                             ^
+--Testcase 459:
+select (select max((fields->>'unique1')::int) filter (where bool_or((fields->>'ten')::int > 0)) from int8_tbl) from tenk1;
+ERROR:  aggregate functions are not allowed in FILTER
+LINE 1: ...lect max((fields->>'unique1')::int) filter (where bool_or((f...
+                                                             ^
+-- ordered-set aggregates
+begin;
+--Testcase 295:
+select (fields->>'f1')::float8 f1, percentile_cont((fields->>'f1')::float8) within group (order by x::float8)
+from generate_series(1,5) x,
+     FLOAT8_TBL
+group by (fields->>'f1')::float8 order by (fields->>'f1')::float8;
+  f1  | percentile_cont 
+------+-----------------
+    0 |               1
+  0.1 |             1.4
+ 0.25 |               2
+  0.4 |             2.6
+  0.5 |               3
+  0.6 |             3.4
+ 0.75 |               4
+  0.9 |             4.6
+    1 |               5
+(9 rows)
+
+rollback;
+begin;
+--Testcase 296:
+select (fields->>'f1')::float8 f1, percentile_cont((fields->>'f1')::float8 order by (fields->>'f1')::float8) within group (order by x)  -- error
+from generate_series(1,5) x,
+     FLOAT8_TBL
+group by (fields->>'f1')::float8 order by (fields->>'f1')::float8;
+ERROR:  cannot use multiple ORDER BY clauses with WITHIN GROUP
+LINE 1: ...>>'f1')::float8 order by (fields->>'f1')::float8) within gro...
+                                                             ^
+rollback;
+begin;
+--Testcase 297:
+select (fields->>'f1')::float8 f1, sum() within group (order by x::float8)  -- error
+from generate_series(1,5) x,
+     FLOAT8_TBL
+group by (fields->>'f1')::float8 order by (fields->>'f1')::float8;
+ERROR:  sum is not an ordered-set aggregate, so it cannot have WITHIN GROUP
+LINE 1: select (fields->>'f1')::float8 f1, sum() within group (order...
+                                           ^
+rollback;
+begin;
+--Testcase 298:
+select (fields->>'f1')::float8 f1, percentile_cont((fields->>'f1')::float8,(fields->>'f1')::float8)  -- error
+from generate_series(1,5) x,
+     FLOAT8_TBL
+group by (fields->>'f1')::float8 order by (fields->>'f1')::float8;
+ERROR:  WITHIN GROUP is required for ordered-set aggregate percentile_cont
+LINE 1: select (fields->>'f1')::float8 f1, percentile_cont((fields->...
+                                           ^
+rollback;
+--Testcase 299:
+select percentile_cont(0.5) within group (order by (fields->>'b')::float4) from aggtest;
+ percentile_cont  
+------------------
+ 53.4485001564026
+(1 row)
+
+--Testcase 300:
+select percentile_cont(0.5) within group (order by (fields->>'b')::float4), sum((fields->>'b')::float4) from aggtest;
+ percentile_cont  |   sum   
+------------------+---------
+ 53.4485001564026 | 431.773
+(1 row)
+
+--Testcase 301:
+select percentile_cont(0.5) within group (order by (fields->>'thousand')::int) from tenk1;
+ percentile_cont 
+-----------------
+           499.5
+(1 row)
+
+--Testcase 302:
+select percentile_disc(0.5) within group (order by (fields->>'thousand')::int) from tenk1;
+ percentile_disc 
+-----------------
+             499
+(1 row)
+
+begin;
+--Testcase 303:
+select rank(3) within group (order by (fields->>'f1')::int4) from INT4_TBL3;
+ rank 
+------
+    5
+(1 row)
+
+--Testcase 304:
+select cume_dist(3) within group (order by (fields->>'f1')::int4) from INT4_TBL3;
+ cume_dist 
+-----------
+     0.875
+(1 row)
+
+--Testcase 305:
+select percent_rank(3) within group (order by (fields->>'f1')::int4) from INT4_TBL4;
+ percent_rank 
+--------------
+          0.5
+(1 row)
+
+--Testcase 306:
+select dense_rank(3) within group (order by (fields->>'f1')::int4) from INT4_TBL3;
+ dense_rank 
+------------
+          3
+(1 row)
+
+rollback;
+--Testcase 307:
+select percentile_disc(array[0,0.1,0.25,0.5,0.75,0.9,1]) within group (order by (fields->>'thousand')::int)
+from tenk1;
+      percentile_disc       
+----------------------------
+ {0,99,249,499,749,899,999}
+(1 row)
+
+--Testcase 308:
+select percentile_cont(array[0,0.25,0.5,0.75,1]) within group (order by (fields->>'thousand')::int)
+from tenk1;
+       percentile_cont       
+-----------------------------
+ {0,249.75,499.5,749.25,999}
+(1 row)
+
+--Testcase 309:
+select percentile_disc(array[[null,1,0.5],[0.75,0.25,null]]) within group (order by (fields->>'thousand')::int)
+from tenk1;
+         percentile_disc         
+---------------------------------
+ {{NULL,999,499},{749,249,NULL}}
+(1 row)
+
+--Testcase 310:
+create foreign table generate_series2 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 311:
+select percentile_cont(array[0,1,0.25,0.75,0.5,1,0.3,0.32,0.35,0.38,0.4]) within group (order by (fields->>'a')::int)
+from generate_series2;
+             percentile_cont              
+------------------------------------------
+ {1,6,2.25,4.75,3.5,6,2.5,2.6,2.75,2.9,3}
+(1 row)
+
+--Testcase 312:
+select (fields->>'ten')::int4 ten, mode() within group (order by fields->>'string4') from tenk1 group by fields->>'ten';
+ ten |  mode  
+-----+--------
+   0 | HHHHxx
+   1 | OOOOxx
+   2 | VVVVxx
+   3 | OOOOxx
+   4 | HHHHxx
+   5 | HHHHxx
+   6 | OOOOxx
+   7 | AAAAxx
+   8 | VVVVxx
+   9 | VVVVxx
+(10 rows)
+
+--Testcase 313:
+create foreign table percentile_disc1 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 314:
+select percentile_disc(array[0.25,0.5,0.75]) within group (order by unnest)
+from (select unnest((fields->>'x')::text[]) from percentile_disc1) y;
+ percentile_disc 
+-----------------
+ {fred,jill,jim}
+(1 row)
+
+-- check collation propagates up in suitable cases:
+--Testcase 315:
+create foreign table pg_collation1 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 316:
+select pg_collation_for(percentile_disc(1) within group (order by fields->>'x' collate "POSIX"))
+  from pg_collation1;
+ pg_collation_for 
+------------------
+ "POSIX"
+(1 row)
+
+-- test ordered-set aggs using built-in support functions
+--Testcase 317:
+create aggregate test_percentile_disc(float8 ORDER BY anyelement) (
+  stype = internal,
+  sfunc = ordered_set_transition,
+  finalfunc = percentile_disc_final,
+  finalfunc_extra = true,
+  finalfunc_modify = read_write
+);
+--Testcase 318:
+create aggregate test_rank(VARIADIC "any" ORDER BY VARIADIC "any") (
+  stype = internal,
+  sfunc = ordered_set_transition_multi,
+  finalfunc = rank_final,
+  finalfunc_extra = true,
+  hypothetical
+);
+-- ordered-set aggs created with CREATE AGGREGATE
+--Testcase 319:
+create foreign table test_rank1 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 320:
+select test_rank(3) within group (order by (fields->>'x')::int) from test_rank1;
+ test_rank 
+-----------
+         5
+(1 row)
+
+--Testcase 321:
+select test_percentile_disc(0.5) within group (order by (fields->>'thousand')::int) from tenk1;
+ test_percentile_disc 
+----------------------
+                  499
+(1 row)
+
+-- ordered-set aggs can't use ungrouped vars in direct args:
+--Testcase 322:
+create foreign table generate_series3 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 323:
+select rank((fields->>'x')::int) within group (order by (fields->>'x')::int) from generate_series3 x;
+ERROR:  column "x.fields" must appear in the GROUP BY clause or be used in an aggregate function
+LINE 1: select rank((fields->>'x')::int) within group (order by (fie...
+                     ^
+DETAIL:  Direct arguments of an ordered-set aggregate must use only grouped columns.
+-- outer-level agg can't use a grouped arg of a lower level, either:
+--Testcase 324:
+select array(select percentile_disc(a) within group (order by (fields->>'x')::int)
+               from (values (0.3),(0.7)) v(a) group by a)
+  from generate_series3;
+ERROR:  outer-level aggregate cannot contain a lower-level variable in its direct arguments
+LINE 1: select array(select percentile_disc(a) within group (order b...
+                                            ^
+-- agg in the direct args is a grouping violation, too:
+--Testcase 325:
+select rank(sum((fields->>'x')::int)) within group (order by (fields->>'x')::int) from generate_series3 x;
+ERROR:  aggregate function calls cannot be nested
+LINE 1: select rank(sum((fields->>'x')::int)) within group (order by...
+                    ^
+-- hypothetical-set type unification and argument-count failures:
+--Testcase 326:
+select rank(3) within group (order by fields->>'x') from pg_collation1;
+ERROR:  WITHIN GROUP types text and integer cannot be matched
+LINE 1: select rank(3) within group (order by fields->>'x') from pg_...
+                    ^
+--Testcase 327:
+select rank(3) within group (order by (fields->>'stringu1')::name,(fields->>'stringu2')::name) from tenk1;
+ERROR:  function rank(integer, name, name) does not exist
+LINE 1: select rank(3) within group (order by (fields->>'stringu1'):...
+               ^
+HINT:  To use the hypothetical-set aggregate rank, the number of hypothetical direct arguments (here 1) must match the number of ordering columns (here 2).
+--Testcase 328:
+select rank('fred') within group (order by (fields->>'x')::int) from generate_series3 x;
+ERROR:  invalid input syntax for type integer: "fred"
+LINE 1: select rank('fred') within group (order by (fields->>'x')::i...
+                    ^
+--Testcase 329:
+select rank('adam'::text collate "C") within group (order by fields->>'x' collate "POSIX")
+  from pg_collation1;
+ERROR:  collation mismatch between explicit collations "C" and "POSIX"
+LINE 1: ... collate "C") within group (order by fields->>'x' collate "P...
+                                                             ^
+-- hypothetical-set type unification successes:
+--Testcase 330:
+select rank('adam'::varchar) within group (order by (fields->>'x')::varchar) from pg_collation1;
+ rank 
+------
+    1
+(1 row)
+
+--Testcase 331:
+select rank('3') within group (order by (fields->>'x')::int) from generate_series3 x;
+ rank 
+------
+    3
+(1 row)
+
+-- divide by zero check
+--Testcase 332:
+select percent_rank(0) within group (order by x) from generate_series(1,0) x;
+ percent_rank 
+--------------
+            0
+(1 row)
+
+-- deparse and multiple features:
+--Testcase 333:
+create view aggordview1 as
+select (fields->>'ten')::int4 ten,
+       percentile_disc(0.5) within group (order by (fields->>'thousand')::int) as p50,
+       percentile_disc(0.5) within group (order by (fields->>'thousand')::int) filter (where (fields->>'hundred')::int=1) as px,
+       rank(5,'AZZZZ',50) within group (order by (fields->>'hundred')::int, (fields->>'string4')::name desc, (fields->>'hundred')::int)
+  from tenk1
+ group by (fields->>'ten')::int order by (fields->>'ten')::int;
+--Testcase 334:
+select pg_get_viewdef('aggordview1');
+                                                                                                    pg_get_viewdef                                                                                                    
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT ((tenk1.fields ->> 'ten'::text))::integer AS ten,                                                                                                                                                           +
+     percentile_disc((0.5)::double precision) WITHIN GROUP (ORDER BY ((tenk1.fields ->> 'thousand'::text))::integer) AS p50,                                                                                         +
+     percentile_disc((0.5)::double precision) WITHIN GROUP (ORDER BY ((tenk1.fields ->> 'thousand'::text))::integer) FILTER (WHERE (((tenk1.fields ->> 'hundred'::text))::integer = 1)) AS px,                       +
+     rank(5, 'AZZZZ'::name, 50) WITHIN GROUP (ORDER BY ((tenk1.fields ->> 'hundred'::text))::integer, (((tenk1.fields ->> 'string4'::text))::name)::name DESC, ((tenk1.fields ->> 'hundred'::text))::integer) AS rank+
+    FROM tenk1                                                                                                                                                                                                       +
+   GROUP BY ((tenk1.fields ->> 'ten'::text))::integer                                                                                                                                                                +
+   ORDER BY ((tenk1.fields ->> 'ten'::text))::integer;
+(1 row)
+
+--Testcase 335:
+select * from aggordview1 order by ten;
+ ten | p50 | px  | rank 
+-----+-----+-----+------
+   0 | 490 |     |  101
+   1 | 491 | 401 |  101
+   2 | 492 |     |  101
+   3 | 493 |     |  101
+   4 | 494 |     |  101
+   5 | 495 |     |   67
+   6 | 496 |     |    1
+   7 | 497 |     |    1
+   8 | 498 |     |    1
+   9 | 499 |     |    1
+(10 rows)
+
+--Testcase 336:
+drop view aggordview1;
+-- User defined function for user defined aggregate, VARIADIC
+--Testcase 337:
+create function least_accum(anyelement, variadic anyarray)
+returns anyelement language sql as
+  'select least($1, min($2[i])) from generate_subscripts($2,1) g(i)';
+--Testcase 338:
+create aggregate least_agg(variadic items anyarray) (
+  stype = anyelement, sfunc = least_accum
+);
+--Testcase 339:
+create function cleast_accum(anycompatible, variadic anycompatiblearray)
+returns anycompatible language sql as
+  'select least($1, min($2[i])) from generate_subscripts($2,1) g(i)';
+--Testcase 340:
+create aggregate cleast_agg(variadic items anycompatiblearray) (
+  stype = anycompatible, sfunc = cleast_accum
+);
+-- variadic aggregates
+--Testcase 341:
+select least_agg((fields->>'q1')::int8,(fields->>'q2')::int8) from int8_tbl;
+     least_agg     
+-------------------
+ -4567890123456789
+(1 row)
+
+--Testcase 342:
+select least_agg(variadic array[(fields->>'q1')::int8,(fields->>'q2')::int8]) from int8_tbl;
+     least_agg     
+-------------------
+ -4567890123456789
+(1 row)
+
+--Testcase 343:
+select cleast_agg((fields->>'q1')::int8,(fields->>'q2')::int8) from int8_tbl;
+    cleast_agg     
+-------------------
+ -4567890123456789
+(1 row)
+
+--Testcase 344:
+select cleast_agg(4.5,(fields->>'f1')::int4) from int4_tbl;
+ cleast_agg  
+-------------
+ -2147483647
+(1 row)
+
+--Testcase 345:
+select cleast_agg(variadic array[4.5,(fields->>'f1')::int4]) from int4_tbl;
+ cleast_agg  
+-------------
+ -2147483647
+(1 row)
+
+--Testcase 346:
+select pg_typeof(cleast_agg(variadic array[4.5,(fields->>'f1')::int4])) from int4_tbl;
+ pg_typeof 
+-----------
+ numeric
+(1 row)
+
+--Testcase 347:
+drop aggregate least_agg(variadic items anyarray);
+--Testcase 348:
+drop function least_accum(anyelement, variadic anyarray);
+-- test aggregates with common transition functions share the same states
+begin work;
+--Testcase 349:
+create type avg_state as (total bigint, count bigint);
+--Testcase 350:
+create or replace function avg_transfn(state avg_state, n int) returns avg_state as
+$$
+declare new_state avg_state;
+begin
+	raise notice 'avg_transfn called with %', n;
+	if state is null then
+		if n is not null then
+			new_state.total := n;
+			new_state.count := 1;
+			return new_state;
+		end if;
+		return null;
+	elsif n is not null then
+		state.total := state.total + n;
+		state.count := state.count + 1;
+		return state;
+	end if;
+
+	return null;
+end
+$$ language plpgsql;
+--Testcase 351:
+create function avg_finalfn(state avg_state) returns int4 as
+$$
+begin
+	if state is null then
+		return NULL;
+	else
+		return state.total / state.count;
+	end if;
+end
+$$ language plpgsql;
+--Testcase 352:
+create function sum_finalfn(state avg_state) returns int4 as
+$$
+begin
+	if state is null then
+		return NULL;
+	else
+		return state.total;
+	end if;
+end
+$$ language plpgsql;
+--Testcase 353:
+create aggregate my_avg(int4)
+(
+   stype = avg_state,
+   sfunc = avg_transfn,
+   finalfunc = avg_finalfn
+);
+--Testcase 354:
+create aggregate my_sum(int4)
+(
+   stype = avg_state,
+   sfunc = avg_transfn,
+   finalfunc = sum_finalfn
+);
+-- aggregate state should be shared as aggs are the same.
+--Testcase 355:
+create foreign table my_avg1 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 356:
+select my_avg((fields->>'one')::int4),my_avg((fields->>'one')::int4) from my_avg1;
+NOTICE:  avg_transfn called with 1
+NOTICE:  avg_transfn called with 3
+ my_avg | my_avg 
+--------+--------
+      2 |      2
+(1 row)
+
+-- aggregate state should be shared as transfn is the same for both aggs.
+--Testcase 357:
+select my_avg((fields->>'one')::int4),my_sum((fields->>'one')::int4) from my_avg1;
+NOTICE:  avg_transfn called with 1
+NOTICE:  avg_transfn called with 3
+ my_avg | my_sum 
+--------+--------
+      2 |      4
+(1 row)
+
+-- same as previous one, but with DISTINCT, which requires sorting the input.
+--Testcase 358:
+select my_avg(distinct (fields->>'one')::int4),my_sum(distinct (fields->>'one')::int4) from my_avg1;
+NOTICE:  avg_transfn called with 1
+NOTICE:  avg_transfn called with 3
+ my_avg | my_sum 
+--------+--------
+      2 |      4
+(1 row)
+
+-- shouldn't share states due to the distinctness not matching.
+--Testcase 359:
+select my_avg(distinct (fields->>'one')::int4),my_sum((fields->>'one')::int4) from my_avg1;
+NOTICE:  avg_transfn called with 1
+NOTICE:  avg_transfn called with 3
+NOTICE:  avg_transfn called with 1
+NOTICE:  avg_transfn called with 3
+ my_avg | my_sum 
+--------+--------
+      2 |      4
+(1 row)
+
+-- shouldn't share states due to the filter clause not matching.
+--Testcase 360:
+select my_avg((fields->>'one')::int4) filter (where (fields->>'one')::int4 > 1),my_sum((fields->>'one')::int4) from my_avg1;
+NOTICE:  avg_transfn called with 1
+NOTICE:  avg_transfn called with 3
+NOTICE:  avg_transfn called with 3
+ my_avg | my_sum 
+--------+--------
+      3 |      4
+(1 row)
+
+-- this should not share the state due to different input columns.
+--Testcase 361:
+create foreign table my_avg2 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 362:
+select my_avg((fields->>'one')::int4),my_sum((fields->>'two')::int4) from my_avg2;
+NOTICE:  avg_transfn called with 1
+NOTICE:  avg_transfn called with 2
+NOTICE:  avg_transfn called with 3
+NOTICE:  avg_transfn called with 4
+ my_avg | my_sum 
+--------+--------
+      2 |      6
+(1 row)
+
+-- exercise cases where OSAs share state
+--Testcase 363:
+create foreign table percentile_cont1 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 364:
+select
+  percentile_cont(0.5) within group (order by (fields->>'a')::int),
+  percentile_disc(0.5) within group (order by (fields->>'a')::int)
+from percentile_cont1;
+ percentile_cont | percentile_disc 
+-----------------+-----------------
+               4 |               3
+(1 row)
+
+--Testcase 365:
+select
+  percentile_cont(0.25) within group (order by (fields->>'a')::int),
+  percentile_disc(0.5) within group (order by (fields->>'a')::int)
+from percentile_cont1;
+ percentile_cont | percentile_disc 
+-----------------+-----------------
+             2.5 |               3
+(1 row)
+
+-- these can't share state currently
+--Testcase 366:
+select
+  rank(4) within group (order by (fields->>'a')::int),
+  dense_rank(4) within group (order by (fields->>'a')::int)
+from percentile_cont1;
+ rank | dense_rank 
+------+------------
+    3 |          3
+(1 row)
+
+-- test that aggs with the same sfunc and initcond share the same agg state
+--Testcase 367:
+create aggregate my_sum_init(int4)
+(
+   stype = avg_state,
+   sfunc = avg_transfn,
+   finalfunc = sum_finalfn,
+   initcond = '(10,0)'
+);
+--Testcase 368:
+create aggregate my_avg_init(int4)
+(
+   stype = avg_state,
+   sfunc = avg_transfn,
+   finalfunc = avg_finalfn,
+   initcond = '(10,0)'
+);
+--Testcase 369:
+create aggregate my_avg_init2(int4)
+(
+   stype = avg_state,
+   sfunc = avg_transfn,
+   finalfunc = avg_finalfn,
+   initcond = '(4,0)'
+);
+-- state should be shared if INITCONDs are matching
+--Testcase 370:
+select my_sum_init((fields->>'one')::int4),my_avg_init((fields->>'one')::int4) from my_avg1;
+NOTICE:  avg_transfn called with 1
+NOTICE:  avg_transfn called with 3
+ my_sum_init | my_avg_init 
+-------------+-------------
+          14 |           7
+(1 row)
+
+-- Varying INITCONDs should cause the states not to be shared.
+--Testcase 371:
+select my_sum_init((fields->>'one')::int4),my_avg_init2((fields->>'one')::int4) from my_avg1;
+NOTICE:  avg_transfn called with 1
+NOTICE:  avg_transfn called with 1
+NOTICE:  avg_transfn called with 3
+NOTICE:  avg_transfn called with 3
+ my_sum_init | my_avg_init2 
+-------------+--------------
+          14 |            4
+(1 row)
+
+rollback;
+-- test aggregate state sharing to ensure it works if one aggregate has a
+-- finalfn and the other one has none.
+begin work;
+--Testcase 372:
+create or replace function sum_transfn(state int4, n int4) returns int4 as
+$$
+declare new_state int4;
+begin
+	raise notice 'sum_transfn called with %', n;
+	if state is null then
+		if n is not null then
+			new_state := n;
+			return new_state;
+		end if;
+		return null;
+	elsif n is not null then
+		state := state + n;
+		return state;
+	end if;
+
+	return null;
+end
+$$ language plpgsql;
+--Testcase 373:
+create function halfsum_finalfn(state int4) returns int4 as
+$$
+begin
+	if state is null then
+		return NULL;
+	else
+		return state / 2;
+	end if;
+end
+$$ language plpgsql;
+--Testcase 374:
+create aggregate my_sum(int4)
+(
+   stype = int4,
+   sfunc = sum_transfn
+);
+--Testcase 375:
+create aggregate my_half_sum(int4)
+(
+   stype = int4,
+   sfunc = sum_transfn,
+   finalfunc = halfsum_finalfn
+);
+-- Agg state should be shared even though my_sum has no finalfn
+--Testcase 376:
+create foreign table my_sum1 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 377:
+select my_sum((fields->>'one')::int4),my_half_sum((fields->>'one')::int4) from my_sum1;
+NOTICE:  sum_transfn called with 1
+NOTICE:  sum_transfn called with 2
+NOTICE:  sum_transfn called with 3
+NOTICE:  sum_transfn called with 4
+ my_sum | my_half_sum 
+--------+-------------
+     10 |           5
+(1 row)
+
+rollback;
+-- test that the aggregate transition logic correctly handles
+-- transition / combine functions returning NULL
+-- First test the case of a normal transition function returning NULL
+BEGIN;
+--Testcase 378:
+CREATE FUNCTION balkifnull(int8, int4)
+RETURNS int8
+STRICT
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF $1 IS NULL THEN
+       RAISE 'erroneously called with NULL argument';
+    END IF;
+    RETURN NULL;
+END$$;
+--Testcase 379:
+CREATE AGGREGATE balk(int4)
+(
+    SFUNC = balkifnull(int8, int4),
+    STYPE = int8,
+    PARALLEL = SAFE,
+    INITCOND = '0'
+);
+--Testcase 380:
+SELECT balk((fields->>'hundred')::int4) FROM tenk1;
+ balk 
+------
+     
+(1 row)
+
+ROLLBACK;
+-- Secondly test the case of a parallel aggregate combiner function
+-- returning NULL. For that use normal transition function, but a
+-- combiner function returning NULL.
+BEGIN;
+--Testcase 381:
+CREATE FUNCTION balkifnull(int8, int8)
+RETURNS int8
+PARALLEL SAFE
+STRICT
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF $1 IS NULL THEN
+       RAISE 'erroneously called with NULL argument';
+    END IF;
+    RETURN NULL;
+END$$;
+--Testcase 382:
+CREATE AGGREGATE balk(int4)
+(
+    SFUNC = int4_sum(int8, int4),
+    STYPE = int8,
+    COMBINEFUNC = balkifnull(int8, int8),
+    PARALLEL = SAFE,
+    INITCOND = '0'
+);
+-- force use of parallelism
+-- ALTER TABLE tenk1 set (parallel_workers = 4);
+-- SET LOCAL parallel_setup_cost=0;
+-- SET LOCAL max_parallel_workers_per_gather=4;
+-- EXPLAIN (COSTS OFF) SELECT balk(hundred) FROM tenk1;
+-- SELECT balk(hundred) FROM tenk1;
+ROLLBACK;
+-- test coverage for aggregate combine/serial/deserial functions
+BEGIN;
+--Testcase 383:
+SET parallel_setup_cost = 0;
+--Testcase 384:
+SET parallel_tuple_cost = 0;
+--Testcase 385:
+SET min_parallel_table_scan_size = 0;
+--Testcase 386:
+SET max_parallel_workers_per_gather = 4;
+--Testcase 387:
+SET parallel_leader_participation = off;
+--Testcase 388:
+SET enable_indexonlyscan = off;
+-- variance(int4) covers numeric_poly_combine
+-- sum(int8) covers int8_avg_combine
+-- regr_count(float8, float8) covers int8inc_float8_float8 and aggregates with > 1 arg
+--Testcase 389:
+EXPLAIN (COSTS OFF, VERBOSE)
+SELECT variance((fields->>'unique1')::int4), sum((fields->>'unique1')::int8), regr_count((fields->>'unique1')::float8, (fields->>'unique1')::float8)
+FROM (SELECT * FROM tenk1
+      UNION ALL SELECT * FROM tenk1
+      UNION ALL SELECT * FROM tenk1
+      UNION ALL SELECT * FROM tenk1) u;
+                                                                                                                    QUERY PLAN                                                                                                                    
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate
+   Output: variance(((tenk1.fields ->> 'unique1'::text))::integer), sum(((tenk1.fields ->> 'unique1'::text))::bigint), regr_count(((tenk1.fields ->> 'unique1'::text))::double precision, ((tenk1.fields ->> 'unique1'::text))::double precision)
+   ->  Append
+         ->  Foreign Scan on public.tenk1
+               Output: tenk1.fields
+               InfluxDB query: SELECT * FROM "tenk"
+         ->  Foreign Scan on public.tenk1 tenk1_1
+               Output: tenk1_1.fields
+               InfluxDB query: SELECT * FROM "tenk"
+         ->  Foreign Scan on public.tenk1 tenk1_2
+               Output: tenk1_2.fields
+               InfluxDB query: SELECT * FROM "tenk"
+         ->  Foreign Scan on public.tenk1 tenk1_3
+               Output: tenk1_3.fields
+               InfluxDB query: SELECT * FROM "tenk"
+(15 rows)
+
+--Testcase 390:
+SELECT variance((fields->>'unique1')::int4), sum((fields->>'unique1')::int8), regr_count((fields->>'unique1')::float8, (fields->>'unique1')::float8)
+FROM (SELECT * FROM tenk1
+      UNION ALL SELECT * FROM tenk1
+      UNION ALL SELECT * FROM tenk1
+      UNION ALL SELECT * FROM tenk1) u;
+       variance       |    sum    | regr_count 
+----------------------+-----------+------------
+ 8333541.588539713493 | 199980000 |      40000
+(1 row)
+
+-- variance(int8) covers numeric_combine
+-- avg(numeric) covers numeric_avg_combine
+--Testcase 391:
+EXPLAIN (COSTS OFF, VERBOSE)
+SELECT variance((fields->>'unique1')::int8), avg((fields->>'unique1')::numeric)
+FROM (SELECT * FROM tenk1
+      UNION ALL SELECT * FROM tenk1
+      UNION ALL SELECT * FROM tenk1
+      UNION ALL SELECT * FROM tenk1) u;
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ Aggregate
+   Output: variance(((tenk1.fields ->> 'unique1'::text))::bigint), avg(((tenk1.fields ->> 'unique1'::text))::numeric)
+   ->  Append
+         ->  Foreign Scan on public.tenk1
+               Output: tenk1.fields
+               InfluxDB query: SELECT * FROM "tenk"
+         ->  Foreign Scan on public.tenk1 tenk1_1
+               Output: tenk1_1.fields
+               InfluxDB query: SELECT * FROM "tenk"
+         ->  Foreign Scan on public.tenk1 tenk1_2
+               Output: tenk1_2.fields
+               InfluxDB query: SELECT * FROM "tenk"
+         ->  Foreign Scan on public.tenk1 tenk1_3
+               Output: tenk1_3.fields
+               InfluxDB query: SELECT * FROM "tenk"
+(15 rows)
+
+--Testcase 392:
+SELECT variance((fields->>'unique1')::int8), avg((fields->>'unique1')::numeric)
+FROM (SELECT * FROM tenk1
+      UNION ALL SELECT * FROM tenk1
+      UNION ALL SELECT * FROM tenk1
+      UNION ALL SELECT * FROM tenk1) u;
+       variance       |          avg          
+----------------------+-----------------------
+ 8333541.588539713493 | 4999.5000000000000000
+(1 row)
+
+ROLLBACK;
+-- test coverage for dense_rank
+--Testcase 393:
+create foreign table dense_rank1 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 394:
+SELECT dense_rank((fields->>'x')::int) WITHIN GROUP (ORDER BY (fields->>'x')::int) FROM dense_rank1 GROUP BY (fields->>'x') ORDER BY 1;
+ dense_rank 
+------------
+          1
+          1
+          1
+(3 rows)
+
+-- Ensure that the STRICT checks for aggregates does not take NULLness
+-- of ORDER BY columns into account. See bug report around
+-- 2a505161-2727-2473-7c46-591ed108ac52@email.cz
+--Testcase 395:
+SELECT min(x ORDER BY y) FROM (VALUES(1, NULL)) AS d(x,y);
+ min 
+-----
+   1
+(1 row)
+
+--Testcase 396:
+SELECT min(x ORDER BY y) FROM (VALUES(1, 2)) AS d(x,y);
+ min 
+-----
+   1
+(1 row)
+
+-- check collation-sensitive matching between grouping expressions
+--Testcase 397:
+select v||'a', case v||'a' when 'aa' then 1 else 0 end, count(*)
+  from unnest(array['a','b']) u(v)
+ group by v||'a' order by 1;
+ ?column? | case | count 
+----------+------+-------
+ aa       |    1 |     1
+ ba       |    0 |     1
+(2 rows)
+
+--Testcase 398:
+select v||'a', case when v||'a' = 'aa' then 1 else 0 end, count(*)
+  from unnest(array['a','b']) u(v)
+ group by v||'a' order by 1;
+ ?column? | case | count 
+----------+------+-------
+ aa       |    1 |     1
+ ba       |    0 |     1
+(2 rows)
+
+-- Make sure that generation of HashAggregate for uniqification purposes
+-- does not lead to array overflow due to unexpected duplicate hash keys
+-- see CAFeeJoKKu0u+A_A9R9316djW-YW3-+Gtgvy3ju655qRHR3jtdA@mail.gmail.com
+--Testcase 399:
+set enable_memoize to off;
+--Testcase 400:
+explain (costs off)
+  select 1 from tenk1
+   where ((fields->>'hundred')::int, (fields->>'thousand')::int) in (select (fields->>'twothousand')::int, (fields->>'twothousand')::int from onek);
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Hash Join
+   Hash Cond: (((onek.fields ->> 'twothousand'::text))::integer = ((tenk1.fields ->> 'hundred'::text))::integer)
+   ->  HashAggregate
+         Group Key: ((onek.fields ->> 'twothousand'::text))::integer, ((onek.fields ->> 'twothousand'::text))::integer
+         ->  Foreign Scan on onek
+   ->  Hash
+         ->  Foreign Scan on tenk1
+(7 rows)
+
+--Testcase 401:
+reset enable_memoize;
+--
+-- Hash Aggregation Spill tests
+--
+--Testcase 402:
+set enable_sort=false;
+--Testcase 403:
+set work_mem='64kB';
+--Testcase 404:
+select (fields->>'unique1')::int unique1, count(*), sum((fields->>'twothousand')::int) from tenk1
+group by fields->>'unique1'
+having sum((fields->>'fivethous')::int) > 4975
+order by sum((fields->>'twothousand')::int);
+ unique1 | count | sum  
+---------+-------+------
+    4976 |     1 |  976
+    4977 |     1 |  977
+    4978 |     1 |  978
+    4979 |     1 |  979
+    4980 |     1 |  980
+    4981 |     1 |  981
+    4982 |     1 |  982
+    4983 |     1 |  983
+    4984 |     1 |  984
+    4985 |     1 |  985
+    4986 |     1 |  986
+    4987 |     1 |  987
+    4988 |     1 |  988
+    4989 |     1 |  989
+    4990 |     1 |  990
+    4991 |     1 |  991
+    4992 |     1 |  992
+    4993 |     1 |  993
+    4994 |     1 |  994
+    4995 |     1 |  995
+    4996 |     1 |  996
+    4997 |     1 |  997
+    4998 |     1 |  998
+    4999 |     1 |  999
+    9976 |     1 | 1976
+    9977 |     1 | 1977
+    9978 |     1 | 1978
+    9979 |     1 | 1979
+    9980 |     1 | 1980
+    9981 |     1 | 1981
+    9982 |     1 | 1982
+    9983 |     1 | 1983
+    9984 |     1 | 1984
+    9985 |     1 | 1985
+    9986 |     1 | 1986
+    9987 |     1 | 1987
+    9988 |     1 | 1988
+    9989 |     1 | 1989
+    9990 |     1 | 1990
+    9991 |     1 | 1991
+    9992 |     1 | 1992
+    9993 |     1 | 1993
+    9994 |     1 | 1994
+    9995 |     1 | 1995
+    9996 |     1 | 1996
+    9997 |     1 | 1997
+    9998 |     1 | 1998
+    9999 |     1 | 1999
+(48 rows)
+
+--Testcase 405:
+set work_mem to default;
+--Testcase 406:
+set enable_sort to default;
+--
+-- Compare results between plans using sorting and plans using hash
+-- aggregation. Force spilling in both cases by setting work_mem low.
+--
+--Testcase 407:
+set work_mem='64kB';
+--Testcase 408:
+create foreign table agg_data_2k (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+create foreign table agg_data_2k_nsc (g int) server influxdb_svr OPTIONS (table 'agg_data_2k');
+--Testcase 409:
+create foreign table agg_data_20k (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+create foreign table agg_data_20k_nsc (g int) server influxdb_svr OPTIONS (table 'agg_data_20k');
+--Testcase 410:
+create foreign table agg_group_1 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+create foreign table agg_group_1_nsc (c1 int, c2 numeric, c3 int) server influxdb_svr OPTIONS (table 'agg_group_1');
+--Testcase 411:
+create foreign table agg_group_2 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+create foreign table agg_group_2_nsc (a int, c1 numeric, c2 text, c3 int) server influxdb_svr OPTIONS (table 'agg_group_2');
+--Testcase 412:
+create foreign table agg_group_3 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+create foreign table agg_group_3_nsc (c1 numeric, c2 int4, c3 int) server influxdb_svr OPTIONS (table 'agg_group_3');
+--Testcase 413:
+create foreign table agg_group_4 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+create foreign table agg_group_4_nsc (c1 numeric, c2 text, c3 int) server influxdb_svr OPTIONS (table 'agg_group_4');
+--Testcase 414:
+create foreign table agg_hash_1 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+create foreign table agg_hash_1_nsc (c1 int, c2 numeric, c3 int) server influxdb_svr OPTIONS (table 'agg_hash_1');
+--Testcase 415:
+create foreign table agg_hash_2 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+create foreign table agg_hash_2_nsc (a int, c1 numeric, c2 text, c3 int) server influxdb_svr OPTIONS (table 'agg_hash_2');
+--Testcase 416:
+create foreign table agg_hash_3 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+create foreign table agg_hash_3_nsc (c1 numeric, c2 int4, c3 int) server influxdb_svr OPTIONS (table 'agg_hash_3');
+--Testcase 417:
+create foreign table agg_hash_4 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+create foreign table agg_hash_4_nsc (c1 numeric, c2 text, c3 int) server influxdb_svr OPTIONS (table 'agg_hash_4');
+--Testcase 418:
+insert into agg_data_2k_nsc select g from generate_series(0, 1999) g;
+--analyze agg_data_2k;
+--Testcase 419:
+insert into agg_data_20k_nsc select g from generate_series(0, 19999) g;
+--analyze agg_data_20k;
+-- Produce results with sorting.
+--Testcase 420:
+set enable_hashagg = false;
+--Testcase 421:
+set jit_above_cost = 0;
+--Testcase 422:
+explain (costs off)
+select (fields->>'g')::int%10000 as c1, sum((fields->>'g')::numeric) as c2, count(*) as c3
+  from agg_data_20k group by (fields->>'g')::int%10000;
+                           QUERY PLAN                            
+-----------------------------------------------------------------
+ GroupAggregate
+   Group Key: ((((fields ->> 'g'::text))::integer % 10000))
+   ->  Sort
+         Sort Key: ((((fields ->> 'g'::text))::integer % 10000))
+         ->  Foreign Scan on agg_data_20k
+(5 rows)
+
+--Testcase 423:
+insert into agg_group_1_nsc
+select g%10000 as c1, sum(g::numeric) as c2, count(*) as c3
+  from agg_data_20k_nsc group by g%10000;
+--Testcase 424:
+insert into agg_group_2_nsc
+select * from
+  (values (100), (300), (500)) as r(a),
+  lateral (
+    select (g/2)::numeric as c1,
+           array_agg(g::numeric) as c2,
+	   count(*) as c3
+    from agg_data_2k_nsc
+    where g < r.a
+    group by g/2) as s;
+--Testcase 425:
+set jit_above_cost to default;
+--Testcase 426:
+insert into agg_group_3_nsc
+select (g/2)::numeric as c1, sum(7::int4) as c2, count(*) as c3
+  from agg_data_2k_nsc group by g/2;
+--Testcase 427:
+insert into agg_group_4_nsc
+select (g/2)::numeric as c1, array_agg(g::numeric) as c2, count(*) as c3
+  from agg_data_2k_nsc group by g/2;
+-- Produce results with hash aggregation
+--Testcase 428:
+set enable_hashagg = true;
+--Testcase 429:
+set enable_sort = false;
+--Testcase 430:
+set jit_above_cost = 0;
+--Testcase 431:
+explain (costs off)
+select (fields->>'g')::int%10000 as c1, sum((fields->>'g')::numeric) as c2, count(*) as c3
+  from agg_data_20k group by (fields->>'g')::int%10000;
+                        QUERY PLAN                        
+----------------------------------------------------------
+ HashAggregate
+   Group Key: (((fields ->> 'g'::text))::integer % 10000)
+   ->  Foreign Scan on agg_data_20k
+(3 rows)
+
+--Testcase 432:
+insert into agg_hash_1_nsc
+select g%10000 as c1, sum(g::numeric) as c2, count(*) as c3
+  from agg_data_20k_nsc group by g%10000;
+--Testcase 433:
+insert into agg_hash_2_nsc
+select * from
+  (values (100), (300), (500)) as r(a),
+  lateral (
+    select (g/2)::numeric as c1,
+           array_agg(g::numeric) as c2,
+	   count(*) as c3
+    from agg_data_2k_nsc
+    where g < r.a
+    group by g/2) as s;
+--Testcase 434:
+set jit_above_cost to default;
+--Testcase 435:
+insert into agg_hash_3_nsc
+select (g/2)::numeric as c1, sum(7::int4) as c2, count(*) as c3
+  from agg_data_2k_nsc group by g/2;
+--Testcase 436:
+insert into agg_hash_4_nsc
+select (g/2)::numeric as c1, array_agg(g::numeric) as c2, count(*) as c3
+  from agg_data_2k_nsc group by g/2;
+--Testcase 437:
+set enable_sort = true;
+--Testcase 438:
+set work_mem to default;
+-- Compare group aggregation results to hash aggregation results
+--Testcase 439:
+(select * from agg_hash_1 except select * from agg_group_1)
+  union all
+(select * from agg_group_1 except select * from agg_hash_1);
+ fields 
+--------
+(0 rows)
+
+--Testcase 440:
+(select * from agg_hash_2 except select * from agg_group_2)
+  union all
+(select * from agg_group_2 except select * from agg_hash_2);
+ fields 
+--------
+(0 rows)
+
+--Testcase 441:
+(select * from agg_hash_3 except select * from agg_group_3)
+  union all
+(select * from agg_group_3 except select * from agg_hash_3);
+ fields 
+--------
+(0 rows)
+
+--Testcase 442:
+(select * from agg_hash_4 except select * from agg_group_4)
+  union all
+(select * from agg_group_4 except select * from agg_hash_4);
+ fields 
+--------
+(0 rows)
+
+--Testcase 443:
+-- Clean up:
+delete from agg_data_2k_nsc;
+delete from agg_data_20k_nsc;
+delete from agg_group_1_nsc;
+delete from agg_group_2_nsc;
+delete from agg_group_3_nsc;
+delete from agg_group_4_nsc;
+delete from agg_hash_1_nsc;
+delete from agg_hash_2_nsc;
+delete from agg_hash_3_nsc;
+delete from agg_hash_4_nsc;
+drop foreign table agg_data_2k;
+drop foreign table agg_data_2k_nsc;
+drop foreign table agg_data_20k;
+drop foreign table agg_data_20k_nsc;
+drop foreign table agg_group_1;
+drop foreign table agg_group_1_nsc;
+--Testcase 444:
+drop foreign table agg_group_2;
+drop foreign table agg_group_2_nsc;
+--Testcase 445:
+drop foreign table agg_group_3;
+drop foreign table agg_group_3_nsc;
+--Testcase 446:
+drop foreign table agg_group_4;
+drop foreign table agg_group_4_nsc;
+--Testcase 447:
+drop foreign table agg_hash_1;
+drop foreign table agg_hash_1_nsc;
+--Testcase 448:
+drop foreign table agg_hash_2;
+drop foreign table agg_hash_2_nsc;
+--Testcase 449:
+drop foreign table agg_hash_3;
+drop foreign table agg_hash_3_nsc;
+--Testcase 450:
+drop foreign table agg_hash_4;
+drop foreign table agg_hash_4_nsc;
+-- Clean up
+DO $d$
+declare
+  l_rec record;
+begin
+  for l_rec in (select foreign_table_schema, foreign_table_name
+                from information_schema.foreign_tables) loop
+     execute format('drop foreign table %I.%I cascade;', l_rec.foreign_table_schema, l_rec.foreign_table_name);
+  end loop;
+end;
+$d$;
+-- Clean up:
+DROP AGGREGATE IF EXISTS newavg (int4);
+DROP AGGREGATE IF EXISTS newsum (int4);
+DROP AGGREGATE IF EXISTS newcnt (*);
+DROP AGGREGATE IF EXISTS oldcnt (*);
+DROP AGGREGATE IF EXISTS newcnt ("any");
+DROP AGGREGATE IF EXISTS sum2(int8,int8);
+DROP FUNCTION IF EXISTS sum3(int8,int8,int8);
+DROP AGGREGATE IF EXISTS aggfns(integer,integer,text);
+DROP AGGREGATE IF EXISTS aggfstr(integer,integer,text);
+DROP FUNCTION IF EXISTS aggfns_trans(aggtype[],integer,integer,text);
+DROP FUNCTION IF EXISTS aggf_trans(aggtype[],integer,integer,text);
+DROP TYPE IF EXISTS aggtype;
+DROP AGGREGATE IF EXISTS test_percentile_disc(float8 ORDER BY anyelement);
+DROP AGGREGATE IF EXISTS test_rank(VARIADIC "any" ORDER BY VARIADIC "any");
+DROP AGGREGATE IF EXISTS cleast_agg(variadic items anycompatiblearray);
+DROP FUNCTION IF EXISTS cleast_accum(anycompatible, variadic anycompatiblearray);
+--Testcase 451:
+DROP USER MAPPING FOR CURRENT_USER SERVER influxdb_svr;
+--Testcase 452:
+DROP SERVER influxdb_svr CASCADE;
+--Testcase 453:
+DROP EXTENSION influxdb_fdw;

@@ -1,0 +1,7 @@
+# DML
+# CONTEXT-DATABASE: schemalessdb
+
+sctbl3,t1=-2323.54454 c1=true,c2="Tôi không biết",c3=32i,c4=78.14,c5=F 000000000000000000111
+sctbl3,t1=faefek c1=T,c2="change for new change",c3=34i,c4=-74,c5=false -789450000000000
+sctbl3,t1='afefea' c1=F,c2="Qué estás haciendo",c3=0i,c4=2E+12,c5=t -3000000000000000000
+sctbl3,t1="3gìvậy" c1=false,c2="lagi ngopo",c3=1i,c4=1.024,c5=T 4343314000

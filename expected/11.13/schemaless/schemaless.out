@@ -1,0 +1,921 @@
+--Testcase 1:
+SET datestyle=ISO;
+-- timestamp with time zone differs based on this
+--Testcase 2:
+SET timezone='Japan';
+\set ECHO none
+--Testcase 3:
+DROP EXTENSION IF EXISTS influxdb_fdw CASCADE;
+NOTICE:  extension "influxdb_fdw" does not exist, skipping
+--Testcase 4:
+CREATE EXTENSION influxdb_fdw CASCADE;
+--Testcase 5:
+CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname 'schemalessdb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
+--Testcase 6:
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
+-- create foreign table
+--Testcase 7:
+CREATE FOREIGN TABLE sc1(time timestamp with time zone, tags jsonb OPTIONS(tags 'true'), fields jsonb OPTIONS (fields 'true')) SERVER influxdb_svr OPTIONS(table 'sc1', tags 'device_id', schemaless 'true');
+--Testcase 8:
+CREATE FOREIGN TABLE sc2(time timestamp with time zone, tags jsonb OPTIONS(tags 'true'), fields jsonb OPTIONS (fields 'true')) SERVER influxdb_svr OPTIONS(table 'sc2', tags 'device_id', schemaless 'true');
+--Testcase 9:
+DROP FOREIGN TABLE sc1;
+--Testcase 10:
+DROP FOREIGN TABLE sc2;
+-- import foreign table
+IMPORT FOREIGN SCHEMA public FROM SERVER influxdb_svr INTO public OPTIONS (schemaless 'true');
+--Testcase 11:
+ALTER FOREIGN TABLE sc2 RENAME COLUMN fields TO fields2;
+--Testcase 12:
+ALTER FOREIGN TABLE sc2 RENAME COLUMN tags TO tags2;
+-- baserel *
+--Testcase 13:
+EXPLAIN VERBOSE
+SELECT * FROM sc1;
+                             QUERY PLAN                             
+--------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..853.00 rows=853 width=72)
+   Output: "time", tags, fields
+   InfluxDB query: SELECT * FROM "sc1"
+(3 rows)
+
+--Testcase 14:
+SELECT * FROM sc1;
+          time          |         tags          |                           fields                           
+------------------------+-----------------------+------------------------------------------------------------
+ 1970-01-01 09:00:00+09 | {"device_id": "dev1"} | {"sig1": "1", "sig2": "a", "sig3": "1.1", "sig4": "true"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev2"} | {"sig1": "2", "sig2": "b", "sig3": "1.2", "sig4": "false"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev3"} | {"sig1": "3", "sig2": "c", "sig3": "1.3", "sig4": "false"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev1"} | {"sig1": "4", "sig2": "d", "sig3": "2.4", "sig4": "true"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev2"} | {"sig1": "5", "sig2": "e", "sig3": "2.5", "sig4": "false"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev3"} | {"sig1": "6", "sig2": "f", "sig3": "2.6", "sig4": "false"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev1"} | {"sig1": "7", "sig2": "g", "sig3": "3.7", "sig4": "true"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev2"} | {"sig1": "8", "sig2": "h", "sig3": "3.8", "sig4": "false"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev3"} | {"sig1": "9", "sig2": "i", "sig3": "3.9", "sig4": "false"}
+(9 rows)
+
+-- baserel all column names
+--Testcase 15:
+EXPLAIN VERBOSE
+SELECT time,tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1;
+                                                                                             QUERY PLAN                                                                                              
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..876.46 rows=853 width=89)
+   Output: "time", (tags ->> 'device_id'::text), ((fields ->> 'sig1'::text))::bigint, (fields ->> 'sig2'::text), ((fields ->> 'sig3'::text))::double precision, ((fields ->> 'sig4'::text))::boolean
+   InfluxDB query: SELECT "device_id", "sig1", "sig2", "sig3", "sig4" FROM "sc1"
+(3 rows)
+
+--Testcase 16:
+SELECT time,tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1;
+          time          | device_id | sig1 | sig2 | sig3 | sig4 
+------------------------+-----------+------+------+------+------
+ 1970-01-01 09:00:00+09 | dev1      |    1 | a    |  1.1 | t
+ 1970-01-01 09:00:00+09 | dev2      |    2 | b    |  1.2 | f
+ 1970-01-01 09:00:00+09 | dev3      |    3 | c    |  1.3 | f
+ 1970-01-01 09:00:00+09 | dev1      |    4 | d    |  2.4 | t
+ 1970-01-01 09:00:00+09 | dev2      |    5 | e    |  2.5 | f
+ 1970-01-01 09:00:00+09 | dev3      |    6 | f    |  2.6 | f
+ 1970-01-01 09:00:00+09 | dev1      |    7 | g    |  3.7 | t
+ 1970-01-01 09:00:00+09 | dev2      |    8 | h    |  3.8 | f
+ 1970-01-01 09:00:00+09 | dev3      |    9 | i    |  3.9 | f
+(9 rows)
+
+-- baserel time only
+--Testcase 17:
+EXPLAIN VERBOSE
+SELECT time FROM sc1;
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..2560.00 rows=2560 width=8)
+   Output: "time"
+   InfluxDB query: SELECT * FROM "sc1"
+(3 rows)
+
+--Testcase 18:
+SELECT time FROM sc1;
+          time          
+------------------------
+ 1970-01-01 09:00:00+09
+ 1970-01-01 09:00:00+09
+ 1970-01-01 09:00:00+09
+ 1970-01-01 09:00:00+09
+ 1970-01-01 09:00:00+09
+ 1970-01-01 09:00:00+09
+ 1970-01-01 09:00:00+09
+ 1970-01-01 09:00:00+09
+ 1970-01-01 09:00:00+09
+(9 rows)
+
+-- baserel tag only
+--Testcase 19:
+EXPLAIN VERBOSE
+SELECT tags->>'device_id' device_id FROM sc1;
+                              QUERY PLAN                              
+----------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..1465.65 rows=1462 width=32)
+   Output: (tags ->> 'device_id'::text)
+   InfluxDB query: SELECT * FROM "sc1"
+(3 rows)
+
+--Testcase 20:
+SELECT tags->>'device_id' device_id FROM sc1;
+ device_id 
+-----------
+ dev1
+ dev2
+ dev3
+ dev1
+ dev2
+ dev3
+ dev1
+ dev2
+ dev3
+(9 rows)
+
+-- baserel field only
+--Testcase 21:
+EXPLAIN VERBOSE
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..1498.55 rows=1462 width=49)
+   Output: ((fields ->> 'sig1'::text))::bigint, (fields ->> 'sig2'::text), ((fields ->> 'sig3'::text))::double precision, ((fields ->> 'sig4'::text))::boolean
+   InfluxDB query: SELECT "sig1", "sig2", "sig3", "sig4" FROM "sc1"
+(3 rows)
+
+--Testcase 22:
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1;
+ sig1 | sig2 | sig3 | sig4 
+------+------+------+------
+    1 | a    |  1.1 | t
+    3 | c    |  1.3 | f
+    2 | b    |  1.2 | f
+    6 | f    |  2.6 | f
+    5 | e    |  2.5 | f
+    4 | d    |  2.4 | t
+    8 | h    |  3.8 | f
+    7 | g    |  3.7 | t
+    9 | i    |  3.9 | f
+(9 rows)
+
+-- baserel tag+field
+--Testcase 23:
+EXPLAIN VERBOSE
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1;
+                                                                                         QUERY PLAN                                                                                          
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..955.58 rows=930 width=81)
+   Output: (tags ->> 'device_id'::text), ((fields ->> 'sig1'::text))::bigint, (fields ->> 'sig2'::text), ((fields ->> 'sig3'::text))::double precision, ((fields ->> 'sig4'::text))::boolean
+   InfluxDB query: SELECT "device_id", "sig1", "sig2", "sig3", "sig4" FROM "sc1"
+(3 rows)
+
+--Testcase 24:
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1;
+ device_id | sig1 | sig2 | sig3 | sig4 
+-----------+------+------+------+------
+ dev1      |    1 | a    |  1.1 | t
+ dev2      |    2 | b    |  1.2 | f
+ dev3      |    3 | c    |  1.3 | f
+ dev1      |    4 | d    |  2.4 | t
+ dev2      |    5 | e    |  2.5 | f
+ dev3      |    6 | f    |  2.6 | f
+ dev1      |    7 | g    |  3.7 | t
+ dev2      |    8 | h    |  3.8 | f
+ dev3      |    9 | i    |  3.9 | f
+(9 rows)
+
+-- baserel * (remote restrict only)
+--Testcase 25:
+EXPLAIN VERBOSE
+SELECT * FROM sc1 WHERE (fields->>'sig3')::double precision > 2;
+                             QUERY PLAN                             
+--------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..284.00 rows=284 width=72)
+   Output: "time", tags, fields
+   InfluxDB query: SELECT * FROM "sc1" WHERE (("sig3" > 2))
+(3 rows)
+
+--Testcase 26:
+SELECT * FROM sc1 WHERE (fields->>'sig3')::double precision > 2;
+          time          |         tags          |                           fields                           
+------------------------+-----------------------+------------------------------------------------------------
+ 1970-01-01 09:00:00+09 | {"device_id": "dev1"} | {"sig1": "4", "sig2": "d", "sig3": "2.4", "sig4": "true"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev2"} | {"sig1": "5", "sig2": "e", "sig3": "2.5", "sig4": "false"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev3"} | {"sig1": "6", "sig2": "f", "sig3": "2.6", "sig4": "false"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev1"} | {"sig1": "7", "sig2": "g", "sig3": "3.7", "sig4": "true"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev2"} | {"sig1": "8", "sig2": "h", "sig3": "3.8", "sig4": "false"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev3"} | {"sig1": "9", "sig2": "i", "sig3": "3.9", "sig4": "false"}
+(6 rows)
+
+-- baserel all (remote restrict only)
+--Testcase 27:
+EXPLAIN VERBOSE
+SELECT time,tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE (fields->>'sig3')::double precision > 2;
+                                                                                             QUERY PLAN                                                                                              
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..291.81 rows=284 width=89)
+   Output: "time", (tags ->> 'device_id'::text), ((fields ->> 'sig1'::text))::bigint, (fields ->> 'sig2'::text), ((fields ->> 'sig3'::text))::double precision, ((fields ->> 'sig4'::text))::boolean
+   InfluxDB query: SELECT "device_id", "sig1", "sig2", "sig3", "sig4" FROM "sc1" WHERE (("sig3" > 2))
+(3 rows)
+
+--Testcase 28:
+SELECT time,tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE (fields->>'sig3')::double precision > 2;
+          time          | device_id | sig1 | sig2 | sig3 | sig4 
+------------------------+-----------+------+------+------+------
+ 1970-01-01 09:00:00+09 | dev1      |    4 | d    |  2.4 | t
+ 1970-01-01 09:00:00+09 | dev2      |    5 | e    |  2.5 | f
+ 1970-01-01 09:00:00+09 | dev3      |    6 | f    |  2.6 | f
+ 1970-01-01 09:00:00+09 | dev1      |    7 | g    |  3.7 | t
+ 1970-01-01 09:00:00+09 | dev2      |    8 | h    |  3.8 | f
+ 1970-01-01 09:00:00+09 | dev3      |    9 | i    |  3.9 | f
+(6 rows)
+
+-- baserel field only (remote restrict only)
+--Testcase 29:
+EXPLAIN VERBOSE
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE (fields->>'sig3')::double precision > 2;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..499.18 rows=487 width=49)
+   Output: ((fields ->> 'sig1'::text))::bigint, (fields ->> 'sig2'::text), ((fields ->> 'sig3'::text))::double precision, ((fields ->> 'sig4'::text))::boolean
+   InfluxDB query: SELECT "sig1", "sig2", "sig3", "sig4" FROM "sc1" WHERE (("sig3" > 2))
+(3 rows)
+
+--Testcase 30:
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE (fields->>'sig3')::double precision > 2;
+ sig1 | sig2 | sig3 | sig4 
+------+------+------+------
+    4 | d    |  2.4 | t
+    6 | f    |  2.6 | f
+    5 | e    |  2.5 | f
+    9 | i    |  3.9 | f
+    8 | h    |  3.8 | f
+    7 | g    |  3.7 | t
+(6 rows)
+
+-- baserel tag+field (remote restrict only)
+--Testcase 31:
+EXPLAIN VERBOSE
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE (fields->>'sig3')::double precision > 2;
+                                                                                         QUERY PLAN                                                                                          
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..318.52 rows=310 width=81)
+   Output: (tags ->> 'device_id'::text), ((fields ->> 'sig1'::text))::bigint, (fields ->> 'sig2'::text), ((fields ->> 'sig3'::text))::double precision, ((fields ->> 'sig4'::text))::boolean
+   InfluxDB query: SELECT "device_id", "sig1", "sig2", "sig3", "sig4" FROM "sc1" WHERE (("sig3" > 2))
+(3 rows)
+
+--Testcase 32:
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE (fields->>'sig3')::double precision > 2;
+ device_id | sig1 | sig2 | sig3 | sig4 
+-----------+------+------+------+------
+ dev1      |    4 | d    |  2.4 | t
+ dev2      |    5 | e    |  2.5 | f
+ dev3      |    6 | f    |  2.6 | f
+ dev1      |    7 | g    |  3.7 | t
+ dev2      |    8 | h    |  3.8 | f
+ dev3      |    9 | i    |  3.9 | f
+(6 rows)
+
+-- baserel tag+field(except restrict var) (remote restrict only)
+--Testcase 33:
+EXPLAIN VERBOSE
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE (fields->>'sig3')::double precision > 2;
+                                                                  QUERY PLAN                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..316.20 rows=310 width=73)
+   Output: (tags ->> 'device_id'::text), ((fields ->> 'sig1'::text))::bigint, (fields ->> 'sig2'::text), ((fields ->> 'sig4'::text))::boolean
+   InfluxDB query: SELECT "device_id", "sig1", "sig2", "sig4" FROM "sc1" WHERE (("sig3" > 2))
+(3 rows)
+
+--Testcase 34:
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE (fields->>'sig3')::double precision > 2;
+ device_id | sig1 | sig2 | sig4 
+-----------+------+------+------
+ dev1      |    4 | d    | t
+ dev2      |    5 | e    | f
+ dev3      |    6 | f    | f
+ dev1      |    7 | g    | t
+ dev2      |    8 | h    | f
+ dev3      |    9 | i    | f
+(6 rows)
+
+-- baserel * (local restrict only)
+--Testcase 35:
+EXPLAIN VERBOSE
+SELECT * FROM sc1 WHERE upper(fields->>'sig2') <> 'I';
+                             QUERY PLAN                             
+--------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..849.00 rows=849 width=72)
+   Output: "time", tags, fields
+   Filter: (upper((sc1.fields ->> 'sig2'::text)) <> 'I'::text)
+   InfluxDB query: SELECT * FROM "sc1"
+(4 rows)
+
+--Testcase 36:
+SELECT * FROM sc1 WHERE upper(fields->>'sig2') <> 'I';
+          time          |         tags          |                           fields                           
+------------------------+-----------------------+------------------------------------------------------------
+ 1970-01-01 09:00:00+09 | {"device_id": "dev1"} | {"sig1": "1", "sig2": "a", "sig3": "1.1", "sig4": "true"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev2"} | {"sig1": "2", "sig2": "b", "sig3": "1.2", "sig4": "false"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev3"} | {"sig1": "3", "sig2": "c", "sig3": "1.3", "sig4": "false"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev1"} | {"sig1": "4", "sig2": "d", "sig3": "2.4", "sig4": "true"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev2"} | {"sig1": "5", "sig2": "e", "sig3": "2.5", "sig4": "false"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev3"} | {"sig1": "6", "sig2": "f", "sig3": "2.6", "sig4": "false"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev1"} | {"sig1": "7", "sig2": "g", "sig3": "3.7", "sig4": "true"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev2"} | {"sig1": "8", "sig2": "h", "sig3": "3.8", "sig4": "false"}
+(8 rows)
+
+-- baserel all (local restrict only)
+--Testcase 37:
+EXPLAIN VERBOSE
+SELECT time,tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE upper(fields->>'sig2') <> 'I';
+                                                                                             QUERY PLAN                                                                                              
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..872.35 rows=849 width=89)
+   Output: "time", (tags ->> 'device_id'::text), ((fields ->> 'sig1'::text))::bigint, (fields ->> 'sig2'::text), ((fields ->> 'sig3'::text))::double precision, ((fields ->> 'sig4'::text))::boolean
+   Filter: (upper((sc1.fields ->> 'sig2'::text)) <> 'I'::text)
+   InfluxDB query: SELECT "device_id", "sig1", "sig2", "sig3", "sig4" FROM "sc1"
+(4 rows)
+
+--Testcase 38:
+SELECT time,tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE upper(fields->>'sig2') <> 'I';
+          time          | device_id | sig1 | sig2 | sig3 | sig4 
+------------------------+-----------+------+------+------+------
+ 1970-01-01 09:00:00+09 | dev1      |    1 | a    |  1.1 | t
+ 1970-01-01 09:00:00+09 | dev2      |    2 | b    |  1.2 | f
+ 1970-01-01 09:00:00+09 | dev3      |    3 | c    |  1.3 | f
+ 1970-01-01 09:00:00+09 | dev1      |    4 | d    |  2.4 | t
+ 1970-01-01 09:00:00+09 | dev2      |    5 | e    |  2.5 | f
+ 1970-01-01 09:00:00+09 | dev3      |    6 | f    |  2.6 | f
+ 1970-01-01 09:00:00+09 | dev1      |    7 | g    |  3.7 | t
+ 1970-01-01 09:00:00+09 | dev2      |    8 | h    |  3.8 | f
+(8 rows)
+
+-- baserel field only (local restrict only)
+--Testcase 39:
+EXPLAIN VERBOSE
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE upper(fields->>'sig2') <> 'I';
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..1491.38 rows=1455 width=49)
+   Output: ((fields ->> 'sig1'::text))::bigint, (fields ->> 'sig2'::text), ((fields ->> 'sig3'::text))::double precision, ((fields ->> 'sig4'::text))::boolean
+   Filter: (upper((sc1.fields ->> 'sig2'::text)) <> 'I'::text)
+   InfluxDB query: SELECT "sig1", "sig2", "sig3", "sig4" FROM "sc1"
+(4 rows)
+
+--Testcase 40:
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE upper(fields->>'sig2') <> 'I';
+ sig1 | sig2 | sig3 | sig4 
+------+------+------+------
+    1 | a    |  1.1 | t
+    3 | c    |  1.3 | f
+    2 | b    |  1.2 | f
+    6 | f    |  2.6 | f
+    5 | e    |  2.5 | f
+    4 | d    |  2.4 | t
+    8 | h    |  3.8 | f
+    7 | g    |  3.7 | t
+(8 rows)
+
+-- baserel tag+field (local restrict only)
+--Testcase 41:
+EXPLAIN VERBOSE
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE upper(fields->>'sig2') <> 'I';
+                                                                                         QUERY PLAN                                                                                          
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..950.44 rows=925 width=81)
+   Output: (tags ->> 'device_id'::text), ((fields ->> 'sig1'::text))::bigint, (fields ->> 'sig2'::text), ((fields ->> 'sig3'::text))::double precision, ((fields ->> 'sig4'::text))::boolean
+   Filter: (upper((sc1.fields ->> 'sig2'::text)) <> 'I'::text)
+   InfluxDB query: SELECT "device_id", "sig1", "sig2", "sig3", "sig4" FROM "sc1"
+(4 rows)
+
+--Testcase 42:
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE upper(fields->>'sig2') <> 'I';
+ device_id | sig1 | sig2 | sig3 | sig4 
+-----------+------+------+------+------
+ dev1      |    1 | a    |  1.1 | t
+ dev2      |    2 | b    |  1.2 | f
+ dev3      |    3 | c    |  1.3 | f
+ dev1      |    4 | d    |  2.4 | t
+ dev2      |    5 | e    |  2.5 | f
+ dev3      |    6 | f    |  2.6 | f
+ dev1      |    7 | g    |  3.7 | t
+ dev2      |    8 | h    |  3.8 | f
+(8 rows)
+
+-- baserel tag+field(except local restrict var) (local restrict only)
+--Testcase 43:
+EXPLAIN VERBOSE
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE upper(fields->>'sig2') <> 'I';
+                                                                            QUERY PLAN                                                                            
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..948.12 rows=925 width=49)
+   Output: (tags ->> 'device_id'::text), ((fields ->> 'sig1'::text))::bigint, ((fields ->> 'sig3'::text))::double precision, ((fields ->> 'sig4'::text))::boolean
+   Filter: (upper((sc1.fields ->> 'sig2'::text)) <> 'I'::text)
+   InfluxDB query: SELECT "device_id", "sig1", "sig3", "sig4", "sig2" FROM "sc1"
+(4 rows)
+
+--Testcase 44:
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE upper(fields->>'sig2') <> 'I';
+ device_id | sig1 | sig3 | sig4 
+-----------+------+------+------
+ dev1      |    1 |  1.1 | t
+ dev2      |    2 |  1.2 | f
+ dev3      |    3 |  1.3 | f
+ dev1      |    4 |  2.4 | t
+ dev2      |    5 |  2.5 | f
+ dev3      |    6 |  2.6 | f
+ dev1      |    7 |  3.7 | t
+ dev2      |    8 |  3.8 | f
+(8 rows)
+
+-- baserel * (both restricts)
+--Testcase 45:
+EXPLAIN VERBOSE
+SELECT * FROM sc1 WHERE (fields->>'sig3')::double precision > 2 AND upper(fields->>'sig2') <> 'I';
+                             QUERY PLAN                             
+--------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..283.00 rows=283 width=72)
+   Output: "time", tags, fields
+   Filter: (upper((sc1.fields ->> 'sig2'::text)) <> 'I'::text)
+   InfluxDB query: SELECT * FROM "sc1" WHERE (("sig3" > 2))
+(4 rows)
+
+--Testcase 46:
+SELECT * FROM sc1 WHERE (fields->>'sig3')::double precision > 2 AND upper(fields->>'sig2') <> 'I';
+          time          |         tags          |                           fields                           
+------------------------+-----------------------+------------------------------------------------------------
+ 1970-01-01 09:00:00+09 | {"device_id": "dev1"} | {"sig1": "4", "sig2": "d", "sig3": "2.4", "sig4": "true"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev2"} | {"sig1": "5", "sig2": "e", "sig3": "2.5", "sig4": "false"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev3"} | {"sig1": "6", "sig2": "f", "sig3": "2.6", "sig4": "false"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev1"} | {"sig1": "7", "sig2": "g", "sig3": "3.7", "sig4": "true"}
+ 1970-01-01 09:00:00+09 | {"device_id": "dev2"} | {"sig1": "8", "sig2": "h", "sig3": "3.8", "sig4": "false"}
+(5 rows)
+
+-- baserel all (both restricts)
+--Testcase 47:
+EXPLAIN VERBOSE
+SELECT time,tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE (fields->>'sig3')::double precision > 2 AND upper(fields->>'sig2') <> 'I';
+                                                                                             QUERY PLAN                                                                                              
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..290.78 rows=283 width=89)
+   Output: "time", (tags ->> 'device_id'::text), ((fields ->> 'sig1'::text))::bigint, (fields ->> 'sig2'::text), ((fields ->> 'sig3'::text))::double precision, ((fields ->> 'sig4'::text))::boolean
+   Filter: (upper((sc1.fields ->> 'sig2'::text)) <> 'I'::text)
+   InfluxDB query: SELECT "device_id", "sig1", "sig2", "sig3", "sig4" FROM "sc1" WHERE (("sig3" > 2))
+(4 rows)
+
+--Testcase 48:
+SELECT time,tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE (fields->>'sig3')::double precision > 2 AND upper(fields->>'sig2') <> 'I';
+          time          | device_id | sig1 | sig2 | sig3 | sig4 
+------------------------+-----------+------+------+------+------
+ 1970-01-01 09:00:00+09 | dev1      |    4 | d    |  2.4 | t
+ 1970-01-01 09:00:00+09 | dev2      |    5 | e    |  2.5 | f
+ 1970-01-01 09:00:00+09 | dev3      |    6 | f    |  2.6 | f
+ 1970-01-01 09:00:00+09 | dev1      |    7 | g    |  3.7 | t
+ 1970-01-01 09:00:00+09 | dev2      |    8 | h    |  3.8 | f
+(5 rows)
+
+-- baserel field only (both restricts)
+--Testcase 49:
+EXPLAIN VERBOSE
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE (fields->>'sig3')::double precision > 2 AND upper(fields->>'sig2') <> 'I';
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..497.12 rows=485 width=49)
+   Output: ((fields ->> 'sig1'::text))::bigint, (fields ->> 'sig2'::text), ((fields ->> 'sig3'::text))::double precision, ((fields ->> 'sig4'::text))::boolean
+   Filter: (upper((sc1.fields ->> 'sig2'::text)) <> 'I'::text)
+   InfluxDB query: SELECT "sig1", "sig2", "sig3", "sig4" FROM "sc1" WHERE (("sig3" > 2))
+(4 rows)
+
+--Testcase 50:
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE (fields->>'sig3')::double precision > 2 AND upper(fields->>'sig2') <> 'I';
+ sig1 | sig2 | sig3 | sig4 
+------+------+------+------
+    4 | d    |  2.4 | t
+    6 | f    |  2.6 | f
+    5 | e    |  2.5 | f
+    8 | h    |  3.8 | f
+    7 | g    |  3.7 | t
+(5 rows)
+
+-- baserel tag+field (both restricts)
+--Testcase 51:
+EXPLAIN VERBOSE
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE (fields->>'sig3')::double precision > 2 AND upper(fields->>'sig2') <> 'I';
+                                                                                         QUERY PLAN                                                                                          
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..316.47 rows=308 width=81)
+   Output: (tags ->> 'device_id'::text), ((fields ->> 'sig1'::text))::bigint, (fields ->> 'sig2'::text), ((fields ->> 'sig3'::text))::double precision, ((fields ->> 'sig4'::text))::boolean
+   Filter: (upper((sc1.fields ->> 'sig2'::text)) <> 'I'::text)
+   InfluxDB query: SELECT "device_id", "sig1", "sig2", "sig3", "sig4" FROM "sc1" WHERE (("sig3" > 2))
+(4 rows)
+
+--Testcase 52:
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE (fields->>'sig3')::double precision > 2 AND upper(fields->>'sig2') <> 'I';
+ device_id | sig1 | sig2 | sig3 | sig4 
+-----------+------+------+------+------
+ dev1      |    4 | d    |  2.4 | t
+ dev2      |    5 | e    |  2.5 | f
+ dev3      |    6 | f    |  2.6 | f
+ dev1      |    7 | g    |  3.7 | t
+ dev2      |    8 | h    |  3.8 | f
+(5 rows)
+
+-- baserel tag+field(except local restrict var) (both restricts)
+--Testcase 53:
+EXPLAIN VERBOSE
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE (fields->>'sig3')::double precision > 2 AND upper(fields->>'sig2') <> 'I';
+                                                                            QUERY PLAN                                                                            
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..315.70 rows=308 width=49)
+   Output: (tags ->> 'device_id'::text), ((fields ->> 'sig1'::text))::bigint, ((fields ->> 'sig3'::text))::double precision, ((fields ->> 'sig4'::text))::boolean
+   Filter: (upper((sc1.fields ->> 'sig2'::text)) <> 'I'::text)
+   InfluxDB query: SELECT "device_id", "sig1", "sig3", "sig4", "sig2" FROM "sc1" WHERE (("sig3" > 2))
+(4 rows)
+
+--Testcase 54:
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE (fields->>'sig3')::double precision > 2 AND upper(fields->>'sig2') <> 'I';
+ device_id | sig1 | sig3 | sig4 
+-----------+------+------+------
+ dev1      |    4 |  2.4 | t
+ dev2      |    5 |  2.5 | f
+ dev3      |    6 |  2.6 | f
+ dev1      |    7 |  3.7 | t
+ dev2      |    8 |  3.8 | f
+(5 rows)
+
+-- baserel tag+field(except remote restrict var) (both restricts)
+--Testcase 55:
+EXPLAIN VERBOSE
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE (fields->>'sig3')::double precision > 2 AND upper(fields->>'sig2') <> 'I';
+                                                                  QUERY PLAN                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..314.16 rows=308 width=73)
+   Output: (tags ->> 'device_id'::text), ((fields ->> 'sig1'::text))::bigint, (fields ->> 'sig2'::text), ((fields ->> 'sig4'::text))::boolean
+   Filter: (upper((sc1.fields ->> 'sig2'::text)) <> 'I'::text)
+   InfluxDB query: SELECT "device_id", "sig1", "sig2", "sig4" FROM "sc1" WHERE (("sig3" > 2))
+(4 rows)
+
+--Testcase 56:
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE (fields->>'sig3')::double precision > 2 AND upper(fields->>'sig2') <> 'I';
+ device_id | sig1 | sig2 | sig4 
+-----------+------+------+------
+ dev1      |    4 | d    | t
+ dev2      |    5 | e    | f
+ dev3      |    6 | f    | f
+ dev1      |    7 | g    | t
+ dev2      |    8 | h    | f
+(5 rows)
+
+-- baserel tag+field(except local and remote restrict var) (both restricts)
+--Testcase 57:
+EXPLAIN VERBOSE
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE (fields->>'sig3')::double precision > 2 AND upper(fields->>'sig2') <> 'I';
+                                                    QUERY PLAN                                                     
+-------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..313.39 rows=308 width=41)
+   Output: (tags ->> 'device_id'::text), ((fields ->> 'sig1'::text))::bigint, ((fields ->> 'sig4'::text))::boolean
+   Filter: (upper((sc1.fields ->> 'sig2'::text)) <> 'I'::text)
+   InfluxDB query: SELECT "device_id", "sig1", "sig4", "sig2" FROM "sc1" WHERE (("sig3" > 2))
+(4 rows)
+
+--Testcase 58:
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig4')::boolean sig4 FROM sc1 WHERE (fields->>'sig3')::double precision > 2 AND upper(fields->>'sig2') <> 'I';
+ device_id | sig1 | sig4 
+-----------+------+------
+ dev1      |    4 | t
+ dev2      |    5 | f
+ dev3      |    6 | f
+ dev1      |    7 | t
+ dev2      |    8 | f
+(5 rows)
+
+-- aggregate sum (remote)
+--Testcase 59:
+EXPLAIN VERBOSE
+SELECT sum((fields->>'sig1')::bigint),sum((fields->>'sig3')::double precision) FROM sc1;
+                                                 QUERY PLAN                                                 
+------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=40)
+   Output: (sum(((fields ->> 'sig1'::text))::bigint)), (sum(((fields ->> 'sig3'::text))::double precision))
+   InfluxDB query: SELECT sum("sig1"), sum("sig3") FROM "sc1"
+(3 rows)
+
+--Testcase 60:
+SELECT sum((fields->>'sig1')::bigint),sum((fields->>'sig3')::double precision) FROM sc1;
+ sum | sum  
+-----+------
+  45 | 22.5
+(1 row)
+
+-- aggregate count (remote)
+--Testcase 61:
+EXPLAIN VERBOSE
+SELECT count(fields->>'sig1'),count(fields->>'sig2'),count(fields->>'sig3'),count(fields->>'sig4') FROM sc1;
+                                                                        QUERY PLAN                                                                        
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=32)
+   Output: (count((fields ->> 'sig1'::text))), (count((fields ->> 'sig2'::text))), (count((fields ->> 'sig3'::text))), (count((fields ->> 'sig4'::text)))
+   InfluxDB query: SELECT count("sig1"), count("sig2"), count("sig3"), count("sig4") FROM "sc1"
+(3 rows)
+
+--Testcase 62:
+SELECT count(fields->>'sig1'),count(fields->>'sig2'),count(fields->>'sig3'),count(fields->>'sig4') FROM sc1;
+ count | count | count | count 
+-------+-------+-------+-------
+     9 |     9 |     9 |     9
+(1 row)
+
+-- aggregate avg (local)
+--Testcase 63:
+EXPLAIN VERBOSE
+SELECT avg((fields->>'sig1')::bigint),avg((fields->>'sig3')::double precision) FROM sc1;
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=1491.25..1491.26 rows=1 width=40)
+   Output: avg(((fields ->> 'sig1'::text))::bigint), avg(((fields ->> 'sig3'::text))::double precision)
+   ->  Foreign Scan on public.sc1  (cost=10.00..1462.00 rows=1462 width=32)
+         Output: "time", tags, fields
+         InfluxDB query: SELECT * FROM "sc1"
+(5 rows)
+
+--Testcase 64:
+SELECT avg((fields->>'sig1')::bigint),avg((fields->>'sig3')::double precision) FROM sc1;
+        avg         | avg 
+--------------------+-----
+ 5.0000000000000000 | 2.5
+(1 row)
+
+-- aggregate sum (remote) + tag + group by
+--Testcase 65:
+EXPLAIN VERBOSE
+SELECT sum((fields->>'sig1')::bigint),tags->>'device_id' device_id FROM sc1 GROUP BY tags->>'device_id';
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=64)
+   Output: (sum(((fields ->> 'sig1'::text))::bigint)), ((tags ->> 'device_id'::text))
+   InfluxDB query: SELECT sum("sig1") FROM "sc1" GROUP BY ("device_id")
+(3 rows)
+
+--Testcase 66:
+SELECT sum((fields->>'sig1')::bigint),tags->>'device_id' device_id FROM sc1 GROUP BY tags->>'device_id';
+ sum | device_id 
+-----+-----------
+  12 | dev1
+  15 | dev2
+  18 | dev3
+(3 rows)
+
+-- aggregate sum (remote) + tag + group by time
+--Testcase 67:
+EXPLAIN VERBOSE
+SELECT sum((fields->>'sig1')::bigint) FROM sc1 WHERE time >= to_timestamp(0) AND time <= to_timestamp(2) GROUP BY influx_time(time, interval '1s');
+                                                                        QUERY PLAN                                                                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=40)
+   Output: (sum(((fields ->> 'sig1'::text))::bigint)), (influx_time("time", '@ 1 sec'::interval))
+   InfluxDB query: SELECT sum("sig1") FROM "sc1" WHERE ((time >= '1970-01-01 00:00:00')) AND ((time <= '1970-01-01 00:00:02')) GROUP BY (time(0d0h0m1s0u))
+(3 rows)
+
+--Testcase 68:
+SELECT sum((fields->>'sig1')::bigint) FROM sc1 WHERE time >= to_timestamp(0) AND time <= to_timestamp(2) GROUP BY influx_time(time, interval '1s');
+ sum 
+-----
+  45
+    
+    
+(3 rows)
+
+-- aggreagte sum (remote) + tag + group by time
+--Testcase 69:
+EXPLAIN VERBOSE
+SELECT tags->>'device_id' device_id,sum((fields->>'sig1')::bigint),fields->>'sid' sid FROM sc3 GROUP BY fields->>'sid', tags->>'device_id';
+                                                    QUERY PLAN                                                    
+------------------------------------------------------------------------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=96)
+   Output: ((tags ->> 'device_id'::text)), (sum(((fields ->> 'sig1'::text))::bigint)), ((fields ->> 'sid'::text))
+   InfluxDB query: SELECT sum("sig1") FROM "sc3" GROUP BY ("sid"), ("device_id")
+(3 rows)
+
+--Testcase 70:
+SELECT tags->>'device_id' device_id,sum((fields->>'sig1')::bigint),fields->>'sid' sid FROM sc3 GROUP BY fields->>'sid', tags->>'device_id';
+ device_id | sum | sid 
+-----------+-----+-----
+ dev1      |  10 | id1
+ dev1      |  40 | id2
+ dev1      |  70 | id3
+ dev2      |  20 | id1
+ dev2      |  50 | id2
+ dev2      |  80 | id3
+ dev3      |  30 | id1
+ dev3      |  60 | id2
+ dev3      |  90 | id3
+(9 rows)
+
+-- fucntion (remote)
+--Testcase 71:
+EXPLAIN VERBOSE
+SELECT sqrt((fields->>'sig1')::bigint) FROM sc1;
+                               QUERY PLAN                                
+-------------------------------------------------------------------------
+ Foreign Scan on public.sc1  (cost=10.00..1480.28 rows=1462 width=8)
+   Output: sqrt((((fields ->> 'sig1'::text))::bigint)::double precision)
+   InfluxDB query: SELECT "sig1" FROM "sc1"
+(3 rows)
+
+--Testcase 72:
+SELECT sqrt((fields->>'sig1')::bigint) FROM sc1;
+       sqrt       
+------------------
+                1
+ 1.73205080756888
+  1.4142135623731
+ 2.44948974278318
+ 2.23606797749979
+                2
+ 2.82842712474619
+ 2.64575131106459
+                3
+(9 rows)
+
+-- sparse data - baserel field only
+--Testcase 73:
+EXPLAIN VERBOSE
+SELECT (fields->>'sig')::double precision sig FROM sc4;
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Foreign Scan on public.sc4  (cost=10.00..1472.96 rows=1462 width=8)
+   Output: ((fields ->> 'sig'::text))::double precision
+   InfluxDB query: SELECT "sig" FROM "sc4"
+(3 rows)
+
+--Testcase 74:
+SELECT (fields->>'sig')::double precision sig FROM sc4;
+ sig 
+-----
+   1
+   3
+   2
+(3 rows)
+
+-- sparse data - baserel filed + remote restrict - no result by filter
+--Testcase 75:
+EXPLAIN VERBOSE
+SELECT (fields->>'sig')::double precision sig FROM sc4 WHERE time >= to_timestamp(1) AND time <= to_timestamp(2);
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sc4  (cost=10.00..7.05 rows=7 width=8)
+   Output: ((fields ->> 'sig'::text))::double precision
+   InfluxDB query: SELECT "sig" FROM "sc4" WHERE ((time >= '1970-01-01 00:00:01')) AND ((time <= '1970-01-01 00:00:02'))
+(3 rows)
+
+--Testcase 76:
+SELECT (fields->>'sig')::double precision sig FROM sc4 WHERE time >= to_timestamp(1) AND time <= to_timestamp(2);
+ sig 
+-----
+(0 rows)
+
+-- sparse data - aggreate avg (local) + remote restrict - ?
+--Testcase 77:
+EXPLAIN VERBOSE
+SELECT avg((fields->>'sig')::double precision) FROM sc4 WHERE time >= to_timestamp(1) AND time <= to_timestamp(2);
+                                                        QUERY PLAN                                                         
+---------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=7.07..7.08 rows=1 width=8)
+   Output: avg(((fields ->> 'sig'::text))::double precision)
+   ->  Foreign Scan on public.sc4  (cost=10.00..7.00 rows=7 width=32)
+         Output: "time", tags, fields
+         InfluxDB query: SELECT * FROM "sc4" WHERE ((time >= '1970-01-01 00:00:01')) AND ((time <= '1970-01-01 00:00:02'))
+(5 rows)
+
+--Testcase 78:
+SELECT avg((fields->>'sig')::double precision) FROM sc4 WHERE time >= to_timestamp(1) AND time <= to_timestamp(2);
+ avg 
+-----
+    
+(1 row)
+
+-- aggregate sum (remote) and avg (local)
+--Testcase 79:
+EXPLAIN VERBOSE
+SELECT avg((fields->>'sig1')::bigint), sum((fields->>'sig1')::bigint) FROM sc1;
+                                          QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
+ Aggregate  (cost=1491.25..1491.26 rows=1 width=64)
+   Output: avg(((fields ->> 'sig1'::text))::bigint), sum(((fields ->> 'sig1'::text))::bigint)
+   ->  Foreign Scan on public.sc1  (cost=10.00..1462.00 rows=1462 width=32)
+         Output: "time", tags, fields
+         InfluxDB query: SELECT * FROM "sc1"
+(5 rows)
+
+--Testcase 80:
+SELECT avg((fields->>'sig1')::bigint), sum((fields->>'sig1')::bigint) FROM sc1;
+        avg         | sum 
+--------------------+-----
+ 5.0000000000000000 |  45
+(1 row)
+
+-- aggregate sum (remote) and avg (local) different remote column
+--Testcase 81:
+EXPLAIN VERBOSE
+SELECT avg((fields->>'sig1')::bigint), sum((fields->>'sig3')::double precision) FROM sc1;
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=1491.24..1491.25 rows=1 width=40)
+   Output: avg(((fields ->> 'sig1'::text))::bigint), sum(((fields ->> 'sig3'::text))::double precision)
+   ->  Foreign Scan on public.sc1  (cost=10.00..1462.00 rows=1462 width=32)
+         Output: "time", tags, fields
+         InfluxDB query: SELECT * FROM "sc1"
+(5 rows)
+
+--Testcase 82:
+SELECT avg((fields->>'sig1')::bigint), sum((fields->>'sig3')::double precision) FROM sc1;
+        avg         | sum  
+--------------------+------
+ 5.0000000000000000 | 22.5
+(1 row)
+
+-- aggregate sum (remote) and avg (local) having non existed remote column
+--Testcase 83:
+EXPLAIN VERBOSE
+SELECT avg((fields->>'sig1')::bigint), sum((fields->>'sig')::double precision) FROM sc1;
+                                              QUERY PLAN                                               
+-------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=1491.24..1491.25 rows=1 width=40)
+   Output: avg(((fields ->> 'sig1'::text))::bigint), sum(((fields ->> 'sig'::text))::double precision)
+   ->  Foreign Scan on public.sc1  (cost=10.00..1462.00 rows=1462 width=32)
+         Output: "time", tags, fields
+         InfluxDB query: SELECT * FROM "sc1"
+(5 rows)
+
+--Testcase 84:
+SELECT avg((fields->>'sig1')::bigint), sum((fields->>'sig')::double precision) FROM sc1;
+        avg         | sum 
+--------------------+-----
+ 5.0000000000000000 |    
+(1 row)
+
+-- aggregate sum (remote) + field + group by(field) + order by(field) - no pushdown for aggregation
+--Testcase 85:
+EXPLAIN VERBOSE
+SELECT sum((fields->>'sig1')::bigint),(fields->>'sig1')::bigint sig1 FROM sc1 GROUP BY (fields->>'sig1')::bigint ORDER BY (fields->>'sig1')::bigint;
+                                            QUERY PLAN                                             
+---------------------------------------------------------------------------------------------------
+ Sort  (cost=1502.88..1503.38 rows=200 width=40)
+   Output: (sum((((fields ->> 'sig1'::text))::bigint))), (((fields ->> 'sig1'::text))::bigint)
+   Sort Key: (((sc1.fields ->> 'sig1'::text))::bigint)
+   ->  HashAggregate  (cost=1491.24..1495.24 rows=200 width=40)
+         Output: sum((((fields ->> 'sig1'::text))::bigint)), (((fields ->> 'sig1'::text))::bigint)
+         Group Key: ((sc1.fields ->> 'sig1'::text))::bigint
+         ->  Foreign Scan on public.sc1  (cost=10.00..1472.96 rows=1462 width=40)
+               Output: ((fields ->> 'sig1'::text))::bigint, fields
+               InfluxDB query: SELECT * FROM "sc1"
+(9 rows)
+
+--Testcase 86:
+SELECT sum((fields->>'sig1')::bigint),(fields->>'sig1')::bigint sig1 FROM sc1 GROUP BY (fields->>'sig1')::bigint ORDER BY (fields->>'sig1')::bigint;
+ sum | sig1 
+-----+------
+   1 |    1
+   2 |    2
+   3 |    3
+   4 |    4
+   5 |    5
+   6 |    6
+   7 |    7
+   8 |    8
+   9 |    9
+(9 rows)
+
+--Testcase 87:
+EXPLAIN VERBOSE
+SELECT count(*) FROM (SELECT (fields->>'sig1')::bigint sig1 FROM sc1) sc;
+                   QUERY PLAN                   
+------------------------------------------------
+ Foreign Scan  (cost=1.00..1.00 rows=1 width=8)
+   Output: (count(*))
+   InfluxDB query: SELECT count(*) FROM "sc1"
+(3 rows)
+
+--Testcase 88:
+SELECT count(*) FROM (SELECT (fields->>'sig1')::bigint sig1 FROM sc1) sc;
+ count 
+-------
+     9
+(1 row)
+
+-- drop extension
+--Testcase 89:
+DROP FOREIGN TABLE sc1;
+--Testcase 90:
+DROP FOREIGN TABLE sc2;
+--Testcase 91:
+DROP FOREIGN TABLE sc3;
+--Testcase 92:
+DROP FOREIGN TABLE sc4;
+--Testcase 93:
+DROP USER MAPPING FOR CURRENT_USER SERVER influxdb_svr;
+--Testcase 94:
+DROP SERVER influxdb_svr;
+--Testcase 95:
+DROP EXTENSION influxdb_fdw;

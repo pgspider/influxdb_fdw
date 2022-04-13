@@ -584,6 +584,9 @@ DELETE FROM cpu WHERE time_text = '2021-02-02 00:00:00' OR time ='2029-02-02 05:
 --Testcase 200:
 SELECT * FROM cpu;
 
+-- Recover data
+\! influx -import -path=init/init.txt -precision=s > /dev/null
+
 --Testcase 201:
 DROP USER MAPPING FOR CURRENT_USER SERVER server1;
 --Testcase 202:

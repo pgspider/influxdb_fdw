@@ -64,6 +64,8 @@ insert into inserttest values(30, 50, repeat('x', 10000));
 select col1, col2, char_length(col3) from inserttest;
 
 --Testcase 20:
+-- Clean up:
+delete from inserttest;
 drop foreign table inserttest;
 
 /*

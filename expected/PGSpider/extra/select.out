@@ -942,6 +942,8 @@ explain (costs off) select * from list_parted_tbl;
 
 --Testcase 75:
 drop table list_parted_tbl;
+-- Clean up:
+DROP TABLE IF EXISTS tmp;
 --Testcase 76:
 DROP USER MAPPING FOR CURRENT_USER SERVER influxdb_svr;
 --Testcase 77:
