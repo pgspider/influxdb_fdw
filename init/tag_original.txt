@@ -1,0 +1,26 @@
+# DDL
+DROP DATABASE schemalessdb
+CREATE DATABASE schemalessdb
+
+# DML
+# CONTEXT-DATABASE: schemalessdb
+
+sctbl4 sig1=12120i,sig2="aoao wejf",sig3=-101,sig4=True 23442
+sctbl4 sig1=2120i,sig2="BAEFOAWJ#AWEK",sig3=102,sig4=false 631983
+sctbl4 sig1=-230i,sig2="C)@maEFJAe=3kake",sig3=103,sig4=f 25978752
+sctbl4 sig1=-340i,sig2="装置開発機能仕",sig3=0,sig4=true 142
+sctbl4 sig1=1250i,sig2="システム",sig3=205,sig4=false 54628
+sctbl4 sig1=9260i,sig2="設計 検討資料",sig3=206,sig4=false 5927
+sctbl4 sig1=370i,sig2="g029012",sig3=307,sig4=t 42351
+sctbl4 sig1=480i,sig2="+!2-3-12030_!@#!)~_#@%)",sig3=308,sig4=false 8678
+sctbl4 sig1=190i,sig2="012002'akewo02",sig3=309,sig4=FALSE 98542
+
+sctbl9,sid=id1,sname=rapviet sig1=12120i,sig2="制御装置が正常に稼働していません",sig3=10.1,sig4=true 0
+sctbl9,sid=id2,sname=kingofrap sig1=2120i,sig2="BAEFOAWJ#AWEK",sig3=10.2,sig4=false 0
+sctbl9,sid=id3,sname=rapviet sig1=-230i,sig2="C)@ma EFJAe=3kake",sig3=10.3,sig4=false 0
+sctbl9,sid=id4,sname=kingofrap sig1=-340i,sig2="装置開111発機能仕",sig3=20.4,sig4=true 1
+sctbl9,sid=id5,sname=kingofrap sig1=1250i,sig2="システム",sig3=20.5,sig4=false 1
+sctbl9,sid=id6,sname=rapviet sig1=9260i,sig2="設計検討資料",sig3=20.6,sig4=false 1
+sctbl9,sid=id7,sname=rapviet sig1=370i,sig2="XINChaoTOIyeUcaCbaN",sig3=30.7,sig4=true 2
+sctbl9,sid=id8,sname=kingofrap sig1=480i,sig2="+!2-3-12030_!@#!)~_#@%)",sig3=30.8,sig4=false 2
+sctbl9,sid=id9,sname=kingofrap sig1=190i,sig2="0113 113'JXJOo02",sig3=30.9,sig4=false 2

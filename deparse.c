@@ -188,6 +188,7 @@ typedef struct foreign_loc_cxt
 										 * function */
 	bool		influx_fill_enable; /* true if deparse subexpression inside
 									 * influx_time() */
+	bool		have_otherfunc_influx_time_tlist; /* true if having other functions than influx_time() in tlist. */
 } foreign_loc_cxt;
 
 /*
@@ -207,6 +208,7 @@ typedef struct deparse_expr_cxt
 	bool		can_skip_cast;	/* outer function can skip float8/numeric cast */
 	bool		can_delete_directly;	/* DELETE statement can pushdown
 										 * directly */
+	bool        has_bool_cmp;   /* outer has bool comparison target */
 	FuncExpr   *influx_fill_expr;	/* Store the fill() function */
 } deparse_expr_cxt;
 
@@ -241,6 +243,7 @@ static void influxdb_deparse_relabel_type(RelabelType *node, deparse_expr_cxt *c
 static void influxdb_deparse_bool_expr(BoolExpr *node, deparse_expr_cxt *context);
 static void influxdb_deparse_null_test(NullTest *node, deparse_expr_cxt *context);
 static void influxdb_deparse_array_expr(ArrayExpr *node, deparse_expr_cxt *context);
+static void influxdb_deparse_coerce_via_io(CoerceViaIO * cio, deparse_expr_cxt *context);
 static void influxdb_print_remote_param(int paramindex, Oid paramtype, int32 paramtypmod,
 										deparse_expr_cxt *context);
 static void influxdb_print_remote_placeholder(Oid paramtype, int32 paramtypmod,
@@ -248,6 +251,11 @@ static void influxdb_print_remote_placeholder(Oid paramtype, int32 paramtypmod,
 static void influxdb_deparse_relation(StringInfo buf, Relation rel);
 static void influxdb_deparse_target_list(StringInfo buf, PlannerInfo *root, Index rtindex, Relation rel,
 										 Bitmapset *attrs_used, List **retrieved_attrs);
+static void influxdb_deparse_target_list_schemaless(StringInfo buf, Relation rel, Oid reloid,
+													Bitmapset *attrs_used,
+													List **retrieved_attrs,
+													bool all_fieldtag, List *slcols);
+static void influxdb_deparse_slvar(Node *node, Var *var, Const *cnst, deparse_expr_cxt *context);
 static void influxdb_deparse_column_ref(StringInfo buf, int varno, int varattno, Oid vartype, PlannerInfo *root, bool convert, bool *can_delete_directly);
 static void influxdb_deparse_select(List *tlist, List **retrieved_attrs, deparse_expr_cxt *context);
 static void influxdb_deparse_from_expr_for_rel(StringInfo buf, PlannerInfo *root,
@@ -267,7 +275,7 @@ static Expr *influxdb_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel
 static bool influxdb_is_contain_time_column(List *tlist);
 static void influxdb_append_field_key(TupleDesc tupdesc, StringInfo buf, Index rtindex, PlannerInfo *root, bool first);
 static void influxdb_append_limit_clause(deparse_expr_cxt *context);
-static bool influxdb_is_string_type(Node *node);
+static bool influxdb_is_string_type(Node *node, schemaless_info *pslinfo);
 static char *influxdb_quote_identifier(const char *s, char q);
 static bool influxdb_contain_functions_walker(Node *node, void *context);
 
@@ -454,6 +462,8 @@ influxdb_foreign_expr_walker(Node *node,
 	static bool is_time_column = false; /* Use static variable for save value
 										 * from child node to parent node.
 										 * Check column T_Var is time column? */
+	InfluxDBFdwRelationInfo *fpinfo =
+		(InfluxDBFdwRelationInfo *)(glob_cxt->foreignrel->fdw_private);
 
 	/* Need do nothing for empty subexpressions */
 	if (node == NULL)
@@ -675,7 +685,14 @@ influxdb_foreign_expr_walker(Node *node,
 				 * influx_time() function
 				 */
 				if (strcmp(opername, "influx_time") == 0)
+				{
 					inner_cxt.influx_fill_enable = true;
+				}
+				else
+				{
+					/* There is another function than influx_time in tlist */
+					outer_cxt->have_otherfunc_influx_time_tlist = true;
+				}
 
 				/*
 				 * Recurse to input subexpressions.
@@ -752,13 +769,21 @@ influxdb_foreign_expr_walker(Node *node,
 		case T_OpExpr:
 			{
 				OpExpr	   *oe = (OpExpr *) node;
+				bool		is_slvar = false;
+				bool		is_param = false;
+
+				if (influxdb_is_slvar_fetch(node, &(fpinfo->slinfo)))
+					is_slvar = true;
+
+				if (influxdb_is_param_fetch(node, &(fpinfo->slinfo)))
+					is_param = true;
 
 				/*
 				 * Similarly, only built-in operators can be sent to remote.
 				 * (If the operator is, surely its underlying function is
 				 * too.)
 				 */
-				if (!influxdb_is_builtin(oe->opno))
+				if (!influxdb_is_builtin(oe->opno) && !is_slvar && !is_param)
 					return false;
 
 				tuple = SearchSysCache1(OPEROID, ObjectIdGetDatum(oe->opno));
@@ -780,7 +805,7 @@ influxdb_foreign_expr_walker(Node *node,
 				 * Cannot pushdown to InfluxDB if there is string comparison
 				 * with: "<, >, <=, >=" operators
 				 */
-				if (influxdb_is_string_type((Node *) linitial(oe->args)))
+				if (influxdb_is_string_type((Node *) linitial(oe->args), &(fpinfo->slinfo)))
 				{
 					if (strcmp(cur_opname, "<") == 0 ||
 						strcmp(cur_opname, ">") == 0 ||
@@ -801,6 +826,16 @@ influxdb_foreign_expr_walker(Node *node,
 					{
 						return false;
 					}
+				}
+
+				if (is_slvar || is_param)
+				{
+					collation = oe->inputcollid;
+					check_type = false;
+
+					state = FDW_COLLATE_SAFE;
+
+					break;
 				}
 
 				/*
@@ -861,7 +896,7 @@ influxdb_foreign_expr_walker(Node *node,
 				 * Cannot pushdown to InfluxDB if there is string comparison
 				 * with: "<, >, <=, >=" operators
 				 */
-				if (influxdb_is_string_type((Node *) linitial(oe->args)))
+				if (influxdb_is_string_type((Node *) linitial(oe->args), &(fpinfo->slinfo)))
 				{
 					if (strcmp(cur_opname, "<") == 0 ||
 						strcmp(cur_opname, ">") == 0 ||
@@ -1002,7 +1037,6 @@ influxdb_foreign_expr_walker(Node *node,
 			{
 				Aggref	   *agg = (Aggref *) node;
 				ListCell   *lc;
-				FuncExpr   *func = (FuncExpr *) node;
 				char	   *opername = NULL;
 				bool		old_val;
 				int			index_const = -1;
@@ -1010,15 +1044,10 @@ influxdb_foreign_expr_walker(Node *node,
 				bool		is_regex = false;
 				bool		is_star_func = false;
 				bool		is_not_star_func = false;
+				Oid			agg_inputcollid = agg->inputcollid;
 
 				/* get function name and schema */
-				tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(agg->aggfnoid));
-				if (!HeapTupleIsValid(tuple))
-				{
-					elog(ERROR, "cache lookup failed for function %u", func->funcid);
-				}
-				opername = pstrdup(((Form_pg_proc) GETSTRUCT(tuple))->proname.data);
-				ReleaseSysCache(tuple);
+				opername = get_func_name(agg->aggfnoid);
 
 				/* these function can be passed to InfluxDB */
 				if ((strcmp(opername, "sum") == 0 ||
@@ -1089,6 +1118,9 @@ influxdb_foreign_expr_walker(Node *node,
 				foreach(lc, agg->args)
 				{
 					Node	   *n = (Node *) lfirst(lc);
+					OpExpr	   *oe = (OpExpr *) NULL;
+					Oid        resulttype = InvalidOid;
+					bool       is_slvar = false;
 
 					index++;
 
@@ -1118,6 +1150,27 @@ influxdb_foreign_expr_walker(Node *node,
 							else
 								return false;
 						}
+						else if (fpinfo->slinfo.schemaless &&
+								 (IsA(n, CoerceViaIO) || IsA(n, OpExpr)))
+						{
+							if (IsA(n, OpExpr))
+							{
+								oe = (OpExpr *) n;
+								resulttype = oe->opresulttype;
+							}
+							else
+							{
+								/* CoerceViaIO */
+								CoerceViaIO *cio = (CoerceViaIO *) n;
+								oe = (OpExpr *)cio->arg;
+								resulttype = cio->resulttype;
+							}
+
+							if (influxdb_is_slvar_fetch((Node *)oe, &(fpinfo->slinfo)))
+								is_slvar = true;
+							else
+								return false;
+						}
 						else if (is_star_func)
 							 /* arguments checking is OK */ ;
 						else
@@ -1125,10 +1178,27 @@ influxdb_foreign_expr_walker(Node *node,
 					}
 
 					/* Check if arg is Var */
-					if (IsA(n, Var))
+					if (IsA(n, Var) || is_slvar)
 					{
-						Var		   *var = (Var *) n;
-						char	   *colname = influxdb_get_column_name(glob_cxt->relid, var->varattno);
+						Var		   *var;
+						char	   *colname;
+
+						if (is_slvar)
+						{
+							Const *cnst;
+
+							var = linitial_node(Var, oe->args);
+							cnst = lsecond_node(Const, oe->args);
+							colname = TextDatumGetCString(cnst->constvalue);
+							agg_inputcollid = var->varcollid;
+						}
+						else
+						{
+							var = (Var *) n;
+
+							colname = influxdb_get_column_name(glob_cxt->relid, var->varattno);
+							resulttype = var->vartype;
+						}
 
 						/* Not push down if arg is tag key */
 						if (influxdb_is_tag_key(colname, glob_cxt->relid))
@@ -1139,7 +1209,7 @@ influxdb_foreign_expr_walker(Node *node,
 						 * column
 						 */
 						if ((strcmp(opername, "max") == 0 || strcmp(opername, "min") == 0)
-							&& var->vartype == TEXTOID)
+							&& (resulttype == TEXTOID || resulttype == InvalidOid))
 							return false;
 					}
 
@@ -1185,10 +1255,10 @@ influxdb_foreign_expr_walker(Node *node,
 					 * If aggregate's input collation is not derived from a
 					 * foreign Var, it can't be sent to remote.
 					 */
-					if (agg->inputcollid == InvalidOid)
+					if (agg_inputcollid == InvalidOid)
 						 /* OK, inputs are all noncollatable */ ;
 					else if (inner_cxt.state != FDW_COLLATE_SAFE ||
-							 agg->inputcollid != inner_cxt.collation)
+							 agg_inputcollid != inner_cxt.collation)
 						return false;
 				}
 
@@ -1208,6 +1278,40 @@ influxdb_foreign_expr_walker(Node *node,
 					state = FDW_COLLATE_NONE;
 				else
 					state = FDW_COLLATE_UNSAFE;
+			}
+			break;
+		case T_CoerceViaIO:
+			{
+				CoerceViaIO *cio = (CoerceViaIO *) node;
+				Node *arg = (Node *)cio->arg;
+
+				if (influxdb_is_slvar_fetch(arg, &(fpinfo->slinfo)) ||
+					influxdb_is_param_fetch(arg, &(fpinfo->slinfo)))
+				{
+					if (!influxdb_foreign_expr_walker(arg, glob_cxt, &inner_cxt))
+						return false;
+				}
+				else
+				{
+					return false;
+				}
+
+				collation = InvalidOid;
+				state = FDW_COLLATE_NONE;
+			}
+			break;
+		case T_NullTest:
+			{
+				NullTest   *nt = (NullTest *) node;
+				char       *colname;
+
+				colname = influxdb_get_slvar(nt->arg, &(fpinfo->slinfo));
+				if (colname == NULL || !influxdb_is_tag_key(colname, glob_cxt->relid))
+					return false;
+
+				/* Output is always boolean and so noncollatable. */
+				collation = InvalidOid;
+				state = FDW_COLLATE_NONE;
 			}
 			break;
 		case T_ArrayExpr:
@@ -1239,7 +1343,6 @@ influxdb_foreign_expr_walker(Node *node,
 			break;
 		case T_DistinctExpr:
 			/* IS DISTINCT FROM */
-		case T_NullTest:
 			return false;
 		default:
 
@@ -1578,7 +1681,13 @@ influxdb_deparse_select(List *tlist, List **retrieved_attrs, deparse_expr_cxt *c
 		 */
 		Relation	rel = table_open(rte->relid, NoLock);
 
-		influxdb_deparse_target_list(buf, root, foreignrel->relid, rel, fpinfo->attrs_used, retrieved_attrs);
+		if (fpinfo->slinfo.schemaless)
+			influxdb_deparse_target_list_schemaless(buf, rel, rte->relid,
+													fpinfo->attrs_used, retrieved_attrs,
+													fpinfo->all_fieldtag,
+													fpinfo->slcols);
+		else
+			influxdb_deparse_target_list(buf, root, foreignrel->relid, rel, fpinfo->attrs_used, retrieved_attrs);
 
 		table_close(rel, NoLock);
 	}
@@ -1644,9 +1753,13 @@ influxdb_append_conditions(List *exprs, deparse_expr_cxt *context)
 		if (!is_first)
 			appendStringInfoString(buf, " AND ");
 
+		context->has_bool_cmp = true;
+
 		appendStringInfoChar(buf, '(');
 		influxdb_deparse_expr(expr, context);
 		appendStringInfoChar(buf, ')');
+
+		context->has_bool_cmp = false;
 
 		is_first = false;
 	}
@@ -1673,6 +1786,7 @@ influxdb_deparse_explicit_target_list(List *tlist, List **retrieved_attrs,
 	bool		is_col_grouping_target = false;
 	bool		need_field_key;
 	bool		is_need_comma = false;
+	bool		selected_all_fieldtag = false;
 	InfluxDBFdwRelationInfo *fpinfo = (InfluxDBFdwRelationInfo *) context->foreignrel->fdw_private;
 
 	*retrieved_attrs = NIL;
@@ -1692,6 +1806,10 @@ influxdb_deparse_explicit_target_list(List *tlist, List **retrieved_attrs,
 	foreach(lc, tlist)
 	{
 		TargetEntry *tle = lfirst_node(TargetEntry, lc);
+		bool is_slvar = false;
+
+		if (influxdb_is_slvar_fetch((Node *)tle->expr, &(fpinfo->slinfo)))
+			is_slvar = true;
 
 		/* Check whether column is a grouping target or not */
 		if (!fpinfo->is_tlist_func_pushdown && IsA((Expr *) tle->expr, Var))
@@ -1699,10 +1817,15 @@ influxdb_deparse_explicit_target_list(List *tlist, List **retrieved_attrs,
 			is_col_grouping_target = influxdb_is_grouping_target(tle, context->root->parse);
 		}
 
+		if (is_slvar)
+		{
+			is_col_grouping_target = influxdb_is_grouping_target(tle, context->root->parse);
+		}
+
 		if (IsA((Expr *) tle->expr, Aggref) ||
-			IsA((Expr *) tle->expr, OpExpr) ||
+			(IsA((Expr *) tle->expr, OpExpr) && !is_slvar) ||
 			IsA((Expr *) tle->expr, FuncExpr) ||
-			(IsA((Expr *) tle->expr, Var) && !is_col_grouping_target))
+			((IsA((Expr *) tle->expr, Var) || is_slvar) && !is_col_grouping_target))
 		{
 			bool		is_skip_expr = false;
 
@@ -1724,9 +1847,14 @@ influxdb_deparse_explicit_target_list(List *tlist, List **retrieved_attrs,
 
 			if (!is_skip_expr)
 			{
-				first = false;
-				influxdb_deparse_expr((Expr *) tle->expr, context);
-				is_need_comma = true;
+				if (fpinfo->is_tlist_func_pushdown && fpinfo->all_fieldtag)
+					selected_all_fieldtag = true;
+				else
+				{
+					first = false;
+					influxdb_deparse_expr((Expr *) tle->expr, context);
+					is_need_comma = true;
+				}
 			}
 		}
 
@@ -1748,7 +1876,7 @@ influxdb_deparse_explicit_target_list(List *tlist, List **retrieved_attrs,
 	}
 	context->is_tlist = false;
 
-	if (i == 0)
+	if (i == 0 || selected_all_fieldtag)
 	{
 		appendStringInfoString(buf, "*");
 		return;
@@ -2144,6 +2272,9 @@ influxdb_deparse_expr(Expr *node, deparse_expr_cxt *context)
 			break;
 		case T_Aggref:
 			influxdb_deparse_aggref((Aggref *) node, context);
+			break;
+		case T_CoerceViaIO:
+			influxdb_deparse_coerce_via_io((CoerceViaIO *) node, context);
 			break;
 		default:
 			elog(ERROR, "unsupported expression type for deparse: %d",
@@ -2676,6 +2807,8 @@ influxdb_deparse_op_expr(OpExpr *node, deparse_expr_cxt *context)
 	HeapTuple	tuple;
 	Form_pg_operator form;
 	char		oprkind;
+	InfluxDBFdwRelationInfo *fpinfo =
+		(InfluxDBFdwRelationInfo *)(context->foreignrel->fdw_private);
 
 	/* Retrieve information about the operator from system catalog. */
 	tuple = SearchSysCache1(OPEROID, ObjectIdGetDatum(node->opno));
@@ -2687,6 +2820,14 @@ influxdb_deparse_op_expr(OpExpr *node, deparse_expr_cxt *context)
 	/* Sanity check. */
 	Assert((oprkind == 'l' && list_length(node->args) == 1) ||
 		   (oprkind == 'b' && list_length(node->args) == 2));
+
+	/* Check schemaless var */
+	if (influxdb_is_slvar_fetch((Node *)node, &(fpinfo->slinfo)))
+	{
+		influxdb_deparse_slvar((Node *)node, linitial_node(Var, node->args), lsecond_node(Const, node->args), context);
+		ReleaseSysCache(tuple);
+		return;
+	}
 
 	/* Always parenthesize the expression. */
 	appendStringInfoChar(buf, '(');
@@ -2853,6 +2994,14 @@ influxdb_deparse_scalar_array_op_expr(ScalarArrayOpExpr *node, deparse_expr_cxt 
 									 * argument is false
 									 */
 									influxdb_deparse_column_ref(buf, var->varno, var->varattno, var->vartype, context->root, false, false);
+								}
+								else if (arg1 != NULL && IsA(arg1, CoerceViaIO))
+								{
+									bool has_bool_cmp = context->has_bool_cmp;
+
+									context->has_bool_cmp = false;
+									influxdb_deparse_expr(arg1, context);
+									context->has_bool_cmp = has_bool_cmp;
 								}
 							}
 							else
@@ -3021,9 +3170,9 @@ influxdb_deparse_null_test(NullTest *node, deparse_expr_cxt *context)
 	appendStringInfoChar(buf, '(');
 	influxdb_deparse_expr(node->arg, context);
 	if (node->nulltesttype == IS_NULL)
-		appendStringInfoString(buf, " IS NULL)");
+		appendStringInfoString(buf, " = '')");
 	else
-		appendStringInfoString(buf, " IS NOT NULL)");
+		appendStringInfoString(buf, " <> '')");
 }
 
 /*
@@ -3712,8 +3861,10 @@ influxdb_is_foreign_function_tlist(PlannerInfo *root,
 								   RelOptInfo *baserel,
 								   List *tlist)
 {
+	InfluxDBFdwRelationInfo *fpinfo = (InfluxDBFdwRelationInfo *) (baserel->fdw_private);
 	ListCell   *lc;
 	bool		is_contain_function;
+	bool		have_slvar_fields = false;
 	foreign_glob_cxt glob_cxt;
 	foreign_loc_cxt loc_cxt;
 
@@ -3740,13 +3891,18 @@ influxdb_is_foreign_function_tlist(PlannerInfo *root,
 		return false;
 
 	/*
+	 * have_otherfunc_influx_time_tlist variable is set
+	 * by influxdb_foreign_expr_walker().
+	 */
+	loc_cxt.have_otherfunc_influx_time_tlist = false;
+
+	/*
 	 * Check that the expression consists of nodes that are safe to execute
 	 * remotely.
 	 */
 	foreach(lc, tlist)
 	{
 		TargetEntry *tle = lfirst_node(TargetEntry, lc);
-		InfluxDBFdwRelationInfo *fpinfo = (InfluxDBFdwRelationInfo *) (baserel->fdw_private);
 
 		/*
 		 * Check that the expression consists of nodes that are safe to
@@ -3819,6 +3975,40 @@ influxdb_is_foreign_function_tlist(PlannerInfo *root,
 				}
 			}
 		}
+
+		if (IsA(tle->expr, Var))
+		{
+			Var *var = (Var *) tle->expr;
+			bool is_field_key = false;
+
+			if (influxdb_is_slvar(var->vartype, var->varattno, &fpinfo->slinfo, NULL, &is_field_key) && is_field_key)
+			{
+				have_slvar_fields = true;
+			}
+		}
+	}
+
+	/*
+	 * Does not pushdown functions (excepting influx_time()) if there's
+	 * a schemaless type variable. If function is pushdown, we cannot
+	 * construct correctly the json string value for fields value since
+	 * the result of function is returned also, but the FDW cannot distinguish
+	 * whether the result column and which is the result for functions.
+	 */
+	if (have_slvar_fields)
+	{
+		if (loc_cxt.have_otherfunc_influx_time_tlist)
+		{
+			/*
+			 * If there is any other functions than influx_time(), we can not pushdown them.
+			 */
+			return false;
+		}
+
+		/*
+		 * All actual columns is required to be fetched from remote to construct fields value.
+		 */
+		fpinfo->all_fieldtag = true;
 	}
 
 	/* OK for the target list with functions to evaluate on the remote server */
@@ -3827,7 +4017,7 @@ influxdb_is_foreign_function_tlist(PlannerInfo *root,
 
 /* Check type of node whether it is string or not */
 static bool
-influxdb_is_string_type(Node *node)
+influxdb_is_string_type(Node *node, schemaless_info *pslinfo)
 {
 	Oid			oidtype = 0;
 
@@ -3847,9 +4037,32 @@ influxdb_is_string_type(Node *node)
 
 		oidtype = c->consttype;
 	}
+	else if (IsA(node, OpExpr))
+	{
+		OpExpr *oe = (OpExpr *) node;
+
+		if (influxdb_is_slvar_fetch(node, pslinfo))
+		{
+			oidtype = oe->opresulttype;
+		}
+		else
+			return expression_tree_walker(node, influxdb_is_string_type, pslinfo);
+	}
+	else if (IsA(node, CoerceViaIO))
+	{
+		CoerceViaIO *cio = (CoerceViaIO *) node;
+		Node *arg = (Node *)cio->arg;
+
+		if (influxdb_is_slvar_fetch(arg, pslinfo))
+		{
+			oidtype = cio->resulttype;
+		}
+		else
+			return expression_tree_walker(node, influxdb_is_string_type, pslinfo);
+	}
 	else
 	{
-		return expression_tree_walker(node, influxdb_is_string_type, NULL);
+		return expression_tree_walker(node, influxdb_is_string_type, pslinfo);
 	}
 
 	switch (oidtype)
@@ -3911,11 +4124,21 @@ influxdb_get_number_field_key_match(Oid relid, char *regex)
 }
 
 int
-influxdb_get_number_tag_key(Oid relid)
+influxdb_get_number_tag_key(Oid relid, schemaless_info *pslinfo)
 {
 	int			i = 0;
 	int			ntags = 0;
 	char	   *colname = NULL;
+
+	if (pslinfo->schemaless)
+	{
+		influxdb_opt *options;
+
+		/* Get FDW options */
+		options = influxdb_get_options(relid);
+
+		return list_length(options->tags_list);
+	}
 
 	do
 	{
@@ -3951,4 +4174,373 @@ exist_in_function_list(char *funcname, const char **funclist)
 			return true;
 	}
 	return false;
+}
+
+/*
+ * influxdb_is_select_all:
+ *  True if all variables are selected or selected any schemaless column (e.g. column fields jsonb OPTIONS (fields 'true'))
+ */
+bool
+influxdb_is_select_all(RangeTblEntry *rte, List *tlist, schemaless_info *pslinfo)
+{
+	int         i;
+	int         natts = 0;
+	int         natts_valid = 0;
+	Relation	rel = table_open(rte->relid, NoLock);
+	TupleDesc	tupdesc = RelationGetDescr(rel);
+	Oid         rel_type_id;
+	bool        has_rel_type_id = false;
+	bool        has_slcol = false;
+	bool        has_wholerow = false;
+
+	rel_type_id = get_rel_type_id(rte->relid);
+
+	for (i = 1; i <= tupdesc->natts; i++)
+	{
+		Form_pg_attribute attr = TupleDescAttr(tupdesc, i - 1);
+		ListCell          *lc;
+
+		/* Ignore dropped attributes. */
+		if (attr->attisdropped)
+			continue;
+
+		natts_valid++;
+
+		foreach(lc, tlist)
+		{
+			Node *node = (Node *)lfirst(lc);
+
+			if (IsA(node, TargetEntry))
+				node = (Node *)((TargetEntry *) node)->expr;
+
+			if (IsA(node, Var))
+			{
+				Var *var = (Var *) node;
+
+				if (var->vartype == rel_type_id)
+				{
+					has_rel_type_id = true;
+					break;
+				}
+
+				/* If there's a whole-row reference, we'll need all the columns. */
+				if (var->varattno == 0)
+				{
+					has_wholerow = true;
+					break;
+				}
+
+				/* If there's a schemaless type variable, we'll need all the columns. */
+				if (influxdb_is_slvar(var->vartype, var->varattno, pslinfo, NULL, NULL))
+				{
+					has_slcol = true;
+					break;
+				}
+
+				if (var->varattno == attr->attnum)
+				{
+					natts++;
+					break;
+				}
+			}
+			if (has_rel_type_id || has_slcol || has_wholerow)
+				break;
+		}
+	}
+
+	table_close(rel, NoLock);
+
+	return ((natts == natts_valid) || has_rel_type_id || has_slcol || has_wholerow);
+}
+
+/*
+ * influxdb_is_no_field_key: True if there is no field key
+ */
+static bool
+influxdb_is_no_field_key(Oid reloid, List *slcols)
+{
+	int i;
+	bool no_field_key = true;
+
+	/* Check whether there are no field key in tlist */
+	for (i = 1; i <= list_length(slcols); i++)
+	{
+		StringInfo *rcol = (StringInfo *)list_nth(slcols, i-1);
+		char *colname = strVal(rcol);
+
+		if (!INFLUXDB_IS_TIME_COLUMN(colname))
+		{
+			if (!influxdb_is_tag_key(colname, reloid))
+			{
+				no_field_key = false;
+				break;
+			}
+		}
+	}
+
+	return no_field_key;
+}
+
+/*
+ * Emit a remote target list that retrieves the columns specified in attrs_used.
+ * This is used for both SELECT and RETURNING targetlists.
+ */
+static void
+influxdb_deparse_target_list_schemaless(StringInfo buf,
+										Relation rel,
+										Oid reloid,
+										Bitmapset *attrs_used,
+										List **retrieved_attrs,
+										bool all_fieldtag,
+										List *slcols)
+{
+	TupleDesc	tupdesc = RelationGetDescr(rel);
+	bool		first;
+	int			i;
+	bool		no_field_key;
+
+	no_field_key = influxdb_is_no_field_key(reloid, slcols);
+
+	*retrieved_attrs = NIL;
+	for (i = 1; i <= tupdesc->natts; i++)
+	{
+		Form_pg_attribute attr = TupleDescAttr(tupdesc, i - 1);
+
+		/* Ignore dropped attributes. */
+		if (attr->attisdropped)
+			continue;
+
+		if (all_fieldtag || no_field_key ||
+			bms_is_member(i - FirstLowInvalidHeapAttributeNumber,
+						  attrs_used))
+			*retrieved_attrs = lappend_int(*retrieved_attrs, i);
+	}
+
+	if (all_fieldtag || no_field_key)
+	{
+		appendStringInfoString(buf, "*");
+		return;
+	}
+
+	first = true;
+
+	for (i = 1; i <= list_length(slcols); i++)
+	{
+		StringInfo *rcol = (StringInfo *)list_nth(slcols, i-1);
+		char *colname = strVal(rcol);
+
+		/* Skip if column is time */
+		if (!INFLUXDB_IS_TIME_COLUMN(colname))
+		{
+			if (!first)
+				appendStringInfoString(buf, ", ");
+			first = false;
+			appendStringInfoString(buf, influxdb_quote_identifier(colname, QUOTE));
+		}
+	}
+}
+
+/*
+ * Deparse CoerceViaIO
+ */
+static void
+influxdb_deparse_coerce_via_io(CoerceViaIO * cio, deparse_expr_cxt *context)
+{
+	StringInfo	buf = context->buf;
+	InfluxDBFdwRelationInfo *fpinfo =
+		(InfluxDBFdwRelationInfo *)(context->foreignrel->fdw_private);
+	OpExpr *oe = (OpExpr *)cio->arg;
+
+	Assert(fpinfo->slinfo.schemaless);
+
+	/* check schemaless var */
+	if (influxdb_is_slvar_fetch((Node *)oe, &(fpinfo->slinfo)))
+	{
+		influxdb_deparse_slvar((Node *)cio, linitial_node(Var, oe->args), lsecond_node(Const, oe->args), context);
+	}
+	else if (influxdb_is_param_fetch((Node *)oe, &(fpinfo->slinfo)))
+	{
+		influxdb_deparse_param((Param *)cio, context);
+	}
+
+	if (cio->resulttype == BOOLOID && context->has_bool_cmp)
+	{
+		appendStringInfoString(buf, " = true");
+	}
+}
+
+/*
+ * Deparse expression of influxdb_tags/influxdb_fields var -> const
+ */
+static void
+influxdb_deparse_slvar(Node *node, Var *var, Const *cnst, deparse_expr_cxt *context)
+{
+	StringInfo	buf = context->buf;
+	Relids		relids = context->scanrel->relids;
+
+	if (bms_is_member(var->varno, relids) && var->varlevelsup == 0)
+	{
+		appendStringInfo(buf, "%s", influxdb_quote_identifier(TextDatumGetCString(cnst->constvalue), QUOTE));
+	}
+	else
+	{
+		/* Treat like a Param */
+		if (context->params_list)
+		{
+			int			pindex = 0;
+			ListCell   *lc;
+
+			/* find its index in params_list */
+			foreach(lc, *context->params_list)
+			{
+				pindex++;
+				if (equal(node, (Node *) lfirst(lc)))
+					break;
+			}
+			if (lc == NULL)
+			{
+				/* not in list, so add it */
+				pindex++;
+				*context->params_list = lappend(*context->params_list, node);
+			}
+			influxdb_print_remote_param(pindex, var->vartype, var->vartypmod, context);
+		}
+		else
+		{
+			influxdb_print_remote_placeholder(var->vartype, var->vartypmod, context);
+		}
+	}
+}
+
+/*
+ * influxdb_escape_json_string
+ *		Escapes a string for safe inclusion in JSON.
+ */
+char *
+influxdb_escape_json_string(char *string)
+{
+	StringInfo	buffer;
+	const char *ptr;
+	int			i;
+	int			segment_start_idx;
+	int			len;
+	bool		needed_escaping = false;
+
+	if (string == NULL)
+		return NULL;
+
+	for (ptr = string; *ptr; ++ptr)
+	{
+		if (*ptr == '"' || *ptr == '\r' || *ptr == '\n' || *ptr == '\t' ||
+			*ptr == '\\')
+		{
+			needed_escaping = true;
+			break;
+		}
+	}
+
+	if (!needed_escaping)
+		return pstrdup(string);
+
+	buffer = makeStringInfo();
+	len = strlen(string);
+	segment_start_idx = 0;
+	for (i = 0; i < len; ++i)
+	{
+		if (string[i] == '"' || string[i] == '\r' || string[i] == '\n' ||
+			string[i] == '\t' || string[i] == '\\')
+		{
+			if (segment_start_idx < i)
+				appendBinaryStringInfo(buffer, string + segment_start_idx,
+									   i - segment_start_idx);
+
+			appendStringInfoChar(buffer, '\\');
+			if (string[i] == '"')
+				appendStringInfoChar(buffer, '"');
+			else if (string[i] == '\r')
+				appendStringInfoChar(buffer, 'r');
+			else if (string[i] == '\n')
+				appendStringInfoChar(buffer, 'n');
+			else if (string[i] == '\t')
+				appendStringInfoChar(buffer, 't');
+			else if (string[i] == '\\')
+				appendStringInfoChar(buffer, '\\');
+
+			segment_start_idx = i + 1;
+		}
+	}
+	if (segment_start_idx < len)
+		appendBinaryStringInfo(buffer, string + segment_start_idx,
+							   len - segment_start_idx);
+	return buffer->data;
+}
+
+/*
+ * influxdb_escape_record_string
+ *		Escapes a string for safe inclusion in record format
+ *		that followed PostgreSQL composite type.
+ */
+char *
+influxdb_escape_record_string(char *string)
+{
+	StringInfo	buffer;
+	const char *ptr;
+	int			i;
+	int			segment_start_idx;
+	int			len;
+	bool		needed_escaping = false;
+
+	if (string == NULL)
+		return NULL;
+
+	/*
+	 * If fields value containing parentheses, commas, double quotes, or backslashes
+	 * must be double quoted.
+	 */
+	for (ptr = string; *ptr; ++ptr)
+	{
+		if (*ptr == '"' || *ptr == '\\' || *ptr == ',' || *ptr == '(' || *ptr == ')')
+		{
+			needed_escaping = true;
+			break;
+		}
+	}
+
+	if (!needed_escaping)
+		return pstrdup(string);
+
+	buffer = makeStringInfo();
+	len = strlen(string);
+	segment_start_idx = 0;
+
+	appendStringInfoChar(buffer, '"');
+
+	/*
+	 * To put a double quote or backslash in a quoted composite field value,
+	 * precede it with a backslash.
+	 */
+	for (i = 0; i < len; ++i)
+	{
+		if (string[i] == '"' || string[i] == '\\')
+		{
+			if (segment_start_idx < i)
+				appendBinaryStringInfo(buffer, string + segment_start_idx,
+									   i - segment_start_idx);
+
+			appendStringInfoChar(buffer, '\\');
+			if (string[i] == '"')
+				appendStringInfoChar(buffer, '"');
+			else if (string[i] == '\\')
+				appendStringInfoChar(buffer, '\\');
+
+			segment_start_idx = i + 1;
+		}
+	}
+	if (segment_start_idx < len)
+		appendBinaryStringInfo(buffer, string + segment_start_idx,
+							   len - segment_start_idx);
+
+	appendStringInfoChar(buffer, '"');
+
+	return buffer->data;
 }

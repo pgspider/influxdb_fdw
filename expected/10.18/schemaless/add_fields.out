@@ -1,0 +1,1291 @@
+SET datestyle=ISO;
+-- timestamp with time zone differs based on this
+SET timezone='UTC';
+\set ECHO none
+-- Init data
+\! influx -import -path=init/fields_original.txt -precision=ns > /dev/null
+--Before update data
+--Testcase 1:
+CREATE EXTENSION influxdb_fdw CASCADE;
+--Testcase 2:
+CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname 'schemalessdb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
+--Testcase 3:
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
+--Testcase 4:
+CREATE FOREIGN TABLE sctbl1 (time timestamp with time zone, tags jsonb OPTIONS(tags 'true'), fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true', tags 'device_id');
+--Testcase 5:
+CREATE FOREIGN TABLE sctbl2 (time timestamp with time zone, tags jsonb OPTIONS(tags 'true'), fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true', tags 'device_id');
+--Before update data
+--Testcase 6:
+SELECT * FROM sctbl1;
+             time              |            tags            |                                               fields                                                
+-------------------------------+----------------------------+-----------------------------------------------------------------------------------------------------
+ 1677-09-21 00:12:43.145224+00 | {"device_id": "dev1"}      | {"sig1": "-664", "sig2": null, "sig3": "0.78", "sig4": "true"}
+ 2016-06-13 17:43:50.1004+00   | {"device_id": "d ,=ev2"}   | {"sig1": "2222", "sig2": "x'a8a9aaabacadaeaf'", "sig3": "-1", "sig4": "false"}
+ 2016-06-13 17:43:50.1004+00   | {"device_id": "dev2"}      | {"sig1": "35655", "sig2": "abcdefghijklmnopqrstuvwxyz", "sig3": "0.25", "sig4": "false"}
+ 2016-06-13 17:43:50.1004+00   | {"device_id": "dev3"}      | {"sig1": "65535", "sig2": "`~!@#$%^&*()_+=", "sig3": "-0.91", "sig4": "false"}
+ 2019-05-02 16:12:41.098+00    | {"device_id": "\"dev 1\""} | {"sig1": "70220", "sig2": "いろはにほへど　ちりぬるをわがよたれぞ", "sig3": "0.37", "sig4": "true"}
+ 2019-05-02 16:12:41.098+00    | {"device_id": "dev1"}      | {"sig1": "11", "sig2": "2e2eawekfrjq2o", "sig3": "-0.79769313486", "sig4": "true"}
+ 2019-05-02 16:12:41.098+00    | {"device_id": "dev2"}      | {"sig1": "-8555", "sig2": "AHWEMAKDF", "sig3": "0.34", "sig4": "false"}
+ 2019-05-02 16:12:41.098+00    | {"device_id": "dev3"}      | {"sig1": "319", "sig2": "P_AEF-wefA", "sig3": "0.32", "sig4": "false"}
+ 2262-04-11 23:47:16.854776+00 | {"device_id": "'dev3'"}    | {"sig1": "34422", "sig2": "散りぬるを我が世誰", "sig3": "0.32", "sig4": "false"}
+(9 rows)
+
+--Testcase 7:
+SELECT max(time), max((fields->>'sig1')::bigint), max((fields->>'sig1')::bigint)+10, max((fields->>'sig1')::bigint)-10, max((fields->>'sig3')::float8), max((fields->>'sig3')::float8)/2 FROM sctbl1 GROUP BY time,(fields->>'sig1')::bigint;
+              max              |  max  | ?column? | ?column? |      max       |    ?column?    
+-------------------------------+-------+----------+----------+----------------+----------------
+ 1677-09-21 00:12:43.145224+00 |  -664 |     -654 |     -674 |           0.78 |           0.39
+ 2016-06-13 17:43:50.1004+00   |  2222 |     2232 |     2212 |             -1 |           -0.5
+ 2019-05-02 16:12:41.098+00    | -8555 |    -8545 |    -8565 |           0.34 |           0.17
+ 2016-06-13 17:43:50.1004+00   | 35655 |    35665 |    35645 |           0.25 |          0.125
+ 2016-06-13 17:43:50.1004+00   | 65535 |    65545 |    65525 |          -0.91 |         -0.455
+ 2019-05-02 16:12:41.098+00    |   319 |      329 |      309 |           0.32 |           0.16
+ 2019-05-02 16:12:41.098+00    | 70220 |    70230 |    70210 |           0.37 |          0.185
+ 2262-04-11 23:47:16.854776+00 | 34422 |    34432 |    34412 |           0.32 |           0.16
+ 2019-05-02 16:12:41.098+00    |    11 |       21 |        1 | -0.79769313486 | -0.39884656743
+(9 rows)
+
+--Testcase 8:
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4 from sctbl1 ORDER BY tags->>'device_id';
+ device_id | sig1  |                  sig2                  |      sig3      | sig4 
+-----------+-------+----------------------------------------+----------------+------
+ dev1      |  -664 |                                        |           0.78 | t
+ dev1      |    11 | 2e2eawekfrjq2o                         | -0.79769313486 | t
+ "dev 1"   | 70220 | いろはにほへど　ちりぬるをわがよたれぞ |           0.37 | t
+ dev2      | 35655 | abcdefghijklmnopqrstuvwxyz             |           0.25 | f
+ dev2      | -8555 | AHWEMAKDF                              |           0.34 | f
+ d ,=ev2   |  2222 | x'a8a9aaabacadaeaf'                    |             -1 | f
+ dev3      | 65535 | `~!@#$%^&*()_+=                        |          -0.91 | f
+ dev3      |   319 | P_AEF-wefA                             |           0.32 | f
+ 'dev3'    | 34422 | 散りぬるを我が世誰                     |           0.32 | f
+(9 rows)
+
+--Testcase 9:
+SELECT bool_or((fields->>'sig1')::bigint <> 10) AND true, bool_and(fields->>'sig2' != 'aghsjfh'), bool_or((fields->>'sig1')::bigint+(fields->>'sig3')::float8 <=5.5) OR false from sctbl1 GROUP BY (fields->>'sig1')::bigint,fields->>'sig2';
+ ?column? | bool_and | ?column? 
+----------+----------+----------
+ t        | t        | f
+ t        | t        | f
+ t        | t        | f
+ t        | t        | f
+ t        | t        | f
+ t        |          | t
+ t        | t        | f
+ t        | t        | f
+ t        | t        | t
+(9 rows)
+
+--Testcase 10:
+SELECT sqrt(abs((fields->>'sig1')::float8)), sqrt(abs((fields->>'sig3')::float8)) FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig1')::bigint > -1000 AND (fields->>'sig3')::float8 < 1000 ) AS sctbl1 ORDER BY 1 ASC,2 DESC;
+       sqrt       |       sqrt        
+------------------+-------------------
+  3.3166247903554 | 0.893136683190205
+ 17.8605710994918 | 0.565685424949238
+ 25.7681974534503 | 0.883176086632785
+ 47.1380949975707 |                 1
+ 185.531668455819 | 0.565685424949238
+ 188.825316099299 |               0.5
+ 255.998046867549 | 0.953939201416946
+ 264.990565869806 | 0.608276253029822
+(8 rows)
+
+--Testcase 11:
+SELECT fields->>'sig2' sig2, mode((fields->>'sig3')::float8) WITHIN GROUP (ORDER BY (fields->>'sig3')::float8) AS m1 from sctbl1 GROUP BY fields->>'sig2';
+ERROR:  function mode(double precision, double precision) does not exist
+LINE 1: SELECT fields->>'sig2' sig2, mode((fields->>'sig3')::float8)...
+                                     ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+--Testcase 12:
+SELECT upper(fields->>'sig2'), upper(fields->>'sig2'), lower(fields->>'sig2'), lower(fields->>'sig2') FROM sctbl1 ORDER BY 1 ASC,2 DESC,3 ASC,4;
+                 upper                  |                 upper                  |                 lower                  |                 lower                  
+----------------------------------------+----------------------------------------+----------------------------------------+----------------------------------------
+ `~!@#$%^&*()_+=                        | `~!@#$%^&*()_+=                        | `~!@#$%^&*()_+=                        | `~!@#$%^&*()_+=
+ いろはにほへど　ちりぬるをわがよたれぞ | いろはにほへど　ちりぬるをわがよたれぞ | いろはにほへど　ちりぬるをわがよたれぞ | いろはにほへど　ちりぬるをわがよたれぞ
+ 2E2EAWEKFRJQ2O                         | 2E2EAWEKFRJQ2O                         | 2e2eawekfrjq2o                         | 2e2eawekfrjq2o
+ ABCDEFGHIJKLMNOPQRSTUVWXYZ             | ABCDEFGHIJKLMNOPQRSTUVWXYZ             | abcdefghijklmnopqrstuvwxyz             | abcdefghijklmnopqrstuvwxyz
+ AHWEMAKDF                              | AHWEMAKDF                              | ahwemakdf                              | ahwemakdf
+ P_AEF-WEFA                             | P_AEF-WEFA                             | p_aef-wefa                             | p_aef-wefa
+ X'A8A9AAABACADAEAF'                    | X'A8A9AAABACADAEAF'                    | x'a8a9aaabacadaeaf'                    | x'a8a9aaabacadaeaf'
+ 散りぬるを我が世誰                     | 散りぬるを我が世誰                     | 散りぬるを我が世誰                     | 散りぬるを我が世誰
+(8 rows)
+
+-------------------------------------------------------------------------------------------Update data--Add 1 field------------------------------------------------------------------------------------------------------------
+--Update data
+\! influx -import -path=init/fields_add_1.txt -precision=ns > /dev/null
+--Testcase 13:
+DROP FOREIGN TABLE sctbl1;
+--Testcase 14:
+CREATE FOREIGN TABLE sctbl1 (time timestamp with time zone, tags jsonb OPTIONS(tags 'true'), fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true', tags 'device_id');
+--Testcase 15:
+SELECT * FROM sctbl1;
+             time              |            tags            |                                                        fields                                                        
+-------------------------------+----------------------------+----------------------------------------------------------------------------------------------------------------------
+ 1677-09-21 00:12:43.145224+00 | {"device_id": "dev1"}      | {"sig1": "-664", "sig2": null, "sig3": "0.78", "sig4": "true", "sig5": "false"}
+ 2016-06-13 17:43:50.1004+00   | {"device_id": "d ,=ev2"}   | {"sig1": "2222", "sig2": "x'a8a9aaabacadaeaf'", "sig3": "-1", "sig4": "false", "sig5": "false"}
+ 2016-06-13 17:43:50.1004+00   | {"device_id": "dev2"}      | {"sig1": "35655", "sig2": "abcdefghijklmnopqrstuvwxyz", "sig3": "0.25", "sig4": "false", "sig5": "true"}
+ 2016-06-13 17:43:50.1004+00   | {"device_id": "dev3"}      | {"sig1": "65535", "sig2": "`~!@#$%^&*()_+=", "sig3": "-0.91", "sig4": "false", "sig5": "true"}
+ 2019-05-02 16:12:41.098+00    | {"device_id": "\"dev 1\""} | {"sig1": "70220", "sig2": "いろはにほへど　ちりぬるをわがよたれぞ", "sig3": "0.37", "sig4": "true", "sig5": "false"}
+ 2019-05-02 16:12:41.098+00    | {"device_id": "dev1"}      | {"sig1": "11", "sig2": "2e2eawekfrjq2o", "sig3": "-0.79769313486", "sig4": "true", "sig5": "true"}
+ 2019-05-02 16:12:41.098+00    | {"device_id": "dev2"}      | {"sig1": "-8555", "sig2": "AHWEMAKDF", "sig3": "0.34", "sig4": "false", "sig5": "false"}
+ 2019-05-02 16:12:41.098+00    | {"device_id": "dev3"}      | {"sig1": "319", "sig2": "P_AEF-wefA", "sig3": "0.32", "sig4": "false", "sig5": "true"}
+ 2262-04-11 23:47:16.854776+00 | {"device_id": "'dev3'"}    | {"sig1": "34422", "sig2": "散りぬるを我が世誰", "sig3": "0.32", "sig4": "false", "sig5": "true"}
+(9 rows)
+
+--Select fields,tags
+--Testcase 16:
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3 FROM sctbl1 WHERE NOT (fields->>'sig1')::bigint < (fields->>'sig3')::float8 ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 5 OFFSET 0;
+ device_id | sig1  | sig3  
+-----------+-------+-------
+ 'dev3'    | 34422 |  0.32
+ dev3      |   319 |  0.32
+ dev3      | 65535 | -0.91
+ d ,=ev2   |  2222 |    -1
+ dev2      | 35655 |  0.25
+(5 rows)
+
+--Testcase 17:
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3 FROM sctbl1 WHERE (fields->>'sig3')::float8 < 0 ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 5 OFFSET 0;
+ device_id | sig1  |      sig3      
+-----------+-------+----------------
+ dev3      | 65535 |          -0.91
+ d ,=ev2   |  2222 |             -1
+ dev1      |    11 | -0.79769313486
+(3 rows)
+
+--Testcase 18:
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3 FROM sctbl1 WHERE NOT time >'2020-1-3 20:30:50' ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 5 OFFSET 2;
+ device_id | sig1  | sig3 
+-----------+-------+------
+ d ,=ev2   |  2222 |   -1
+ dev2      | -8555 | 0.34
+ dev2      | 35655 | 0.25
+ "dev 1"   | 70220 | 0.37
+ dev1      |  -664 | 0.78
+(5 rows)
+
+--Testcase 19:
+SELECT time, tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM sctbl1 WHERE true ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 5 OFFSET 0;
+             time              | device_id | sig1  |                  sig2                  |      sig3      | sig4 | sig5 
+-------------------------------+-----------+-------+----------------------------------------+----------------+------+------
+ 2262-04-11 23:47:16.854776+00 | 'dev3'    | 34422 | 散りぬるを我が世誰                     |           0.32 | f    | t
+ 2019-05-02 16:12:41.098+00    | dev1      |    11 | 2e2eawekfrjq2o                         | -0.79769313486 | t    | t
+ 2019-05-02 16:12:41.098+00    | "dev 1"   | 70220 | いろはにほへど　ちりぬるをわがよたれぞ |           0.37 | t    | f
+ 2019-05-02 16:12:41.098+00    | dev2      | -8555 | AHWEMAKDF                              |           0.34 | f    | f
+ 2019-05-02 16:12:41.098+00    | dev3      |   319 | P_AEF-wefA                             |           0.32 | f    | t
+(5 rows)
+
+--Testcase 20:
+SELECT time, tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM sctbl1 WHERE false ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 5 OFFSET 0;
+ time | device_id | sig1 | sig2 | sig3 | sig4 | sig5 
+------+-----------+------+------+------+------+------
+(0 rows)
+
+--Testcase 21:
+SELECT (fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM sctbl1 WHERE (fields->>'sig1')::bigint BETWEEN 0 AND 10000 ORDER BY (fields->>'sig1')::bigint DESC LIMIT 5 OFFSET 0;
+ sig1 |      sig3      | sig4 | sig5 
+------+----------------+------+------
+ 2222 |             -1 | f    | f
+  319 |           0.32 | f    | t
+   11 | -0.79769313486 | t    | t
+(3 rows)
+
+--Testcase 22:
+SELECT time, tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM sctbl1 WHERE fields->>'sig2' LIKE 'x%' ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 5 OFFSET 0;
+            time             | device_id | sig1  |            sig2            | sig3 | sig4 | sig5 
+-----------------------------+-----------+-------+----------------------------+------+------+------
+ 2016-06-13 17:43:50.1004+00 | dev2      | 35655 | abcdefghijklmnopqrstuvwxyz | 0.25 | f    | t
+ 2016-06-13 17:43:50.1004+00 | d ,=ev2   |  2222 | x'a8a9aaabacadaeaf'        |   -1 | f    | f
+(2 rows)
+
+--Testcase 23:
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4 FROM sctbl1 WHERE NOT EXISTS (SELECT fields->>'sig2' FROM sctbl1 WHERE fields->>'sig2'='AHW') ORDER BY 1 DESC,2 ASC LIMIT 5 OFFSET 0;
+ device_id | sig1  |        sig2         | sig3  | sig4 
+-----------+-------+---------------------+-------+------
+ 'dev3'    | 34422 | 散りぬるを我が世誰  |  0.32 | f
+ dev3      |   319 | P_AEF-wefA          |  0.32 | f
+ dev3      | 65535 | `~!@#$%^&*()_+=     | -0.91 | f
+ d ,=ev2   |  2222 | x'a8a9aaabacadaeaf' |    -1 | f
+ dev2      | -8555 | AHWEMAKDF           |  0.34 | f
+(5 rows)
+
+--Testcase 24:
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM sctbl1 WHERE (fields->>'sig3')::float8 < ALL (SELECT (fields->>'sig1')::bigint FROM sctbl1 WHERE (fields->>'sig1')::bigint > 0) ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 5 OFFSET 0;
+ sig1  |                  sig2                  | sig3  | sig4 | sig5 
+-------+----------------------------------------+-------+------+------
+ 70220 | いろはにほへど　ちりぬるをわがよたれぞ |  0.37 | t    | f
+ 65535 | `~!@#$%^&*()_+=                        | -0.91 | f    | t
+ 35655 | abcdefghijklmnopqrstuvwxyz             |  0.25 | f    | t
+ 34422 | 散りぬるを我が世誰                     |  0.32 | f    | t
+  2222 | x'a8a9aaabacadaeaf'                    |    -1 | f    | f
+(5 rows)
+
+--Testcase 25:
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM sctbl1 WHERE (fields->>'sig3')::float8 = ANY (ARRAY[0.78,0.32,0.34]) ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 5 OFFSET 0;
+ sig1  |        sig2        | sig3 | sig4 | sig5 
+-------+--------------------+------+------+------
+ 34422 | 散りぬるを我が世誰 | 0.32 | f    | t
+   319 | P_AEF-wefA         | 0.32 | f    | t
+  -664 |                    | 0.78 | t    | f
+ -8555 | AHWEMAKDF          | 0.34 | f    | f
+(4 rows)
+
+--Testcase 26:
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM sctbl1 WHERE EXISTS (SELECT fields->>'sig3' FROM sctbl1 WHERE (fields->>'sig3')::float8=0.25) ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 5 OFFSET 0;
+ sig1  |                  sig2                  | sig3  | sig4 | sig5 
+-------+----------------------------------------+-------+------+------
+ 70220 | いろはにほへど　ちりぬるをわがよたれぞ |  0.37 | t    | f
+ 65535 | `~!@#$%^&*()_+=                        | -0.91 | f    | t
+ 35655 | abcdefghijklmnopqrstuvwxyz             |  0.25 | f    | t
+ 34422 | 散りぬるを我が世誰                     |  0.32 | f    | t
+  2222 | x'a8a9aaabacadaeaf'                    |    -1 | f    | f
+(5 rows)
+
+--Testcase 27:
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM sctbl1 WHERE fields->>'sig1'=ANY (ARRAY(SELECT fields->>'sig1' FROM sctbl1 WHERE (fields->>'sig1')::bigint%2=0)) ORDER BY 1 DESC LIMIT 5 OFFSET 0;
+ sig1  |                  sig2                  | sig3 | sig4 | sig5 
+-------+----------------------------------------+------+------+------
+ 70220 | いろはにほへど　ちりぬるをわがよたれぞ | 0.37 | t    | f
+ 34422 | 散りぬるを我が世誰                     | 0.32 | f    | t
+  2222 | x'a8a9aaabacadaeaf'                    |   -1 | f    | f
+  -664 |                                        | 0.78 | t    | f
+(4 rows)
+
+--Testcase 28:
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM sctbl1 WHERE EXISTS (SELECT fields->>'sig3' FROM sctbl1 WHERE (fields->>'sig4')::boolean=true) ORDER BY 1 DESC,2 ASC LIMIT 5 OFFSET 0;
+ sig1  |                  sig2                  | sig3  | sig4 | sig5 
+-------+----------------------------------------+-------+------+------
+ 70220 | いろはにほへど　ちりぬるをわがよたれぞ |  0.37 | t    | f
+ 65535 | `~!@#$%^&*()_+=                        | -0.91 | f    | t
+ 35655 | abcdefghijklmnopqrstuvwxyz             |  0.25 | f    | t
+ 34422 | 散りぬるを我が世誰                     |  0.32 | f    | t
+  2222 | x'a8a9aaabacadaeaf'                    |    -1 | f    | f
+(5 rows)
+
+--Testcase 29:
+SELECT (fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3,(fields->>'sig5')::boolean sig5,(fields->>'sig1')::bigint+(fields->>'sig3')::float8 as ss FROM sctbl1 WHERE fields->>'sig2' IS NULL ORDER BY (fields->>'sig1')::bigint DESC,fields->>'sig2' ASC LIMIT 5 OFFSET 0;
+ sig1 | sig3 | sig5 |   ss    
+------+------+------+---------
+ -664 | 0.78 | f    | -663.22
+(1 row)
+
+--Testcase 30:
+SELECT (fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3,(fields->>'sig5')::boolean sig5,(fields->>'sig1')::bigint/(fields->>'sig3')::float8 as dd FROM sctbl1 WHERE fields->>'sig2' IS NOT NULL ORDER BY fields->>'sig2' DESC,(fields->>'sig1')::bigint ASC LIMIT 5 OFFSET 0;
+ sig1  | sig3 | sig5 |        dd         
+-------+------+------+-------------------
+ 34422 | 0.32 | t    |         107568.75
+  2222 |   -1 | f    |             -2222
+   319 | 0.32 | t    |           996.875
+ -8555 | 0.34 | f    | -25161.7647058823
+ 35655 | 0.25 | t    |            142620
+(5 rows)
+
+--Testcase 31:
+SELECT (fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3,(fields->>'sig5')::boolean sig5,(fields->>'sig1')::bigint*(fields->>'sig3')::float8 as mm FROM sctbl1 WHERE NOT (fields->>'sig1')::bigint=5 ORDER BY fields->>'sig2' DESC LIMIT 5 OFFSET 0;
+ sig1  | sig3 | sig5 |    mm    
+-------+------+------+----------
+  -664 | 0.78 | f    |  -517.92
+ 34422 | 0.32 | t    | 11015.04
+  2222 |   -1 | f    |    -2222
+   319 | 0.32 | t    |   102.08
+ -8555 | 0.34 | f    |  -2908.7
+(5 rows)
+
+--Testcase 32:
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig1')::bigint>-1000 AND (fields->>'sig3')::float8 < 1 ) AS tb1 WHERE (fields->>'sig1')::bigint != 0 AND (fields->>'sig3')::float8=0.32 ORDER BY 1 DESC,2 ASC LIMIT 5 OFFSET 0;
+ sig1  |        sig2        | sig3 | sig4 | sig5 
+-------+--------------------+------+------+------
+ 34422 | 散りぬるを我が世誰 | 0.32 | f    | t
+   319 | P_AEF-wefA         | 0.32 | f    | t
+(2 rows)
+
+--Testcase 33:
+SELECT (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4, (fields->>'sig5')::boolean sig5 FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig1')::bigint>-1000 AND (fields->>'sig3')::float8 < 1 ) AS tb1 WHERE (fields->>'sig3')::float8 > -1.0 OR fields->>'sig2' != 'Hello' ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 5 OFFSET 0;
+ sig1  |                  sig2                  | sig3  | sig4 | sig5 
+-------+----------------------------------------+-------+------+------
+ 70220 | いろはにほへど　ちりぬるをわがよたれぞ |  0.37 | t    | f
+ 65535 | `~!@#$%^&*()_+=                        | -0.91 | f    | t
+ 35655 | abcdefghijklmnopqrstuvwxyz             |  0.25 | f    | t
+ 34422 | 散りぬるを我が世誰                     |  0.32 | f    | t
+  2222 | x'a8a9aaabacadaeaf'                    |    -1 | f    | f
+(5 rows)
+
+--Testcase 34:
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig1')::bigint>-1000 AND (fields->>'sig3')::float8 < 1 ) AS tb1 WHERE (fields->>'sig3')::float8 < -0.1 AND fields->>'sig2' > 'Mee' ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 5 OFFSET 0;
+ sig1 |        sig2         | sig3 | sig4 | sig5 
+------+---------------------+------+------+------
+ 2222 | x'a8a9aaabacadaeaf' |   -1 | f    | f
+(1 row)
+
+--Testcase 35:
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig1')::bigint>-1000 AND (fields->>'sig3')::float8 < 1 ) AS tb1 WHERE (fields->>'sig3')::float8 IN (-1,1,0,2,-2) ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 5 OFFSET 0;
+ sig1 |        sig2         | sig3 | sig4 | sig5 
+------+---------------------+------+------+------
+ 2222 | x'a8a9aaabacadaeaf' |   -1 | f    | f
+(1 row)
+
+--Testcase 36:
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig1')::bigint>-1000 AND (fields->>'sig3')::float8 < 1 ) AS tb1 WHERE fields->>'sig2' LIKE 'A%' ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 5 OFFSET 0;
+ sig1 |    sig2    | sig3 | sig4 | sig5 
+------+------------+------+------+------
+  319 | P_AEF-wefA | 0.32 | f    | t
+(1 row)
+
+--Testcase 37:
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig1')::bigint>-1000 AND (fields->>'sig3')::float8 < 1 ) AS tb1 WHERE NOT EXISTS (SELECT fields->>'sig2' FROM sctbl1 WHERE fields->>'sig2'='AHW') ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 5 OFFSET 2;
+ sig1  |            sig2            |      sig3      | sig4 | sig5 
+-------+----------------------------+----------------+------+------
+ 35655 | abcdefghijklmnopqrstuvwxyz |           0.25 | f    | t
+ 34422 | 散りぬるを我が世誰         |           0.32 | f    | t
+  2222 | x'a8a9aaabacadaeaf'        |             -1 | f    | f
+   319 | P_AEF-wefA                 |           0.32 | f    | t
+    11 | 2e2eawekfrjq2o             | -0.79769313486 | t    | t
+(5 rows)
+
+--Testcase 38:
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig1')::bigint>-1000 AND (fields->>'sig3')::float8 < 1 ) AS tb1 WHERE (fields->>'sig3')::float8 NOT IN (0, 1000, -1, -2) ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 5 OFFSET 1;
+ sig1  |            sig2            |      sig3      | sig4 | sig5 
+-------+----------------------------+----------------+------+------
+ 65535 | `~!@#$%^&*()_+=            |          -0.91 | f    | t
+ 35655 | abcdefghijklmnopqrstuvwxyz |           0.25 | f    | t
+ 34422 | 散りぬるを我が世誰         |           0.32 | f    | t
+   319 | P_AEF-wefA                 |           0.32 | f    | t
+    11 | 2e2eawekfrjq2o             | -0.79769313486 | t    | t
+(5 rows)
+
+--Testcase 39:
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig1')::bigint>-1000 AND (fields->>'sig3')::float8 < 1 ) AS tb1 WHERE fields->>'sig3'=ANY (ARRAY(SELECT fields->>'sig3' FROM sctbl1 WHERE (fields->>'sig1')::bigint%2=0)) ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 5 OFFSET 1;
+ sig1  |        sig2         | sig3 | sig4 | sig5 
+-------+---------------------+------+------+------
+ 34422 | 散りぬるを我が世誰  | 0.32 | f    | t
+  2222 | x'a8a9aaabacadaeaf' |   -1 | f    | f
+   319 | P_AEF-wefA          | 0.32 | f    | t
+  -664 |                     | 0.78 | t    | f
+(4 rows)
+
+--Testcase 40:
+SELECT time, fields->>'sig2' sig2 FROM sctbl1 WHERE fields->>'sig2' <= 'A' AND (fields->>'sig3')::float8 <>-5 AND (fields->>'sig1')::bigint <> 100 ORDER BY 1 ASC,2 DESC LIMIT 5 OFFSET 1;
+            time            |                  sig2                  
+----------------------------+----------------------------------------
+ 2019-05-02 16:12:41.098+00 | 2e2eawekfrjq2o
+ 2019-05-02 16:12:41.098+00 | いろはにほへど　ちりぬるをわがよたれぞ
+(2 rows)
+
+--Select aggregate functions
+--Testcase 41:
+SELECT max(time), max((fields->>'sig1')::bigint*0.5), max((fields->>'sig3')::float8+10) FROM sctbl1 WHERE (fields->>'sig3')::float8 NOT IN (0, 1000, -1, -2) GROUP BY fields->>'sig3', fields->>'sig1' HAVING min((fields->>'sig3')::float8) < min((fields->>'sig1')::bigint) ORDER BY 1 DESC, 2, 3 LIMIT 5 OFFSET 0;
+              max              |   max   |      max      
+-------------------------------+---------+---------------
+ 2262-04-11 23:47:16.854776+00 | 17211.0 |         10.32
+ 2019-05-02 16:12:41.098+00    |     5.5 | 9.20230686514
+ 2019-05-02 16:12:41.098+00    |   159.5 |         10.32
+ 2019-05-02 16:12:41.098+00    | 35110.0 |         10.37
+ 2016-06-13 17:43:50.1004+00   | 17827.5 |         10.25
+(5 rows)
+
+--Testcase 42:
+SELECT tags->>'device_id' device_id,abs((fields->>'sig1')::bigint), ceil((fields->>'sig3')::float8), (fields->>'sig5')::boolean sig5 FROM sctbl1 WHERE (fields->>'sig1')::bigint > 0 AND (fields->>'sig4')::boolean = true;
+ device_id |  abs  | ceil | sig5 
+-----------+-------+------+------
+ "dev 1"   | 70220 |    1 | f
+ dev1      |    11 |   -0 | t
+(2 rows)
+
+--Testcase 43:
+SELECT count(tags->>'device_id'),sum((fields->>'sig1')::bigint),sum((fields->>'sig1')::bigint+(fields->>'sig3')::float8),stddev((fields->>'sig3')::float8 order by (fields->>'sig3')::float8) from sctbl1 ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 5 OFFSET 0;
+ count |  sum   |       sum        |      stddev       
+-------+--------+------------------+-------------------
+     9 | 199165 | 199164.672306865 | 0.669018209414099
+(1 row)
+
+--Testcase 44:
+SELECT mode((fields->>'sig1')::bigint) WITHIN GROUP (order by (fields->>'sig1')::bigint) from sctbl1;
+ERROR:  function mode(bigint, bigint) does not exist
+LINE 1: SELECT mode((fields->>'sig1')::bigint) WITHIN GROUP (order b...
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+--Testcase 45:
+SELECT (fields->>'sig1')::bigint sig1,spread((fields->>'sig1')::bigint) FROM sctbl1 WHERE EXISTS (SELECT fields->>'sig3' FROM sctbl1 WHERE (fields->>'sig4')::boolean in (true,false)) GROUP BY tags->>'device_id', fields->>'sig1',fields->>'sig5' HAVING (fields->>'sig5')::boolean != true ORDER BY 1 DESC, 2, 3 LIMIT 5 OFFSET 1;
+ERROR:  ORDER BY position 3 is not in select list
+LINE 1: ...ds->>'sig5')::boolean != true ORDER BY 1 DESC, 2, 3 LIMIT 5 ...
+                                                             ^
+--Testcase 46:
+SELECT (fields->>'sig3')::float8 sig3, acos((fields->>'sig3')::float8), atan((fields->>'sig3')::float8) FROM sctbl1 WHERE fields->>'sig2' IS NULL GROUP BY fields->>'sig3' HAVING min((fields->>'sig1')::bigint) < min((fields->>'sig3')::float8) ORDER BY 1 DESC, 2, 3 LIMIT 5 OFFSET 0;
+ sig3 |       acos        |       atan        
+------+-------------------+-------------------
+ 0.78 | 0.676130509560661 | 0.662426293833151
+(1 row)
+
+--Testcase 47:
+SELECT (fields->>'sig3')::float8 sig3, log((fields->>'sig3')::float8),cos((fields->>'sig3')::float8) FROM sctbl1 WHERE fields->>'sig2' IS NOT NULL AND (fields->>'sig3')::float8 > 0 GROUP BY fields->>'sig3' HAVING min((fields->>'sig3')::float8) < 100 AND max((fields->>'sig1')::bigint) < 1000 AND sum((fields->>'sig3')::float8) > -1000 AND avg((fields->>'sig3')::float8) > -1000 ORDER BY 1 DESC, 2, 3 LIMIT 5 OFFSET 0;
+ sig3 |        log         |        cos        
+------+--------------------+-------------------
+ 0.34 | -0.468521082957745 | 0.942754665528346
+(1 row)
+
+--Testcase 48:
+SELECT (fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3,ln((fields->>'sig1')::bigint), log10((fields->>'sig3')::float8) FROM sctbl1 WHERE NOT (fields->>'sig1')::bigint=5 GROUP BY fields->>'sig1', fields->>'sig3' HAVING min((fields->>'sig3')::float8) < 100 AND max((fields->>'sig1')::bigint) < 1000 AND (fields->>'sig1')::bigint > 0 AND (fields->>'sig3')::float8 > 0 ORDER BY 1 DESC, 2, 3 LIMIT 5 OFFSET 0;
+ERROR:  stub log10(float8) is called
+CONTEXT:  PL/pgSQL function log10(double precision) line 3 at RAISE
+--Testcase 49:
+SELECT max(time), max((fields->>'sig1')::bigint + (fields->>'sig3')::float8), min((fields->>'sig1')::bigint + (fields->>'sig3')::float8) FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig3')::float8 > -1000 AND (fields->>'sig4')::boolean != true ) AS tb1 WHERE (fields->>'sig3')::float8 != -1 AND (fields->>'sig5')::boolean != true GROUP BY fields->>'sig1' ORDER BY 1 DESC, 2, 3 LIMIT 5 OFFSET 0;
+            max             |   max    |   min    
+----------------------------+----------+----------
+ 2019-05-02 16:12:41.098+00 | -8554.66 | -8554.66
+(1 row)
+
+--Testcase 50:
+SELECT every((fields->>'sig1')::bigint > 5),every((fields->>'sig3')::float8 != 5) FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig3')::float8 > -1000 AND (fields->>'sig5')::boolean = true ) AS tb1 WHERE (fields->>'sig3')::float8 < 0 GROUP BY fields->>'sig1', fields->>'sig4' HAVING sum((fields->>'sig3')::float8) < avg((fields->>'sig1')::float8) ORDER BY 1 DESC, 2 LIMIT 5 OFFSET 0;
+ every | every 
+-------+-------
+ t     | t
+ t     | t
+(2 rows)
+
+--Testcase 51:
+SELECT (fields->>'sig3')::float8 sig3,exp((fields->>'sig3')::float8),exp((fields->>'sig3')::float8*2) FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig3')::float8 > -1000 AND (fields->>'sig5')::boolean = true ) AS tb1 WHERE true GROUP BY fields->>'sig3' ORDER BY 1 DESC, 2, 3 LIMIT 5 OFFSET 0;
+      sig3      |        exp        |        exp        
+----------------+-------------------+-------------------
+           0.32 |  1.37712776433596 |  1.89648087930495
+           0.25 |  1.28402541668774 |  1.64872127070013
+ -0.79769313486 | 0.450366701941337 | 0.202830166217517
+          -0.91 | 0.402524224033636 | 0.162025750933881
+(4 rows)
+
+--Testcase 52:
+SELECT min(time)+'10 days'::interval, min((fields->>'sig1')::bigint + (fields->>'sig3')::float8) FROM sctbl1 WHERE NOT time>'2020-01-03 20:30:50' GROUP BY fields->>'sig1', fields->>'sig3' HAVING sum((fields->>'sig3')::float8) < avg((fields->>'sig1')::float8) ORDER BY 1 ASC,2 DESC LIMIT 5 OFFSET 0;
+          ?column?           |   min    
+-----------------------------+----------
+ 2016-06-23 17:43:50.1004+00 | 65534.09
+ 2016-06-23 17:43:50.1004+00 | 35655.25
+ 2016-06-23 17:43:50.1004+00 |     2221
+ 2019-05-12 16:12:41.098+00  | 70220.37
+ 2019-05-12 16:12:41.098+00  |   319.32
+(5 rows)
+
+--Testcase 53:
+SELECT floor((fields->>'sig1')::bigint*(fields->>'sig3')::float8), floor((fields->>'sig1')::bigint/(fields->>'sig3')::float8) FROM sctbl1 WHERE ((fields->>'sig3')::float8 - 1)/3 != 1 GROUP BY fields->>'sig1', fields->>'sig3' HAVING sum((fields->>'sig3')::float8) < avg((fields->>'sig1')::float8) ORDER BY 1 ASC,2 DESC LIMIT 5 OFFSET 0;
+ floor  | floor  
+--------+--------
+ -59637 | -72017
+  -2222 |  -2222
+     -9 |    -14
+    102 |    996
+   8913 | 142620
+(5 rows)
+
+--Testcase 54:
+SELECT time, tags->>'device_id' device_id, pow((fields->>'sig1')::bigint,-2) FROM sctbl1 WHERE ((fields->>'sig3')::float8 - 1)/3 != 1 GROUP BY time, tags->>'device_id', fields->>'sig1' ORDER BY 1 ASC,2 DESC LIMIT 5 OFFSET 0;
+             time              | device_id |         pow          
+-------------------------------+-----------+----------------------
+ 1677-09-21 00:12:43.145224+00 | dev1      | 2.26810857889389e-06
+ 2016-06-13 17:43:50.1004+00   | dev3      | 2.32837749243861e-10
+ 2016-06-13 17:43:50.1004+00   | d ,=ev2   |  2.0254050607581e-07
+ 2016-06-13 17:43:50.1004+00   | dev2      | 7.86609375546018e-10
+ 2019-05-02 16:12:41.098+00    | dev3      | 9.82694745531196e-06
+(5 rows)
+
+--Testcase 55:
+SELECT min(time)+'10 days'::interval, min((fields->>'sig3')::float8) FROM sctbl1 WHERE false GROUP BY fields->>'sig1',fields->>'sig2', fields->>'sig3' HAVING sum((fields->>'sig3')::float8) < avg((fields->>'sig1')::float8) ORDER BY 1 ASC,2 DESC LIMIT 5 OFFSET 0;
+ ?column? | min 
+----------+-----
+(0 rows)
+
+--Testcase 56:
+SELECT min(time)+'10 days'::interval, min((fields->>'sig3')::float8) FROM sctbl1 WHERE (fields->>'sig3')::float8 IN (-1,0.32,0.34,0.91,0.78) GROUP BY fields->>'sig3' HAVING min((fields->>'sig1')::bigint) > min((fields->>'sig3')::float8) ORDER BY 1 ASC,2 DESC LIMIT 5 OFFSET 0;
+          ?column?           | min  
+-----------------------------+------
+ 2016-06-23 17:43:50.1004+00 |   -1
+ 2019-05-12 16:12:41.098+00  | 0.32
+(2 rows)
+
+--Testcase 57:
+SELECT max((fields->>'sig3')::float8), count(*), exists(SELECT * FROM sctbl1 WHERE (fields->>'sig3')::float8 > 1), exists (SELECT count(*) FROM sctbl1 WHERE (fields->>'sig4')::boolean in ('t','f')) FROM sctbl1 WHERE (fields->>'sig5')::boolean =true GROUP BY time ORDER BY 1 ASC,2 DESC,3 ASC,4 LIMIT 5 OFFSET 0;
+ max  | count | exists | exists 
+------+-------+--------+--------
+ 0.25 |     2 | f      | t
+ 0.32 |     2 | f      | t
+ 0.32 |     1 | f      | t
+(3 rows)
+
+--Join table, each table has 5 fields
+--Testcase 58:
+SELECT * FROM sctbl1 s1 FULL JOIN sctbl2 s2 ON s1.tags->>'device_id'=s2.tags->>'device_id';
+             time              |            tags            |                                                        fields                                                        |             time              |         tags          |                                                                              fields                                                                               
+-------------------------------+----------------------------+----------------------------------------------------------------------------------------------------------------------+-------------------------------+-----------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 1677-09-21 00:12:43.145224+00 | {"device_id": "dev1"}      | {"sig1": "-664", "sig2": null, "sig3": "0.78", "sig4": "true", "sig5": "false"}                                      | 2016-06-13 17:43:50.1004+00   | {"device_id": "dev1"} | {"sig1": "640", "sig2": "敷ヘカウ告政ヨハツヤ", "sig3": "20.4222211221", "sig4": "true", "sig5": "[(-122.107,37.664),(-122.107101,37.66425),(-122.1074,37.665)]"}
+ 1677-09-21 00:12:43.145224+00 | {"device_id": "dev1"}      | {"sig1": "-664", "sig2": null, "sig3": "0.78", "sig4": "true", "sig5": "false"}                                      | 2262-04-11 23:47:16.854776+00 | {"device_id": "dev1"} | {"sig1": "7060", "sig2": null, "sig3": "-3230.17", "sig4": "true", "sig5": "[(-121.9044,37.895),(-121.9044,37.899)]"}
+ 2019-05-02 16:12:41.098+00    | {"device_id": "dev1"}      | {"sig1": "11", "sig2": "2e2eawekfrjq2o", "sig3": "-0.79769313486", "sig4": "true", "sig5": "true"}                   | 2016-06-13 17:43:50.1004+00   | {"device_id": "dev1"} | {"sig1": "640", "sig2": "敷ヘカウ告政ヨハツヤ", "sig3": "20.4222211221", "sig4": "true", "sig5": "[(-122.107,37.664),(-122.107101,37.66425),(-122.1074,37.665)]"}
+ 2019-05-02 16:12:41.098+00    | {"device_id": "dev1"}      | {"sig1": "11", "sig2": "2e2eawekfrjq2o", "sig3": "-0.79769313486", "sig4": "true", "sig5": "true"}                   | 2262-04-11 23:47:16.854776+00 | {"device_id": "dev1"} | {"sig1": "7060", "sig2": null, "sig3": "-3230.17", "sig4": "true", "sig5": "[(-121.9044,37.895),(-121.9044,37.899)]"}
+ 2019-05-02 16:12:41.098+00    | {"device_id": "\"dev 1\""} | {"sig1": "70220", "sig2": "いろはにほへど　ちりぬるをわがよたれぞ", "sig3": "0.37", "sig4": "true", "sig5": "false"} |                               |                       | 
+ 2016-06-13 17:43:50.1004+00   | {"device_id": "dev2"}      | {"sig1": "35655", "sig2": "abcdefghijklmnopqrstuvwxyz", "sig3": "0.25", "sig4": "false", "sig5": "true"}             | 2019-05-02 16:12:41.098+00    | {"device_id": "dev2"} | {"sig1": "7950", "sig2": "`~!@#$%^&*()_+=-{}[]|:;<>?/.", "sig3": "220.2215", "sig4": "false", "sig5": "[(-122.2364,37.436),(-122.2364,37.443)]"}
+ 2016-06-13 17:43:50.1004+00   | {"device_id": "dev2"}      | {"sig1": "35655", "sig2": "abcdefghijklmnopqrstuvwxyz", "sig3": "0.25", "sig4": "false", "sig5": "true"}             | 2262-04-11 23:47:16.854776+00 | {"device_id": "dev2"} | {"sig1": "-7880", "sig2": "EFQEF", "sig3": "2330.8", "sig4": "false", "sig5": "[(-121.9026,37.843),(-121.9028,37.843)]"}
+ 2019-05-02 16:12:41.098+00    | {"device_id": "dev2"}      | {"sig1": "-8555", "sig2": "AHWEMAKDF", "sig3": "0.34", "sig4": "false", "sig5": "false"}                             | 2019-05-02 16:12:41.098+00    | {"device_id": "dev2"} | {"sig1": "7950", "sig2": "`~!@#$%^&*()_+=-{}[]|:;<>?/.", "sig3": "220.2215", "sig4": "false", "sig5": "[(-122.2364,37.436),(-122.2364,37.443)]"}
+ 2019-05-02 16:12:41.098+00    | {"device_id": "dev2"}      | {"sig1": "-8555", "sig2": "AHWEMAKDF", "sig3": "0.34", "sig4": "false", "sig5": "false"}                             | 2262-04-11 23:47:16.854776+00 | {"device_id": "dev2"} | {"sig1": "-7880", "sig2": "EFQEF", "sig3": "2330.8", "sig4": "false", "sig5": "[(-121.9026,37.843),(-121.9028,37.843)]"}
+ 2016-06-13 17:43:50.1004+00   | {"device_id": "d ,=ev2"}   | {"sig1": "2222", "sig2": "x'a8a9aaabacadaeaf'", "sig3": "-1", "sig4": "false", "sig5": "false"}                      |                               |                       | 
+ 2016-06-13 17:43:50.1004+00   | {"device_id": "dev3"}      | {"sig1": "65535", "sig2": "`~!@#$%^&*()_+=", "sig3": "-0.91", "sig4": "false", "sig5": "true"}                       | 1677-09-21 00:12:43.145224+00 | {"device_id": "dev3"} | {"sig1": "-30", "sig2": null, "sig3": "102.3827810127", "sig4": "false", "sig5": "[(-122.106469,37.66446),(-122.1067,37.664)]"}
+ 2016-06-13 17:43:50.1004+00   | {"device_id": "dev3"}      | {"sig1": "65535", "sig2": "`~!@#$%^&*()_+=", "sig3": "-0.91", "sig4": "false", "sig5": "true"}                       | 2019-05-02 16:12:41.098+00    | {"device_id": "dev3"} | {"sig1": "6990", "sig2": "wr3wri", "sig3": "5630.9", "sig4": "false", "sig5": "[(-121.900576,37.74452),(-121.900804,37.74889)]"}
+ 2019-05-02 16:12:41.098+00    | {"device_id": "dev3"}      | {"sig1": "319", "sig2": "P_AEF-wefA", "sig3": "0.32", "sig4": "false", "sig5": "true"}                               | 1677-09-21 00:12:43.145224+00 | {"device_id": "dev3"} | {"sig1": "-30", "sig2": null, "sig3": "102.3827810127", "sig4": "false", "sig5": "[(-122.106469,37.66446),(-122.1067,37.664)]"}
+ 2019-05-02 16:12:41.098+00    | {"device_id": "dev3"}      | {"sig1": "319", "sig2": "P_AEF-wefA", "sig3": "0.32", "sig4": "false", "sig5": "true"}                               | 2019-05-02 16:12:41.098+00    | {"device_id": "dev3"} | {"sig1": "6990", "sig2": "wr3wri", "sig3": "5630.9", "sig4": "false", "sig5": "[(-121.900576,37.74452),(-121.900804,37.74889)]"}
+ 2262-04-11 23:47:16.854776+00 | {"device_id": "'dev3'"}    | {"sig1": "34422", "sig2": "散りぬるを我が世誰", "sig3": "0.32", "sig4": "false", "sig5": "true"}                     |                               |                       | 
+(15 rows)
+
+--Testcase 59:
+SELECT s1.tags->>'device_id' device_id,(s1.fields->>'sig1')::bigint sig1,s1.fields->>'sig2' sig2,(s1.fields->>'sig3')::float8 sig3,(s1.fields->>'sig4')::boolean sig4,s2.fields->>'sig5' sig5 FROM sctbl1 s1 LEFT JOIN sctbl2 s2 ON (s1.fields->>'sig4')::boolean=(s2.fields->>'sig4')::boolean;
+ device_id | sig1  |                  sig2                  |      sig3      | sig4 |                             sig5                              
+-----------+-------+----------------------------------------+----------------+------+---------------------------------------------------------------
+ 'dev3'    | 34422 | 散りぬるを我が世誰                     |           0.32 | f    | [(-122.106469,37.66446),(-122.1067,37.664)]
+ dev3      |   319 | P_AEF-wefA                             |           0.32 | f    | [(-122.106469,37.66446),(-122.1067,37.664)]
+ dev2      | -8555 | AHWEMAKDF                              |           0.34 | f    | [(-122.106469,37.66446),(-122.1067,37.664)]
+ dev3      | 65535 | `~!@#$%^&*()_+=                        |          -0.91 | f    | [(-122.106469,37.66446),(-122.1067,37.664)]
+ dev2      | 35655 | abcdefghijklmnopqrstuvwxyz             |           0.25 | f    | [(-122.106469,37.66446),(-122.1067,37.664)]
+ d ,=ev2   |  2222 | x'a8a9aaabacadaeaf'                    |             -1 | f    | [(-122.106469,37.66446),(-122.1067,37.664)]
+ dev1      |    11 | 2e2eawekfrjq2o                         | -0.79769313486 | t    | [(-122.107,37.664),(-122.107101,37.66425),(-122.1074,37.665)]
+ "dev 1"   | 70220 | いろはにほへど　ちりぬるをわがよたれぞ |           0.37 | t    | [(-122.107,37.664),(-122.107101,37.66425),(-122.1074,37.665)]
+ dev1      |  -664 |                                        |           0.78 | t    | [(-122.107,37.664),(-122.107101,37.66425),(-122.1074,37.665)]
+ 'dev3'    | 34422 | 散りぬるを我が世誰                     |           0.32 | f    | [(-122.2364,37.436),(-122.2364,37.443)]
+ dev3      |   319 | P_AEF-wefA                             |           0.32 | f    | [(-122.2364,37.436),(-122.2364,37.443)]
+ dev2      | -8555 | AHWEMAKDF                              |           0.34 | f    | [(-122.2364,37.436),(-122.2364,37.443)]
+ dev3      | 65535 | `~!@#$%^&*()_+=                        |          -0.91 | f    | [(-122.2364,37.436),(-122.2364,37.443)]
+ dev2      | 35655 | abcdefghijklmnopqrstuvwxyz             |           0.25 | f    | [(-122.2364,37.436),(-122.2364,37.443)]
+ d ,=ev2   |  2222 | x'a8a9aaabacadaeaf'                    |             -1 | f    | [(-122.2364,37.436),(-122.2364,37.443)]
+ 'dev3'    | 34422 | 散りぬるを我が世誰                     |           0.32 | f    | [(-121.900576,37.74452),(-121.900804,37.74889)]
+ dev3      |   319 | P_AEF-wefA                             |           0.32 | f    | [(-121.900576,37.74452),(-121.900804,37.74889)]
+ dev2      | -8555 | AHWEMAKDF                              |           0.34 | f    | [(-121.900576,37.74452),(-121.900804,37.74889)]
+ dev3      | 65535 | `~!@#$%^&*()_+=                        |          -0.91 | f    | [(-121.900576,37.74452),(-121.900804,37.74889)]
+ dev2      | 35655 | abcdefghijklmnopqrstuvwxyz             |           0.25 | f    | [(-121.900576,37.74452),(-121.900804,37.74889)]
+ d ,=ev2   |  2222 | x'a8a9aaabacadaeaf'                    |             -1 | f    | [(-121.900576,37.74452),(-121.900804,37.74889)]
+ dev1      |    11 | 2e2eawekfrjq2o                         | -0.79769313486 | t    | [(-121.9044,37.895),(-121.9044,37.899)]
+ "dev 1"   | 70220 | いろはにほへど　ちりぬるをわがよたれぞ |           0.37 | t    | [(-121.9044,37.895),(-121.9044,37.899)]
+ dev1      |  -664 |                                        |           0.78 | t    | [(-121.9044,37.895),(-121.9044,37.899)]
+ 'dev3'    | 34422 | 散りぬるを我が世誰                     |           0.32 | f    | [(-121.9026,37.843),(-121.9028,37.843)]
+ dev3      |   319 | P_AEF-wefA                             |           0.32 | f    | [(-121.9026,37.843),(-121.9028,37.843)]
+ dev2      | -8555 | AHWEMAKDF                              |           0.34 | f    | [(-121.9026,37.843),(-121.9028,37.843)]
+ dev3      | 65535 | `~!@#$%^&*()_+=                        |          -0.91 | f    | [(-121.9026,37.843),(-121.9028,37.843)]
+ dev2      | 35655 | abcdefghijklmnopqrstuvwxyz             |           0.25 | f    | [(-121.9026,37.843),(-121.9028,37.843)]
+ d ,=ev2   |  2222 | x'a8a9aaabacadaeaf'                    |             -1 | f    | [(-121.9026,37.843),(-121.9028,37.843)]
+(30 rows)
+
+--Testcase 60:
+SELECT s2.device_id,s2.sig1,s2.sig2,s2.sig3,s1.sig4,s1.sig5 FROM (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM sctbl1) s1 RIGHT JOIN (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,fields->>'sig5' sig5 FROM  sctbl2) s2 using(sig2) where (s2.sig1)::bigint > 0 ORDER BY s2.device_id,s2.sig1,s2.sig2,s2.sig3,s1.sig4,s1.sig5;
+ device_id | sig1 |             sig2             |     sig3      | sig4 | sig5 
+-----------+------+------------------------------+---------------+------+------
+ dev1      |  640 | 敷ヘカウ告政ヨハツヤ         | 20.4222211221 |      | 
+ dev1      | 7060 |                              |      -3230.17 |      | 
+ dev2      | 7950 | `~!@#$%^&*()_+=-{}[]|:;<>?/. |      220.2215 |      | 
+ dev3      | 6990 | wr3wri                       |        5630.9 |      | 
+(4 rows)
+
+--Testcase 61:
+SELECT * FROM (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM sctbl1) s1 LEFT OUTER JOIN (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,fields->>'sig5' sig5 FROM sctbl2) s2 using (sig2) ORDER BY s1.sig1,s1.sig2;
+                  sig2                  |             time              | device_id | sig1  |      sig3      | sig4 | sig5 | time | device_id | sig1 | sig3 | sig4 | sig5 
+----------------------------------------+-------------------------------+-----------+-------+----------------+------+------+------+-----------+------+------+------+------
+ AHWEMAKDF                              | 2019-05-02 16:12:41.098+00    | dev2      | -8555 |           0.34 | f    | f    |      |           |      |      |      | 
+                                        | 1677-09-21 00:12:43.145224+00 | dev1      |  -664 |           0.78 | t    | f    |      |           |      |      |      | 
+ 2e2eawekfrjq2o                         | 2019-05-02 16:12:41.098+00    | dev1      |    11 | -0.79769313486 | t    | t    |      |           |      |      |      | 
+ P_AEF-wefA                             | 2019-05-02 16:12:41.098+00    | dev3      |   319 |           0.32 | f    | t    |      |           |      |      |      | 
+ x'a8a9aaabacadaeaf'                    | 2016-06-13 17:43:50.1004+00   | d ,=ev2   |  2222 |             -1 | f    | f    |      |           |      |      |      | 
+ 散りぬるを我が世誰                     | 2262-04-11 23:47:16.854776+00 | 'dev3'    | 34422 |           0.32 | f    | t    |      |           |      |      |      | 
+ abcdefghijklmnopqrstuvwxyz             | 2016-06-13 17:43:50.1004+00   | dev2      | 35655 |           0.25 | f    | t    |      |           |      |      |      | 
+ `~!@#$%^&*()_+=                        | 2016-06-13 17:43:50.1004+00   | dev3      | 65535 |          -0.91 | f    | t    |      |           |      |      |      | 
+ いろはにほへど　ちりぬるをわがよたれぞ | 2019-05-02 16:12:41.098+00    | "dev 1"   | 70220 |           0.37 | t    | f    |      |           |      |      |      | 
+(9 rows)
+
+--Testcase 62:
+SELECT s1.device_id,s1.sig1,s1.sig2,s1.sig3,s1.sig4,s1.sig5 FROM (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM sctbl1) s1 NATURAL JOIN (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,fields->>'sig5' sig5 FROM sctbl2) s2;
+ERROR:  JOIN/USING types boolean and text cannot be matched
+--Testcase 63:
+SELECT s1.tags->>'device_id' device_id,(s1.fields->>'sig1')::bigint sig1,s1.fields->>'sig2' sig2,(s1.fields->>'sig3')::float8 sig3,(s1.fields->>'sig4')::boolean sig4,(s1.fields->>'sig5')::boolean sig5 FROM sctbl1 s1 JOIN sctbl2 s2 on true;
+ device_id | sig1  |                  sig2                  |      sig3      | sig4 | sig5 
+-----------+-------+----------------------------------------+----------------+------+------
+ dev1      |  -664 |                                        |           0.78 | t    | f
+ d ,=ev2   |  2222 | x'a8a9aaabacadaeaf'                    |             -1 | f    | f
+ dev2      | 35655 | abcdefghijklmnopqrstuvwxyz             |           0.25 | f    | t
+ dev3      | 65535 | `~!@#$%^&*()_+=                        |          -0.91 | f    | t
+ "dev 1"   | 70220 | いろはにほへど　ちりぬるをわがよたれぞ |           0.37 | t    | f
+ dev1      |    11 | 2e2eawekfrjq2o                         | -0.79769313486 | t    | t
+ dev2      | -8555 | AHWEMAKDF                              |           0.34 | f    | f
+ dev3      |   319 | P_AEF-wefA                             |           0.32 | f    | t
+ 'dev3'    | 34422 | 散りぬるを我が世誰                     |           0.32 | f    | t
+ dev1      |  -664 |                                        |           0.78 | t    | f
+ d ,=ev2   |  2222 | x'a8a9aaabacadaeaf'                    |             -1 | f    | f
+ dev2      | 35655 | abcdefghijklmnopqrstuvwxyz             |           0.25 | f    | t
+ dev3      | 65535 | `~!@#$%^&*()_+=                        |          -0.91 | f    | t
+ "dev 1"   | 70220 | いろはにほへど　ちりぬるをわがよたれぞ |           0.37 | t    | f
+ dev1      |    11 | 2e2eawekfrjq2o                         | -0.79769313486 | t    | t
+ dev2      | -8555 | AHWEMAKDF                              |           0.34 | f    | f
+ dev3      |   319 | P_AEF-wefA                             |           0.32 | f    | t
+ 'dev3'    | 34422 | 散りぬるを我が世誰                     |           0.32 | f    | t
+ dev1      |  -664 |                                        |           0.78 | t    | f
+ d ,=ev2   |  2222 | x'a8a9aaabacadaeaf'                    |             -1 | f    | f
+ dev2      | 35655 | abcdefghijklmnopqrstuvwxyz             |           0.25 | f    | t
+ dev3      | 65535 | `~!@#$%^&*()_+=                        |          -0.91 | f    | t
+ "dev 1"   | 70220 | いろはにほへど　ちりぬるをわがよたれぞ |           0.37 | t    | f
+ dev1      |    11 | 2e2eawekfrjq2o                         | -0.79769313486 | t    | t
+ dev2      | -8555 | AHWEMAKDF                              |           0.34 | f    | f
+ dev3      |   319 | P_AEF-wefA                             |           0.32 | f    | t
+ 'dev3'    | 34422 | 散りぬるを我が世誰                     |           0.32 | f    | t
+ dev1      |  -664 |                                        |           0.78 | t    | f
+ d ,=ev2   |  2222 | x'a8a9aaabacadaeaf'                    |             -1 | f    | f
+ dev2      | 35655 | abcdefghijklmnopqrstuvwxyz             |           0.25 | f    | t
+ dev3      | 65535 | `~!@#$%^&*()_+=                        |          -0.91 | f    | t
+ "dev 1"   | 70220 | いろはにほへど　ちりぬるをわがよたれぞ |           0.37 | t    | f
+ dev1      |    11 | 2e2eawekfrjq2o                         | -0.79769313486 | t    | t
+ dev2      | -8555 | AHWEMAKDF                              |           0.34 | f    | f
+ dev3      |   319 | P_AEF-wefA                             |           0.32 | f    | t
+ 'dev3'    | 34422 | 散りぬるを我が世誰                     |           0.32 | f    | t
+ dev1      |  -664 |                                        |           0.78 | t    | f
+ d ,=ev2   |  2222 | x'a8a9aaabacadaeaf'                    |             -1 | f    | f
+ dev2      | 35655 | abcdefghijklmnopqrstuvwxyz             |           0.25 | f    | t
+ dev3      | 65535 | `~!@#$%^&*()_+=                        |          -0.91 | f    | t
+ "dev 1"   | 70220 | いろはにほへど　ちりぬるをわがよたれぞ |           0.37 | t    | f
+ dev1      |    11 | 2e2eawekfrjq2o                         | -0.79769313486 | t    | t
+ dev2      | -8555 | AHWEMAKDF                              |           0.34 | f    | f
+ dev3      |   319 | P_AEF-wefA                             |           0.32 | f    | t
+ 'dev3'    | 34422 | 散りぬるを我が世誰                     |           0.32 | f    | t
+ dev1      |  -664 |                                        |           0.78 | t    | f
+ d ,=ev2   |  2222 | x'a8a9aaabacadaeaf'                    |             -1 | f    | f
+ dev2      | 35655 | abcdefghijklmnopqrstuvwxyz             |           0.25 | f    | t
+ dev3      | 65535 | `~!@#$%^&*()_+=                        |          -0.91 | f    | t
+ "dev 1"   | 70220 | いろはにほへど　ちりぬるをわがよたれぞ |           0.37 | t    | f
+ dev1      |    11 | 2e2eawekfrjq2o                         | -0.79769313486 | t    | t
+ dev2      | -8555 | AHWEMAKDF                              |           0.34 | f    | f
+ dev3      |   319 | P_AEF-wefA                             |           0.32 | f    | t
+ 'dev3'    | 34422 | 散りぬるを我が世誰                     |           0.32 | f    | t
+(54 rows)
+
+-------------------------------------------------------------------------------------------Update data--Add 20 field------------------------------------------------------------------------------------------------------------
+--Update data
+\! influx -import -path=init/fields_add_20.txt -precision=ns > /dev/null
+--Testcase 64:
+DROP FOREIGN TABLE sctbl1;
+--Testcase 65:
+CREATE FOREIGN TABLE sctbl1 (time timestamp with time zone, tags jsonb OPTIONS(tags 'true'), fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true', tags 'device_id');
+--Testcase 66:
+SELECT * FROM sctbl1;
+             time              |            tags            |                                                                                                                                                                                                                                                                fields                                                                                                                                                                                                                                                                 
+-------------------------------+----------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 1677-09-21 00:12:43.145224+00 | {"device_id": "dev1"}      | {"sig1": "-664", "sig2": null, "sig3": "0.78", "sig4": "true", "sig5": "false", "sig6": "22", "sig7": "-123445600", "sig8": "4.026", "sig9": "0.24", "sig10": "33", "sig11": ")#O3-kaej", "sig12": "this is a string", "sig13": "true", "sig14": "example string", "sig15": "9223372036854775807", "sig16": "-9223372036854775808", "sig17": "9223372036854775807", "sig18": "west", "sig19": "east", "sig20": "OFF", "sig21": "false", "sig22": "wef", "sig23": "1112", "sig24": "122", "sig25": "0"}
+ 2016-06-13 17:43:50.1004+00   | {"device_id": "d ,=ev2"}   | {"sig1": "2222", "sig2": "x'a8a9aaabacadaeaf'", "sig3": "-1", "sig4": "false", "sig5": "false", "sig6": "33666", "sig7": "-12344560", "sig8": "2.024", "sig9": "-0.22", "sig10": "26", "sig11": "Os", "sig12": "this is a string", "sig13": "true", "sig14": "example string", "sig15": "9223372036854775807", "sig16": "-9223372036854775808", "sig17": "9223372036854775807", "sig18": "west", "sig19": "east", "sig20": "OFF", "sig21": "false", "sig22": "wef", "sig23": "1112", "sig24": "122", "sig25": "0.1"}
+ 2016-06-13 17:43:50.1004+00   | {"device_id": "dev2"}      | {"sig1": "35655", "sig2": "abcdefghijklmnopqrstuvwxyz", "sig3": "0.25", "sig4": "false", "sig5": "true", "sig6": "33", "sig7": "323445600", "sig8": "5.027", "sig9": "0.425", "sig10": "44", "sig11": "3ae\\aefw\\naf", "sig12": "this is a string", "sig13": "true", "sig14": "example string", "sig15": "9223372036854775807", "sig16": "-9223372036854775808", "sig17": "9223372036854775807", "sig18": "west", "sig19": "east", "sig20": "OFF", "sig21": "true", "sig22": "wef", "sig23": "1112", "sig24": "122", "sig25": "0"}
+ 2016-06-13 17:43:50.1004+00   | {"device_id": "dev3"}      | {"sig1": "65535", "sig2": "`~!@#$%^&*()_+=", "sig3": "-0.91", "sig4": "false", "sig5": "true", "sig6": "311", "sig7": "-123445600", "sig8": "6.028", "sig9": "0.26", "sig10": "55", "sig11": "wwefs", "sig12": null, "sig13": "false", "sig14": "example string", "sig15": "9223372036854775807", "sig16": "-9223372036854775808", "sig17": "9223372036854775807", "sig18": null, "sig19": null, "sig20": "OFF", "sig21": "false", "sig22": "wef", "sig23": "1112", "sig24": "122", "sig25": "0.5"}
+ 2019-05-02 16:12:41.098+00    | {"device_id": "\"dev 1\""} | {"sig1": "70220", "sig2": "いろはにほへど　ちりぬるをわがよたれぞ", "sig3": "0.37", "sig4": "true", "sig5": "false", "sig6": "43", "sig7": "223445600", "sig8": "7.029", "sig9": "-0.27", "sig10": "66", "sig11": "3333", "sig12": "this is a string", "sig13": "true", "sig14": "example string", "sig15": "9223372036854775807", "sig16": "-9223372036854775808", "sig17": "9223372036854775807", "sig18": "west", "sig19": "east", "sig20": "OFF", "sig21": "true", "sig22": "wef", "sig23": "1112", "sig24": "122", "sig25": "0"}
+ 2019-05-02 16:12:41.098+00    | {"device_id": "dev1"}      | {"sig1": "11", "sig2": "2e2eawekfrjq2o", "sig3": "-0.797693134862", "sig4": "true", "sig5": "true", "sig6": "11", "sig7": "-1.234456e+78", "sig8": "1.023", "sig9": "-0.421", "sig10": "226", "sig11": "ws", "sig12": "this is a string", "sig13": "true", "sig14": "example string", "sig15": "9223372036854775807", "sig16": "-9223372036854775808", "sig17": "9223372036854775807", "sig18": "west", "sig19": "east", "sig20": "OFF", "sig21": "true", "sig22": "wef", "sig23": "1112", "sig24": "122", "sig25": "0"}
+ 2019-05-02 16:12:41.098+00    | {"device_id": "dev2"}      | {"sig1": "-8555", "sig2": "AHWEMAKDF", "sig3": "0.34", "sig4": "false", "sig5": "false", "sig6": "5", "sig7": "-123445600", "sig8": "8.03", "sig9": "-0.9", "sig10": "77", "sig11": "333u", "sig12": "this is a string", "sig13": "false", "sig14": "example string", "sig15": "9223372036854775807", "sig16": "-9223372036854775808", "sig17": "9223372036854775807", "sig18": "west", "sig19": "east", "sig20": "OFF", "sig21": "false", "sig22": "wef", "sig23": "1112", "sig24": "122", "sig25": "0.7"}
+ 2019-05-02 16:12:41.098+00    | {"device_id": "dev3"}      | {"sig1": "319", "sig2": "P_AEF-wefA", "sig3": "0.32", "sig4": "false", "sig5": "true", "sig6": "111545", "sig7": "-223445600", "sig8": "9.031", "sig9": "-0.9", "sig10": "8228", "sig11": "1122e", "sig12": null, "sig13": "true", "sig14": "example string", "sig15": "9223372036854775807", "sig16": "-9223372036854775808", "sig17": "9223372036854775807", "sig18": "west", "sig19": "east", "sig20": "OFF", "sig21": "true", "sig22": "wef", "sig23": "1112", "sig24": "122", "sig25": "0"}
+ 2262-04-11 23:47:16.854776+00 | {"device_id": "'dev3'"}    | {"sig1": "34422", "sig2": "散りぬるを我が世誰", "sig3": "0.32", "sig4": "false", "sig5": "true", "sig6": "232", "sig7": "123445600", "sig8": "3.025", "sig9": "-0.423", "sig10": "22", "sig11": "Zep", "sig12": null, "sig13": "false", "sig14": null, "sig15": "9223372036854775807", "sig16": "-9223372036854775808", "sig17": "9223372036854775807", "sig18": "west", "sig19": "east", "sig20": null, "sig21": "true", "sig22": "wef", "sig23": "1112", "sig24": "122", "sig25": "0.2"}
+(9 rows)
+
+--Testcase 67:
+SELECT avg(null::numeric) FROM sctbl1;
+ avg 
+-----
+    
+(1 row)
+
+--Testcase 68:
+SELECT sqrt(null::float8) FROM sctbl1;
+ sqrt 
+------
+     
+     
+     
+     
+     
+     
+     
+     
+     
+(9 rows)
+
+--Testcase 69:
+SELECT sum('NaN'::numeric) FROM sctbl1;
+ sum 
+-----
+ NaN
+(1 row)
+
+--Select fields,tags
+--Testcase 70:
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3,(fields->>'sig6')::bigint sig6 FROM sctbl1 WHERE NOT (fields->>'sig6')::bigint < (fields->>'sig1')::bigint ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 15 OFFSET 0;
+ device_id | sig1  |      sig3       |  sig6  
+-----------+-------+-----------------+--------
+ dev3      |   319 |            0.32 | 111545
+ d ,=ev2   |  2222 |              -1 |  33666
+ dev2      | -8555 |            0.34 |      5
+ dev1      |  -664 |            0.78 |     22
+ dev1      |    11 | -0.797693134862 |     11
+(5 rows)
+
+--Testcase 71:
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3,(fields->>'sig7')::float8 sig7 FROM sctbl1 WHERE (fields->>'sig7')::float8 < 0 ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 15 OFFSET 0;
+ device_id | sig1  |      sig3       |     sig7      
+-----------+-------+-----------------+---------------
+ dev3      |   319 |            0.32 |    -223445600
+ dev3      | 65535 |           -0.91 |    -123445600
+ d ,=ev2   |  2222 |              -1 |     -12344560
+ dev2      | -8555 |            0.34 |    -123445600
+ dev1      |  -664 |            0.78 |    -123445600
+ dev1      |    11 | -0.797693134862 | -1.234456e+78
+(6 rows)
+
+--Testcase 72:
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3,(fields->>'sig8')::float8 sig8 FROM sctbl1 WHERE NOT time >'2020-1-3 20:30:50' ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 15 OFFSET 2;
+ device_id | sig1  |      sig3       | sig8  
+-----------+-------+-----------------+-------
+ d ,=ev2   |  2222 |              -1 | 2.024
+ dev2      | -8555 |            0.34 |  8.03
+ dev2      | 35655 |            0.25 | 5.027
+ "dev 1"   | 70220 |            0.37 | 7.029
+ dev1      |  -664 |            0.78 | 4.026
+ dev1      |    11 | -0.797693134862 | 1.023
+(6 rows)
+
+--Testcase 73:
+SELECT time, tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5,(fields->>'sig6')::bigint sig6,(fields->>'sig7')::float8 sig7,(fields->>'sig8')::float8 sig8,(fields->>'sig9')::float8 sig9,(fields->>'sig10')::int sig10,fields->>'sig11' sig11,fields->>'sig12' sig12,(fields->>'sig13')::boolean sig13,fields->>'sig14' sig14,(fields->>'sig15')::bigint sig15,(fields->>'sig16')::bigint sig16,(fields->>'sig17')::bigint sig17,fields->>'sig18' sig18,fields->>'sig19' sig19,fields->>'sig20' sig20,(fields->>'sig21')::boolean sig21,fields->>'sig22' sig22,(fields->>'sig23')::bigint sig23,(fields->>'sig24')::int sig24,(fields->>'sig25')::float8 sig25 FROM sctbl1 WHERE true ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 15 OFFSET 0;
+             time              | device_id | sig1  |                  sig2                  |      sig3       | sig4 | sig5 |  sig6  |     sig7      | sig8  |  sig9  | sig10 |    sig11     |      sig12       | sig13 |     sig14      |        sig15        |        sig16         |        sig17        | sig18 | sig19 | sig20 | sig21 | sig22 | sig23 | sig24 | sig25 
+-------------------------------+-----------+-------+----------------------------------------+-----------------+------+------+--------+---------------+-------+--------+-------+--------------+------------------+-------+----------------+---------------------+----------------------+---------------------+-------+-------+-------+-------+-------+-------+-------+-------
+ 2262-04-11 23:47:16.854776+00 | 'dev3'    | 34422 | 散りぬるを我が世誰                     |            0.32 | f    | t    |    232 |     123445600 | 3.025 | -0.423 |    22 | Zep          |                  | f     |                | 9223372036854775807 | -9223372036854775808 | 9223372036854775807 | west  | east  |       | t     | wef   |  1112 |   122 |   0.2
+ 2019-05-02 16:12:41.098+00    | dev1      |    11 | 2e2eawekfrjq2o                         | -0.797693134862 | t    | t    |     11 | -1.234456e+78 | 1.023 | -0.421 |   226 | ws           | this is a string | t     | example string | 9223372036854775807 | -9223372036854775808 | 9223372036854775807 | west  | east  | OFF   | t     | wef   |  1112 |   122 |     0
+ 2019-05-02 16:12:41.098+00    | "dev 1"   | 70220 | いろはにほへど　ちりぬるをわがよたれぞ |            0.37 | t    | f    |     43 |     223445600 | 7.029 |  -0.27 |    66 | 3333         | this is a string | t     | example string | 9223372036854775807 | -9223372036854775808 | 9223372036854775807 | west  | east  | OFF   | t     | wef   |  1112 |   122 |     0
+ 2019-05-02 16:12:41.098+00    | dev2      | -8555 | AHWEMAKDF                              |            0.34 | f    | f    |      5 |    -123445600 |  8.03 |   -0.9 |    77 | 333u         | this is a string | f     | example string | 9223372036854775807 | -9223372036854775808 | 9223372036854775807 | west  | east  | OFF   | f     | wef   |  1112 |   122 |   0.7
+ 2019-05-02 16:12:41.098+00    | dev3      |   319 | P_AEF-wefA                             |            0.32 | f    | t    | 111545 |    -223445600 | 9.031 |   -0.9 |  8228 | 1122e        |                  | t     | example string | 9223372036854775807 | -9223372036854775808 | 9223372036854775807 | west  | east  | OFF   | t     | wef   |  1112 |   122 |     0
+ 2016-06-13 17:43:50.1004+00   | dev2      | 35655 | abcdefghijklmnopqrstuvwxyz             |            0.25 | f    | t    |     33 |     323445600 | 5.027 |  0.425 |    44 | 3ae\aefw\naf | this is a string | t     | example string | 9223372036854775807 | -9223372036854775808 | 9223372036854775807 | west  | east  | OFF   | t     | wef   |  1112 |   122 |     0
+ 2016-06-13 17:43:50.1004+00   | d ,=ev2   |  2222 | x'a8a9aaabacadaeaf'                    |              -1 | f    | f    |  33666 |     -12344560 | 2.024 |  -0.22 |    26 | Os           | this is a string | t     | example string | 9223372036854775807 | -9223372036854775808 | 9223372036854775807 | west  | east  | OFF   | f     | wef   |  1112 |   122 |   0.1
+ 2016-06-13 17:43:50.1004+00   | dev3      | 65535 | `~!@#$%^&*()_+=                        |           -0.91 | f    | t    |    311 |    -123445600 | 6.028 |   0.26 |    55 | wwefs        |                  | f     | example string | 9223372036854775807 | -9223372036854775808 | 9223372036854775807 |       |       | OFF   | f     | wef   |  1112 |   122 |   0.5
+ 1677-09-21 00:12:43.145224+00 | dev1      |  -664 |                                        |            0.78 | t    | f    |     22 |    -123445600 | 4.026 |   0.24 |    33 | )#O3-kaej    | this is a string | t     | example string | 9223372036854775807 | -9223372036854775808 | 9223372036854775807 | west  | east  | OFF   | f     | wef   |  1112 |   122 |     0
+(9 rows)
+
+--Testcase 74:
+SELECT time, tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5,(fields->>'sig6')::bigint sig6,(fields->>'sig7')::float8 sig7,(fields->>'sig8')::float8 sig8,(fields->>'sig9')::float8 sig9,(fields->>'sig10')::int sig10,fields->>'sig11' sig11,fields->>'sig12' sig12,(fields->>'sig13')::boolean sig13,fields->>'sig14' sig14,(fields->>'sig15')::bigint sig15,(fields->>'sig16')::bigint sig16,(fields->>'sig17')::bigint sig17,fields->>'sig18' sig18,fields->>'sig19' sig19,fields->>'sig20' sig20,(fields->>'sig21')::boolean sig21,fields->>'sig22' sig22,(fields->>'sig23')::bigint sig23,(fields->>'sig24')::int sig24,(fields->>'sig25')::float8 sig25 FROM sctbl1 WHERE false ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 15 OFFSET 0;
+ time | device_id | sig1 | sig2 | sig3 | sig4 | sig5 | sig6 | sig7 | sig8 | sig9 | sig10 | sig11 | sig12 | sig13 | sig14 | sig15 | sig16 | sig17 | sig18 | sig19 | sig20 | sig21 | sig22 | sig23 | sig24 | sig25 
+------+-----------+------+------+------+------+------+------+------+------+------+-------+-------+-------+-------+-------+-------+-------+-------+-------+-------+-------+-------+-------+-------+-------+-------
+(0 rows)
+
+--Testcase 75:
+SELECT (fields->>'sig1')::bigint sig1,(fields->>'sig9')::float8 sig9, (fields->>'sig10')::int sig10,fields->>'sig11' sig11 FROM sctbl1 WHERE (fields->>'sig8')::float8 BETWEEN 0.0 AND 10.0 ORDER BY (fields->>'sig1')::bigint DESC LIMIT 15 OFFSET 2;
+ sig1  |  sig9  | sig10 |    sig11     
+-------+--------+-------+--------------
+ 35655 |  0.425 |    44 | 3ae\aefw\naf
+ 34422 | -0.423 |    22 | Zep
+  2222 |  -0.22 |    26 | Os
+   319 |   -0.9 |  8228 | 1122e
+    11 | -0.421 |   226 | ws
+  -664 |   0.24 |    33 | )#O3-kaej
+ -8555 |   -0.9 |    77 | 333u
+(7 rows)
+
+--Testcase 76:
+SELECT * FROM sctbl1 WHERE fields->>'sig11' LIKE 'w%' ORDER BY fields->>'sig11' DESC LIMIT 15 OFFSET 0;
+            time             |         tags          |                                                                                                                                                                                                                                                               fields                                                                                                                                                                                                                                                                
+-----------------------------+-----------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 2016-06-13 17:43:50.1004+00 | {"device_id": "dev3"} | {"sig1": "65535", "sig2": "`~!@#$%^&*()_+=", "sig3": "-0.91", "sig4": "false", "sig5": "true", "sig6": "311", "sig7": "-123445600", "sig8": "6.028", "sig9": "0.26", "sig10": "55", "sig11": "wwefs", "sig12": null, "sig13": "false", "sig14": "example string", "sig15": "9223372036854775807", "sig16": "-9223372036854775808", "sig17": "9223372036854775807", "sig18": null, "sig19": null, "sig20": "OFF", "sig21": "false", "sig22": "wef", "sig23": "1112", "sig24": "122", "sig25": "0.5"}
+ 2019-05-02 16:12:41.098+00  | {"device_id": "dev1"} | {"sig1": "11", "sig2": "2e2eawekfrjq2o", "sig3": "-0.797693134862", "sig4": "true", "sig5": "true", "sig6": "11", "sig7": "-1.234456e+78", "sig8": "1.023", "sig9": "-0.421", "sig10": "226", "sig11": "ws", "sig12": "this is a string", "sig13": "true", "sig14": "example string", "sig15": "9223372036854775807", "sig16": "-9223372036854775808", "sig17": "9223372036854775807", "sig18": "west", "sig19": "east", "sig20": "OFF", "sig21": "true", "sig22": "wef", "sig23": "1112", "sig24": "122", "sig25": "0"}
+ 2016-06-13 17:43:50.1004+00 | {"device_id": "dev2"} | {"sig1": "35655", "sig2": "abcdefghijklmnopqrstuvwxyz", "sig3": "0.25", "sig4": "false", "sig5": "true", "sig6": "33", "sig7": "323445600", "sig8": "5.027", "sig9": "0.425", "sig10": "44", "sig11": "3ae\\aefw\\naf", "sig12": "this is a string", "sig13": "true", "sig14": "example string", "sig15": "9223372036854775807", "sig16": "-9223372036854775808", "sig17": "9223372036854775807", "sig18": "west", "sig19": "east", "sig20": "OFF", "sig21": "true", "sig22": "wef", "sig23": "1112", "sig24": "122", "sig25": "0"}
+(3 rows)
+
+--Testcase 77:
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,fields->>'sig12' sig12,(fields->>'sig13')::boolean sig13 FROM sctbl1 WHERE NOT EXISTS (SELECT fields->>'sig12' FROM sctbl1 WHERE fields->>'sig11'='33') ORDER BY tags->>'device_id' DESC,(fields->>'sig1')::bigint ASC LIMIT 15 OFFSET 0;
+ device_id | sig1  |                  sig2                  |      sig12       | sig13 
+-----------+-------+----------------------------------------+------------------+-------
+ 'dev3'    | 34422 | 散りぬるを我が世誰                     |                  | f
+ dev3      |   319 | P_AEF-wefA                             |                  | t
+ dev3      | 65535 | `~!@#$%^&*()_+=                        |                  | f
+ d ,=ev2   |  2222 | x'a8a9aaabacadaeaf'                    | this is a string | t
+ dev2      | -8555 | AHWEMAKDF                              | this is a string | f
+ dev2      | 35655 | abcdefghijklmnopqrstuvwxyz             | this is a string | t
+ "dev 1"   | 70220 | いろはにほへど　ちりぬるをわがよたれぞ | this is a string | t
+ dev1      |  -664 |                                        | this is a string | t
+ dev1      |    11 | 2e2eawekfrjq2o                         | this is a string | t
+(9 rows)
+
+--Testcase 78:
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,fields->>'sig14' sig14,(fields->>'sig15')::bigint sig15 FROM sctbl1 WHERE (fields->>'sig9')::float8 < ALL (SELECT (fields->>'sig8')::float8 FROM sctbl1 WHERE (fields->>'sig1')::bigint > 0 AND fields->>'sig8' IS NOT NULL) ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 15 OFFSET 0;
+ sig1  |                  sig2                  |      sig3       |     sig14      |        sig15        
+-------+----------------------------------------+-----------------+----------------+---------------------
+ 70220 | いろはにほへど　ちりぬるをわがよたれぞ |            0.37 | example string | 9223372036854775807
+ 65535 | `~!@#$%^&*()_+=                        |           -0.91 | example string | 9223372036854775807
+ 35655 | abcdefghijklmnopqrstuvwxyz             |            0.25 | example string | 9223372036854775807
+ 34422 | 散りぬるを我が世誰                     |            0.32 |                | 9223372036854775807
+  2222 | x'a8a9aaabacadaeaf'                    |              -1 | example string | 9223372036854775807
+   319 | P_AEF-wefA                             |            0.32 | example string | 9223372036854775807
+    11 | 2e2eawekfrjq2o                         | -0.797693134862 | example string | 9223372036854775807
+  -664 |                                        |            0.78 | example string | 9223372036854775807
+ -8555 | AHWEMAKDF                              |            0.34 | example string | 9223372036854775807
+(9 rows)
+
+--Testcase 79:
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig16')::bigint sig16 FROM sctbl1 WHERE (fields->>'sig9')::float8 = ANY (ARRAY[-0.22,0.425,-0.9]) ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 15 OFFSET 0;
+ sig1  |            sig2            | sig3 | sig4 |        sig16         
+-------+----------------------------+------+------+----------------------
+ 35655 | abcdefghijklmnopqrstuvwxyz | 0.25 | f    | -9223372036854775808
+  2222 | x'a8a9aaabacadaeaf'        |   -1 | f    | -9223372036854775808
+   319 | P_AEF-wefA                 | 0.32 | f    | -9223372036854775808
+ -8555 | AHWEMAKDF                  | 0.34 | f    | -9223372036854775808
+(4 rows)
+
+--Testcase 80:
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig17')::bigint sig17 FROM sctbl1 WHERE EXISTS (SELECT fields->>'sig10' FROM sctbl1 WHERE (fields->>'sig10')::bigint!=77) ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 15 OFFSET 0;
+ sig1  |                  sig2                  |      sig3       | sig4 |        sig17        
+-------+----------------------------------------+-----------------+------+---------------------
+ 70220 | いろはにほへど　ちりぬるをわがよたれぞ |            0.37 | t    | 9223372036854775807
+ 65535 | `~!@#$%^&*()_+=                        |           -0.91 | f    | 9223372036854775807
+ 35655 | abcdefghijklmnopqrstuvwxyz             |            0.25 | f    | 9223372036854775807
+ 34422 | 散りぬるを我が世誰                     |            0.32 | f    | 9223372036854775807
+  2222 | x'a8a9aaabacadaeaf'                    |              -1 | f    | 9223372036854775807
+   319 | P_AEF-wefA                             |            0.32 | f    | 9223372036854775807
+    11 | 2e2eawekfrjq2o                         | -0.797693134862 | t    | 9223372036854775807
+  -664 |                                        |            0.78 | t    | 9223372036854775807
+ -8555 | AHWEMAKDF                              |            0.34 | f    | 9223372036854775807
+(9 rows)
+
+--Testcase 81:
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,fields->>'sig18' sig18 FROM sctbl1 WHERE fields->>'sig6'=ANY (ARRAY(SELECT fields->>'sig10' FROM sctbl1 WHERE (fields->>'sig10')::bigint%2 !=0)) ORDER BY 1 DESC LIMIT 15 OFFSET 0;
+ sig1  |            sig2            | sig3 | sig4 | sig18 
+-------+----------------------------+------+------+-------
+ 35655 | abcdefghijklmnopqrstuvwxyz | 0.25 | f    | west
+(1 row)
+
+--Testcase 82:
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,fields->>'sig19' sig19,fields->>'sig20' sig20 FROM sctbl1 WHERE EXISTS (SELECT fields->>'sig11' FROM sctbl1 WHERE (fields->>'sig13')::boolean=true) ORDER BY 1 DESC,2 ASC LIMIT 5 OFFSET 0;
+ sig1  |                  sig2                  | sig3  | sig19 | sig20 
+-------+----------------------------------------+-------+-------+-------
+ 70220 | いろはにほへど　ちりぬるをわがよたれぞ |  0.37 | east  | OFF
+ 65535 | `~!@#$%^&*()_+=                        | -0.91 |       | OFF
+ 35655 | abcdefghijklmnopqrstuvwxyz             |  0.25 | east  | OFF
+ 34422 | 散りぬるを我が世誰                     |  0.32 | east  | 
+  2222 | x'a8a9aaabacadaeaf'                    |    -1 | east  | OFF
+(5 rows)
+
+--Testcase 83:
+SELECT (fields->>'sig15')::bigint sig15,(fields->>'sig16')::bigint sig16,(fields->>'sig15')::bigint+(fields->>'sig16')::bigint as ss,fields->>'sig20' sig20,(fields->>'sig21')::boolean sig21 FROM sctbl1 WHERE fields->>'sig12' IS NULL ORDER BY (fields->>'sig1')::bigint DESC,fields->>'sig12' ASC LIMIT 15 OFFSET 0;
+        sig15        |        sig16         | ss | sig20 | sig21 
+---------------------+----------------------+----+-------+-------
+ 9223372036854775807 | -9223372036854775808 | -1 | OFF   | f
+ 9223372036854775807 | -9223372036854775808 | -1 |       | t
+ 9223372036854775807 | -9223372036854775808 | -1 | OFF   | t
+(3 rows)
+
+--Testcase 84:
+SELECT (fields->>'sig16')::bigint sig16,(fields->>'sig17')::bigint sig17,(fields->>'sig16')::bigint/(fields->>'sig17')::bigint as dd,fields->>'sig22' sig22,(fields->>'sig23')::bigint sig23 FROM sctbl1 WHERE fields->>'sig12' IS NOT NULL ORDER BY fields->>'sig12' DESC,(fields->>'sig1')::int ASC LIMIT 15 OFFSET 0;
+        sig16         |        sig17        | dd | sig22 | sig23 
+----------------------+---------------------+----+-------+-------
+ -9223372036854775808 | 9223372036854775807 | -1 | wef   |  1112
+ -9223372036854775808 | 9223372036854775807 | -1 | wef   |  1112
+ -9223372036854775808 | 9223372036854775807 | -1 | wef   |  1112
+ -9223372036854775808 | 9223372036854775807 | -1 | wef   |  1112
+ -9223372036854775808 | 9223372036854775807 | -1 | wef   |  1112
+ -9223372036854775808 | 9223372036854775807 | -1 | wef   |  1112
+(6 rows)
+
+--Testcase 85:
+SELECT (fields->>'sig1')::bigint sig1,(fields->>'sig17')::bigint sig17,(fields->>'sig24')::int sig24,(fields->>'sig25')::float8 sig25,(fields->>'sig17')::bigint*(fields->>'sig25')::float8 as mm FROM sctbl1 WHERE NOT (fields->>'sig10')::bigint=15 ORDER BY fields->>'sig20' DESC LIMIT 15 OFFSET 0;
+ sig1  |        sig17        | sig24 | sig25 |          mm          
+-------+---------------------+-------+-------+----------------------
+ 34422 | 9223372036854775807 |   122 |   0.2 | 1.84467440737096e+18
+  2222 | 9223372036854775807 |   122 |   0.1 | 9.22337203685478e+17
+ 65535 | 9223372036854775807 |   122 |   0.5 | 4.61168601842739e+18
+ 35655 | 9223372036854775807 |   122 |     0 |                    0
+  -664 | 9223372036854775807 |   122 |     0 |                    0
+   319 | 9223372036854775807 |   122 |     0 |                    0
+ -8555 | 9223372036854775807 |   122 |   0.7 | 6.45636042579834e+18
+    11 | 9223372036854775807 |   122 |     0 |                    0
+ 70220 | 9223372036854775807 |   122 |     0 |                    0
+(9 rows)
+
+--Testcase 86:
+SELECT (fields->>'sig21')::boolean sig21,fields->>'sig22' sig22,(fields->>'sig23')::bigint sig23,(fields->>'sig24')::int sig24,(fields->>'sig25')::float8 sig25 FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig6')::bigint>-1000 AND (fields->>'sig9')::float8 < 1 ) AS tb1 WHERE (fields->>'sig10')::bigint != 0 AND (fields->>'sig7')::float8=-1.234456e+78 ORDER BY 1 DESC,2 ASC LIMIT 15 OFFSET 0;
+ERROR:  influxdb_fdw : error parsing query: found e, expected ) at line 1, char 169
+--Testcase 87:
+SELECT (fields->>'sig21')::boolean sig21,fields->>'sig22' sig22,(fields->>'sig23')::bigint sig23,(fields->>'sig24')::int sig24,(fields->>'sig25')::float8 sig25 FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig6')::bigint>-1000 AND (fields->>'sig9')::float8 < 1 ) AS tb1 WHERE (fields->>'sig7')::float8 > -1.0 OR fields->>'sig12' != 'Hello' ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 15 OFFSET 0;
+ sig21 | sig22 | sig23 | sig24 | sig25 
+-------+-------+-------+-------+-------
+ t     | wef   |  1112 |   122 |     0
+ t     | wef   |  1112 |   122 |     0
+ t     | wef   |  1112 |   122 |     0
+ t     | wef   |  1112 |   122 |   0.2
+ f     | wef   |  1112 |   122 |     0
+ f     | wef   |  1112 |   122 |   0.1
+ f     | wef   |  1112 |   122 |   0.7
+(7 rows)
+
+--Testcase 88:
+SELECT (fields->>'sig21')::boolean sig21,fields->>'sig22' sig22,(fields->>'sig23')::bigint sig23,(fields->>'sig24')::int sig24,(fields->>'sig25')::float8 sig25 FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig6')::bigint>-1000 AND (fields->>'sig9')::float8 < 1 ) AS tb1 WHERE (fields->>'sig7')::float8 < 0 AND fields->>'sig12' > 'Mee' ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 15 OFFSET 0;
+ sig21 | sig22 | sig23 | sig24 | sig25 
+-------+-------+-------+-------+-------
+ t     | wef   |  1112 |   122 |     0
+ f     | wef   |  1112 |   122 |     0
+ f     | wef   |  1112 |   122 |   0.1
+ f     | wef   |  1112 |   122 |   0.7
+(4 rows)
+
+--Testcase 89:
+SELECT (fields->>'sig21')::boolean sig21,fields->>'sig22' sig22,(fields->>'sig23')::bigint sig23,(fields->>'sig24')::int sig24,(fields->>'sig25')::float8 sig25 FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig6')::bigint>-1000 AND (fields->>'sig9')::float8 < 1 ) AS tb1 WHERE (fields->>'sig7')::float8 IN (1.234456e+8,-1.234456e+8) ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 15 OFFSET 0;
+ sig21 | sig22 | sig23 | sig24 | sig25 
+-------+-------+-------+-------+-------
+ t     | wef   |  1112 |   122 |   0.2
+ f     | wef   |  1112 |   122 |     0
+ f     | wef   |  1112 |   122 |   0.5
+ f     | wef   |  1112 |   122 |   0.7
+(4 rows)
+
+--Testcase 90:
+SELECT (fields->>'sig21')::boolean sig21,fields->>'sig22' sig22,(fields->>'sig23')::bigint sig23,(fields->>'sig24')::int sig24,(fields->>'sig25')::float8 sig25 FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig6')::bigint>-1000 AND (fields->>'sig9')::float8 < 1 ) AS tb1 WHERE fields->>'sig12' LIKE 't%' ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 15 OFFSET 0;
+ sig21 | sig22 | sig23 | sig24 | sig25 
+-------+-------+-------+-------+-------
+ t     | wef   |  1112 |   122 |     0
+ t     | wef   |  1112 |   122 |     0
+ t     | wef   |  1112 |   122 |     0
+ f     | wef   |  1112 |   122 |     0
+ f     | wef   |  1112 |   122 |   0.1
+ f     | wef   |  1112 |   122 |   0.7
+(6 rows)
+
+--Testcase 91:
+SELECT (fields->>'sig21')::boolean sig21,fields->>'sig22' sig22,(fields->>'sig23')::bigint sig23,(fields->>'sig24')::int sig24,(fields->>'sig25')::float8 sig25 FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig6')::bigint>-1000 AND (fields->>'sig9')::float8 < 1 ) AS tb1 WHERE NOT EXISTS (SELECT fields->>'sig22' FROM sctbl1 WHERE fields->>'sig12'='AHWEMAKDF') ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 15 OFFSET 1;
+ sig21 | sig22 | sig23 | sig24 | sig25 
+-------+-------+-------+-------+-------
+ t     | wef   |  1112 |   122 |     0
+ t     | wef   |  1112 |   122 |     0
+ t     | wef   |  1112 |   122 |     0
+ t     | wef   |  1112 |   122 |   0.2
+ f     | wef   |  1112 |   122 |     0
+ f     | wef   |  1112 |   122 |   0.1
+ f     | wef   |  1112 |   122 |   0.5
+ f     | wef   |  1112 |   122 |   0.7
+(8 rows)
+
+--Testcase 92:
+SELECT (fields->>'sig21')::boolean sig21,fields->>'sig22' sig22,(fields->>'sig23')::bigint sig23,(fields->>'sig24')::int sig24,(fields->>'sig25')::float8 sig25 FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig6')::bigint>-1000 AND (fields->>'sig9')::float8 < 1 ) AS tb1 WHERE (fields->>'sig8')::float8 NOT IN (0, 1000, -1, -2) ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 5 OFFSET 2;
+ sig21 | sig22 | sig23 | sig24 | sig25 
+-------+-------+-------+-------+-------
+ t     | wef   |  1112 |   122 |     0
+ t     | wef   |  1112 |   122 |     0
+ t     | wef   |  1112 |   122 |   0.2
+ f     | wef   |  1112 |   122 |     0
+ f     | wef   |  1112 |   122 |   0.1
+(5 rows)
+
+--Testcase 93:
+SELECT (fields->>'sig21')::boolean sig21,fields->>'sig22' sig22,(fields->>'sig23')::bigint sig23,(fields->>'sig24')::int sig24,(fields->>'sig25')::float8 sig25 FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig6')::bigint>-1000 AND (fields->>'sig9')::float8 < 1 ) AS tb1 WHERE fields->>'sig6'=ANY (ARRAY(SELECT fields->>'sig6' FROM sctbl1 WHERE (fields->>'sig10')::bigint%2!=0)) ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 15 OFFSET 0;
+ sig21 | sig22 | sig23 | sig24 | sig25 
+-------+-------+-------+-------+-------
+ f     | wef   |  1112 |   122 |     0
+ f     | wef   |  1112 |   122 |   0.5
+ f     | wef   |  1112 |   122 |   0.7
+(3 rows)
+
+--Testcase 94:
+SELECT time, (fields->>'sig10')::bigint sig10,fields->>'sig12' sig12 FROM sctbl1 WHERE (fields->>'sig10')::bigint <= 1000 AND (fields->>'sig15')::float8 <> -5 AND (fields->>'sig10')::bigint <> 100 ORDER BY 1 ASC,2 DESC LIMIT 5 OFFSET 1;
+            time             | sig10 |      sig12       
+-----------------------------+-------+------------------
+ 2016-06-13 17:43:50.1004+00 |    55 | 
+ 2016-06-13 17:43:50.1004+00 |    44 | this is a string
+ 2016-06-13 17:43:50.1004+00 |    26 | this is a string
+ 2019-05-02 16:12:41.098+00  |   226 | this is a string
+ 2019-05-02 16:12:41.098+00  |    77 | this is a string
+(5 rows)
+
+--Select aggregate functions
+--Testcase 95:
+SELECT max(time), max((fields->>'sig15')::bigint*0.5), max((fields->>'sig17')::bigint - 10) FROM sctbl1 WHERE (fields->>'sig8')::float8 NOT IN (0.0, 1000, -1.0, -2.0) GROUP BY fields->>'sig15', fields->>'sig17' HAVING min((fields->>'sig8')::float8) < min((fields->>'sig17')::bigint) ORDER BY 1 DESC, 2, 3 LIMIT 15 OFFSET 0;
+              max              |          max          |         max         
+-------------------------------+-----------------------+---------------------
+ 2262-04-11 23:47:16.854776+00 | 4611686018427387903.5 | 9223372036854775797
+(1 row)
+
+--Testcase 96:
+SELECT tags->>'device_id' device_id,abs((fields->>'sig16')::bigint), ceil((fields->>'sig8')::float8), (fields->>'sig25')::float8 sig25 FROM sctbl1 WHERE (fields->>'sig15')::bigint > 0 AND (fields->>'sig13')::boolean = true;
+ device_id |         abs          | ceil | sig25 
+-----------+----------------------+------+-------
+ dev1      | -9223372036854775808 |    5 |     0
+ d ,=ev2   | -9223372036854775808 |    3 |   0.1
+ dev2      | -9223372036854775808 |    6 |     0
+ "dev 1"   | -9223372036854775808 |    8 |     0
+ dev1      | -9223372036854775808 |    2 |     0
+ dev3      | -9223372036854775808 |   10 |     0
+(6 rows)
+
+--Testcase 97:
+SELECT count(tags->>'device_id'),sum((fields->>'sig10')::bigint),sum((fields->>'sig7')::float8+(fields->>'sig10')::bigint),stddev((fields->>'sig8')::float8 order by (fields->>'sig8')::float8) from sctbl1 ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 15 OFFSET 0;
+ count | sum  |      sum      |      stddev      
+-------+------+---------------+------------------
+     9 | 8777 | -1.234456e+78 | 2.74135140031336
+(1 row)
+
+--Testcase 98:
+SELECT mode(fields->>'sig12') WITHIN GROUP (order by fields->>'sig12') from sctbl1;
+ERROR:  function mode(text, text) does not exist
+LINE 1: SELECT mode(fields->>'sig12') WITHIN GROUP (order by fields-...
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+--Testcase 99:
+SELECT (fields->>'sig10')::int sig10,spread((fields->>'sig10')::bigint) FROM sctbl1 WHERE EXISTS (SELECT fields->>'sig6' FROM sctbl1 WHERE (fields->>'sig13')::boolean in (true,false)) GROUP BY tags->>'device_id', fields->>'sig10',fields->>'sig21' HAVING (fields->>'sig21')::boolean != true ORDER BY 1 DESC, 2, 3 LIMIT 15 OFFSET 1;
+ERROR:  ORDER BY position 3 is not in select list
+LINE 1: ...s->>'sig21')::boolean != true ORDER BY 1 DESC, 2, 3 LIMIT 15...
+                                                             ^
+--Testcase 100:
+SELECT (fields->>'sig9')::float8 sig9, acos((fields->>'sig9')::float8), atan((fields->>'sig9')::float8) FROM sctbl1 WHERE fields->>'sig12' IS NULL GROUP BY fields->>'sig9' HAVING min((fields->>'sig10')::bigint) < min((fields->>'sig6')::bigint) ORDER BY 1 DESC, 2, 3 LIMIT 15 OFFSET 0;
+  sig9  |       acos       |        atan        
+--------+------------------+--------------------
+   0.26 | 1.30777412388643 |  0.254368058553266
+ -0.423 |  2.0075498827442 | -0.400175410565532
+   -0.9 | 2.69056584179353 | -0.732815101786507
+(3 rows)
+
+--Testcase 101:
+SELECT (fields->>'sig9')::float8 sig9, log((fields->>'sig9')::float8),cos((fields->>'sig9')::float8) FROM sctbl1 WHERE fields->>'sig12' IS NOT NULL AND (fields->>'sig9')::float8 > 0 GROUP BY fields->>'sig9' HAVING min((fields->>'sig9')::float8) < 100 AND max((fields->>'sig1')::bigint) < 1000 AND sum((fields->>'sig3')::float8) > -1000 AND avg((fields->>'sig3')::float8) > -1000 ORDER BY 1 DESC, 2, 3 LIMIT 15 OFFSET 0;
+ sig9 |        log         |       cos        
+------+--------------------+------------------
+ 0.24 | -0.619788758288394 | 0.97133797485203
+(1 row)
+
+--Testcase 102:
+SELECT (fields->>'sig10')::bigint sig10,(fields->>'sig8')::float8 sig8,ln((fields->>'sig10')::bigint), log10((fields->>'sig8')::float8) FROM sctbl1 WHERE NOT (fields->>'sig10')::bigint=5 GROUP BY fields->>'sig10', fields->>'sig8' HAVING min((fields->>'sig7')::float8) < 100 AND max((fields->>'sig6')::bigint) < 1000 AND (fields->>'sig10')::bigint > 0 AND (fields->>'sig8')::float8 > 0 ORDER BY 1 DESC, 2, 3 LIMIT 15 OFFSET 0;
+ERROR:  stub log10(float8) is called
+CONTEXT:  PL/pgSQL function log10(double precision) line 3 at RAISE
+--Testcase 103:
+SELECT max(time), max((fields->>'sig6')::bigint + (fields->>'sig7')::float8), min((fields->>'sig6')::bigint + (fields->>'sig7')::float8) FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig8')::float8 > -1000 AND (fields->>'sig13')::boolean != true ) AS tb1 WHERE (fields->>'sig7')::float8 != -1 AND (fields->>'sig21')::boolean != true GROUP BY fields->>'sig6' ORDER BY 1 DESC, 2, 3 LIMIT 15 OFFSET 0;
+             max             |    max     |    min     
+-----------------------------+------------+------------
+ 2019-05-02 16:12:41.098+00  | -123445595 | -123445595
+ 2016-06-13 17:43:50.1004+00 | -123445289 | -123445289
+(2 rows)
+
+--Testcase 104:
+SELECT avg((fields->>'sig23')::bigint order by (fields->>'sig23')::bigint),avg((fields->>'sig24')::bigint * 0.5) FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig8')::float8 > -1000 AND (fields->>'sig21')::boolean = true ) AS tb1 WHERE (fields->>'sig9')::float8 < 0 GROUP BY (fields->>'sig23')::bigint, fields->>'sig24' HAVING sum((fields->>'sig8')::float8) > avg((fields->>'sig9')::float8) ORDER BY 1 DESC, 2 LIMIT 15 OFFSET 0;
+          avg          |         avg         
+-----------------------+---------------------
+ 1112.0000000000000000 | 61.0000000000000000
+(1 row)
+
+--Testcase 105:
+SELECT (fields->>'sig8')::float8 sig8,exp((fields->>'sig8')::float8),exp((fields->>'sig8')::float8*2) FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig9')::float8 > -1000 AND (fields->>'sig21')::boolean = true ) AS tb1 WHERE true GROUP BY fields->>'sig8' ORDER BY 1 DESC, 2, 3 LIMIT 15 OFFSET 0;
+ sig8  |       exp        |       exp        
+-------+------------------+------------------
+ 9.031 | 8358.21360806988 | 69859734.7181246
+ 7.029 |  1128.9011444032 | 1274417.79383485
+ 5.027 | 152.474901168402 | 23248.5954863141
+ 3.025 |  20.594004711196 | 424.113030044764
+ 1.023 | 2.78152684012137 | 7.73689156231557
+(5 rows)
+
+--Testcase 106:
+SELECT min(time)+'10 days'::interval, min((fields->>'sig10')::bigint + (fields->>'sig25')::float8) FROM sctbl1 WHERE NOT time>'2020-01-03 20:30:50' GROUP BY fields->>'sig10', fields->>'sig25' HAVING sum((fields->>'sig23')::bigint) > avg((fields->>'sig24')::bigint) ORDER BY 1 ASC,2 DESC LIMIT 15 OFFSET 0;
+           ?column?            | min  
+-------------------------------+------
+ 1677-10-01 00:12:43.145224+00 |   33
+ 2016-06-23 17:43:50.1004+00   | 55.5
+ 2016-06-23 17:43:50.1004+00   |   44
+ 2016-06-23 17:43:50.1004+00   | 26.1
+ 2019-05-12 16:12:41.098+00    | 8228
+ 2019-05-12 16:12:41.098+00    |  226
+ 2019-05-12 16:12:41.098+00    | 77.7
+ 2019-05-12 16:12:41.098+00    |   66
+(8 rows)
+
+--Testcase 107:
+SELECT floor((fields->>'sig23')::bigint*(fields->>'sig25')::float8), floor((fields->>'sig24')::bigint/(fields->>'sig25')::float8) FROM sctbl1 WHERE ((fields->>'sig25')::float8 - 1)/3 != 1 GROUP BY (fields->>'sig23')::bigint, (fields->>'sig24')::bigint,(fields->>'sig25')::float8 HAVING sum((fields->>'sig23')::bigint) > avg((fields->>'sig24')::bigint) ORDER BY 1 ASC,2 DESC LIMIT 15 OFFSET 0;
+ERROR:  division by zero
+--Testcase 108:
+SELECT time, tags->>'device_id' device_id, pow((fields->>'sig25')::float8,2) FROM sctbl1 WHERE ((fields->>'sig25')::float8 - 1)/3 != 1 GROUP BY time,tags->>'device_id',fields->>'sig25' ORDER BY 1 ASC,2 DESC LIMIT 15 OFFSET 0;
+             time              | device_id | pow  
+-------------------------------+-----------+------
+ 1677-09-21 00:12:43.145224+00 | dev1      |    0
+ 2016-06-13 17:43:50.1004+00   | dev3      | 0.25
+ 2016-06-13 17:43:50.1004+00   | d ,=ev2   | 0.01
+ 2016-06-13 17:43:50.1004+00   | dev2      |    0
+ 2019-05-02 16:12:41.098+00    | dev3      |    0
+ 2019-05-02 16:12:41.098+00    | dev2      | 0.49
+ 2019-05-02 16:12:41.098+00    | "dev 1"   |    0
+ 2019-05-02 16:12:41.098+00    | dev1      |    0
+ 2262-04-11 23:47:16.854776+00 | 'dev3'    | 0.04
+(9 rows)
+
+--Testcase 109:
+SELECT min(time)+'10 days'::interval, min((fields->>'sig23')::bigint) FROM sctbl1 WHERE false GROUP BY (fields->>'sig23')::bigint HAVING sum((fields->>'sig23')::bigint) > avg((fields->>'sig24')::bigint) ORDER BY 1 ASC,2 DESC LIMIT 15 OFFSET 0;
+ ?column? | min 
+----------+-----
+(0 rows)
+
+--Testcase 110:
+SELECT min(time)+'10 days'::interval, min((fields->>'sig23')::bigint) FROM sctbl1 WHERE (fields->>'sig23')::bigint IN (1112,1000,0) GROUP BY (fields->>'sig23')::bigint HAVING min((fields->>'sig23')::bigint) > min((fields->>'sig24')::bigint) ORDER BY 1 ASC,2 DESC LIMIT 15 OFFSET 0;
+           ?column?            | min  
+-------------------------------+------
+ 1677-10-01 00:12:43.145224+00 | 1112
+(1 row)
+
+--Testcase 111:
+SELECT max((fields->>'sig23')::bigint), count(*), exists(SELECT * FROM sctbl1 WHERE (fields->>'sig24')::bigint > 1), exists (SELECT count(*) FROM sctbl1 WHERE (fields->>'sig21')::boolean in ('T','F')) FROM sctbl1 WHERE (fields->>'sig13')::boolean =true GROUP BY time ORDER BY 1 ASC,2 DESC,3 ASC,4 LIMIT 15 OFFSET 0;
+ max  | count | exists | exists 
+------+-------+--------+--------
+ 1112 |     3 | t      | t
+ 1112 |     2 | t      | t
+ 1112 |     1 | t      | t
+(3 rows)
+
+--Testcase 112:
+SELECT (fields->>'sig9')::float8 sig9, abs(avg((fields->>'sig16')::bigint)),string_agg(fields->>'sig22',',' order by fields->>'sig22'),round(sin((fields->>'sig9')::float8)*2.3),sqrt(pow((fields->>'sig25')::float8,2)) FROM sctbl1 WHERE fields->>'sig12' IS NOT NULL AND (fields->>'sig9')::float8 > 0 GROUP BY (fields->>'sig9')::float8,(fields->>'sig25')::float8;
+ sig9  |         abs         | string_agg | round | sqrt 
+-------+---------------------+------------+-------+------
+  0.24 | 9223372036854775808 | wef        |     1 |    0
+ 0.425 | 9223372036854775808 | wef        |     1 |    0
+(2 rows)
+
+--Join table
+--Testcase 113:
+SELECT s1.tags->>'device_id' device_id,(s1.fields->>'sig21')::boolean sig21,s1.fields->>'sig22' sig22,(s1.fields->>'sig23')::bigint sig23,(s1.fields->>'sig24')::int sig24,(s1.fields->>'sig25')::float8 sig25 FROM sctbl1 s1 FULL JOIN sctbl2 s2 ON s1.tags->>'device_id'=s2.tags->>'device_id' ORDER BY device_id,sig21,sig22,sig23,sig24,sig25;
+ device_id | sig21 | sig22 | sig23 | sig24 | sig25 
+-----------+-------+-------+-------+-------+-------
+ dev1      | f     | wef   |  1112 |   122 |     0
+ dev1      | f     | wef   |  1112 |   122 |     0
+ dev1      | t     | wef   |  1112 |   122 |     0
+ dev1      | t     | wef   |  1112 |   122 |     0
+ "dev 1"   | t     | wef   |  1112 |   122 |     0
+ dev2      | f     | wef   |  1112 |   122 |   0.7
+ dev2      | f     | wef   |  1112 |   122 |   0.7
+ dev2      | t     | wef   |  1112 |   122 |     0
+ dev2      | t     | wef   |  1112 |   122 |     0
+ d ,=ev2   | f     | wef   |  1112 |   122 |   0.1
+ dev3      | f     | wef   |  1112 |   122 |   0.5
+ dev3      | f     | wef   |  1112 |   122 |   0.5
+ dev3      | t     | wef   |  1112 |   122 |     0
+ dev3      | t     | wef   |  1112 |   122 |     0
+ 'dev3'    | t     | wef   |  1112 |   122 |   0.2
+(15 rows)
+
+--Testcase 114:
+SELECT s1.tags->>'device_id' device_id,(s1.fields->>'sig21')::boolean sig21,s1.fields->>'sig22' sig22,(s1.fields->>'sig23')::bigint sig23,(s2.fields->>'sig4')::boolean sig4,s2.fields->>'sig5' sig5 FROM sctbl1 s1 LEFT JOIN sctbl2 s2 ON (s1.fields->>'sig21')::boolean=(s2.fields->>'sig4')::boolean;
+ device_id | sig21 | sig22 | sig23 | sig4 |                             sig5                              
+-----------+-------+-------+-------+------+---------------------------------------------------------------
+ dev2      | f     | wef   |  1112 | f    | [(-122.106469,37.66446),(-122.1067,37.664)]
+ dev3      | f     | wef   |  1112 | f    | [(-122.106469,37.66446),(-122.1067,37.664)]
+ d ,=ev2   | f     | wef   |  1112 | f    | [(-122.106469,37.66446),(-122.1067,37.664)]
+ dev1      | f     | wef   |  1112 | f    | [(-122.106469,37.66446),(-122.1067,37.664)]
+ 'dev3'    | t     | wef   |  1112 | t    | [(-122.107,37.664),(-122.107101,37.66425),(-122.1074,37.665)]
+ dev3      | t     | wef   |  1112 | t    | [(-122.107,37.664),(-122.107101,37.66425),(-122.1074,37.665)]
+ dev1      | t     | wef   |  1112 | t    | [(-122.107,37.664),(-122.107101,37.66425),(-122.1074,37.665)]
+ "dev 1"   | t     | wef   |  1112 | t    | [(-122.107,37.664),(-122.107101,37.66425),(-122.1074,37.665)]
+ dev2      | t     | wef   |  1112 | t    | [(-122.107,37.664),(-122.107101,37.66425),(-122.1074,37.665)]
+ dev2      | f     | wef   |  1112 | f    | [(-122.2364,37.436),(-122.2364,37.443)]
+ dev3      | f     | wef   |  1112 | f    | [(-122.2364,37.436),(-122.2364,37.443)]
+ d ,=ev2   | f     | wef   |  1112 | f    | [(-122.2364,37.436),(-122.2364,37.443)]
+ dev1      | f     | wef   |  1112 | f    | [(-122.2364,37.436),(-122.2364,37.443)]
+ dev2      | f     | wef   |  1112 | f    | [(-121.900576,37.74452),(-121.900804,37.74889)]
+ dev3      | f     | wef   |  1112 | f    | [(-121.900576,37.74452),(-121.900804,37.74889)]
+ d ,=ev2   | f     | wef   |  1112 | f    | [(-121.900576,37.74452),(-121.900804,37.74889)]
+ dev1      | f     | wef   |  1112 | f    | [(-121.900576,37.74452),(-121.900804,37.74889)]
+ 'dev3'    | t     | wef   |  1112 | t    | [(-121.9044,37.895),(-121.9044,37.899)]
+ dev3      | t     | wef   |  1112 | t    | [(-121.9044,37.895),(-121.9044,37.899)]
+ dev1      | t     | wef   |  1112 | t    | [(-121.9044,37.895),(-121.9044,37.899)]
+ "dev 1"   | t     | wef   |  1112 | t    | [(-121.9044,37.895),(-121.9044,37.899)]
+ dev2      | t     | wef   |  1112 | t    | [(-121.9044,37.895),(-121.9044,37.899)]
+ dev2      | f     | wef   |  1112 | f    | [(-121.9026,37.843),(-121.9028,37.843)]
+ dev3      | f     | wef   |  1112 | f    | [(-121.9026,37.843),(-121.9028,37.843)]
+ d ,=ev2   | f     | wef   |  1112 | f    | [(-121.9026,37.843),(-121.9028,37.843)]
+ dev1      | f     | wef   |  1112 | f    | [(-121.9026,37.843),(-121.9028,37.843)]
+(26 rows)
+
+--Testcase 115:
+SELECT s1.device_id,s1.sig21,s1.sig22,s1.sig23,s1.sig24,s1.sig25 FROM (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5,(fields->>'sig6')::bigint sig6, (fields->>'sig7')::float8 sig7,(fields->>'sig8')::float8 sig8,(fields->>'sig9')::float8 sig9,(fields->>'sig10')::bigint sig10,fields->>'sig11' sig11,fields->>'sig12' sig12, (fields->>'sig13')::boolean sig13, fields->>'sig14' sig14, (fields->>'sig15')::bigint sig15,(fields->>'sig16')::bigint sig16, (fields->>'sig17')::bigint sig17, fields->>'sig18' sig18,fields->>'sig19' sig19, fields->>'sig20' sig20, (fields->>'sig21')::boolean sig21, fields->>'sig22' sig22, (fields->>'sig23')::bigint sig23, (fields->>'sig24')::bigint sig24, (fields->>'sig25')::float8 sig25 FROM sctbl1) s1 RIGHT JOIN (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4, (fields->>'sig5')::boolean sig5 FROM sctbl2) s2 using(sig1) where s2.sig3 != 0;
+ device_id | sig21 | sig22 | sig23 | sig24 | sig25 
+-----------+-------+-------+-------+-------+-------
+           |       |       |       |       |      
+           |       |       |       |       |      
+           |       |       |       |       |      
+           |       |       |       |       |      
+           |       |       |       |       |      
+           |       |       |       |       |      
+(6 rows)
+
+--Testcase 116:
+SELECT * FROM (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5,(fields->>'sig6')::bigint sig6, (fields->>'sig7')::float8 sig7,(fields->>'sig8')::float8 sig8,(fields->>'sig9')::float8 sig9,(fields->>'sig10')::bigint sig10,fields->>'sig11' sig11,fields->>'sig12' sig12, (fields->>'sig13')::boolean sig13, fields->>'sig14' sig14, (fields->>'sig15')::bigint sig15,(fields->>'sig16')::bigint sig16, (fields->>'sig17')::bigint sig17, fields->>'sig18' sig18,fields->>'sig19' sig19, fields->>'sig20' sig20, (fields->>'sig21')::boolean sig21, fields->>'sig22' sig22, (fields->>'sig23')::bigint sig23, (fields->>'sig24')::bigint sig24, (fields->>'sig25')::float8 sig25 FROM sctbl1) s1 FULL OUTER JOIN (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,fields->>'sig5' sig5 FROM sctbl2) s2 USING(sig2) ORDER BY s1.sig2, s1.time, s1.device_id, s2.time, s2.device_id;
+                  sig2                  |             time              | device_id | sig1  |      sig3       | sig4 | sig5 |  sig6  |     sig7      | sig8  |  sig9  | sig10 |    sig11     |      sig12       | sig13 |     sig14      |        sig15        |        sig16         |        sig17        | sig18 | sig19 | sig20 | sig21 | sig22 | sig23 | sig24 | sig25 |             time              | device_id | sig1  |      sig3      | sig4 |                             sig5                              
+----------------------------------------+-------------------------------+-----------+-------+-----------------+------+------+--------+---------------+-------+--------+-------+--------------+------------------+-------+----------------+---------------------+----------------------+---------------------+-------+-------+-------+-------+-------+-------+-------+-------+-------------------------------+-----------+-------+----------------+------+---------------------------------------------------------------
+ `~!@#$%^&*()_+=                        | 2016-06-13 17:43:50.1004+00   | dev3      | 65535 |           -0.91 | f    | t    |    311 |    -123445600 | 6.028 |   0.26 |    55 | wwefs        |                  | f     | example string | 9223372036854775807 | -9223372036854775808 | 9223372036854775807 |       |       | OFF   | f     | wef   |  1112 |   122 |   0.5 |                               |           |       |                |      | 
+ いろはにほへど　ちりぬるをわがよたれぞ | 2019-05-02 16:12:41.098+00    | "dev 1"   | 70220 |            0.37 | t    | f    |     43 |     223445600 | 7.029 |  -0.27 |    66 | 3333         | this is a string | t     | example string | 9223372036854775807 | -9223372036854775808 | 9223372036854775807 | west  | east  | OFF   | t     | wef   |  1112 |   122 |     0 |                               |           |       |                |      | 
+ 2e2eawekfrjq2o                         | 2019-05-02 16:12:41.098+00    | dev1      |    11 | -0.797693134862 | t    | t    |     11 | -1.234456e+78 | 1.023 | -0.421 |   226 | ws           | this is a string | t     | example string | 9223372036854775807 | -9223372036854775808 | 9223372036854775807 | west  | east  | OFF   | t     | wef   |  1112 |   122 |     0 |                               |           |       |                |      | 
+ abcdefghijklmnopqrstuvwxyz             | 2016-06-13 17:43:50.1004+00   | dev2      | 35655 |            0.25 | f    | t    |     33 |     323445600 | 5.027 |  0.425 |    44 | 3ae\aefw\naf | this is a string | t     | example string | 9223372036854775807 | -9223372036854775808 | 9223372036854775807 | west  | east  | OFF   | t     | wef   |  1112 |   122 |     0 |                               |           |       |                |      | 
+ AHWEMAKDF                              | 2019-05-02 16:12:41.098+00    | dev2      | -8555 |            0.34 | f    | f    |      5 |    -123445600 |  8.03 |   -0.9 |    77 | 333u         | this is a string | f     | example string | 9223372036854775807 | -9223372036854775808 | 9223372036854775807 | west  | east  | OFF   | f     | wef   |  1112 |   122 |   0.7 |                               |           |       |                |      | 
+ P_AEF-wefA                             | 2019-05-02 16:12:41.098+00    | dev3      |   319 |            0.32 | f    | t    | 111545 |    -223445600 | 9.031 |   -0.9 |  8228 | 1122e        |                  | t     | example string | 9223372036854775807 | -9223372036854775808 | 9223372036854775807 | west  | east  | OFF   | t     | wef   |  1112 |   122 |     0 |                               |           |       |                |      | 
+ x'a8a9aaabacadaeaf'                    | 2016-06-13 17:43:50.1004+00   | d ,=ev2   |  2222 |              -1 | f    | f    |  33666 |     -12344560 | 2.024 |  -0.22 |    26 | Os           | this is a string | t     | example string | 9223372036854775807 | -9223372036854775808 | 9223372036854775807 | west  | east  | OFF   | f     | wef   |  1112 |   122 |   0.1 |                               |           |       |                |      | 
+ 散りぬるを我が世誰                     | 2262-04-11 23:47:16.854776+00 | 'dev3'    | 34422 |            0.32 | f    | t    |    232 |     123445600 | 3.025 | -0.423 |    22 | Zep          |                  | f     |                | 9223372036854775807 | -9223372036854775808 | 9223372036854775807 | west  | east  |       | t     | wef   |  1112 |   122 |   0.2 |                               |           |       |                |      | 
+                                        | 1677-09-21 00:12:43.145224+00 | dev1      |  -664 |            0.78 | t    | f    |     22 |    -123445600 | 4.026 |   0.24 |    33 | )#O3-kaej    | this is a string | t     | example string | 9223372036854775807 | -9223372036854775808 | 9223372036854775807 | west  | east  | OFF   | f     | wef   |  1112 |   122 |     0 |                               |           |       |                |      | 
+                                        |                               |           |       |                 |      |      |        |               |       |        |       |              |                  |       |                |                     |                      |                     |       |       |       |       |       |       |       |       | 1677-09-21 00:12:43.145224+00 | dev3      |   -30 | 102.3827810127 | f    | [(-122.106469,37.66446),(-122.1067,37.664)]
+ 敷ヘカウ告政ヨハツヤ                   |                               |           |       |                 |      |      |        |               |       |        |       |              |                  |       |                |                     |                      |                     |       |       |       |       |       |       |       |       | 2016-06-13 17:43:50.1004+00   | dev1      |   640 |  20.4222211221 | t    | [(-122.107,37.664),(-122.107101,37.66425),(-122.1074,37.665)]
+ `~!@#$%^&*()_+=-{}[]|:;<>?/.           |                               |           |       |                 |      |      |        |               |       |        |       |              |                  |       |                |                     |                      |                     |       |       |       |       |       |       |       |       | 2019-05-02 16:12:41.098+00    | dev2      |  7950 |       220.2215 | f    | [(-122.2364,37.436),(-122.2364,37.443)]
+ wr3wri                                 |                               |           |       |                 |      |      |        |               |       |        |       |              |                  |       |                |                     |                      |                     |       |       |       |       |       |       |       |       | 2019-05-02 16:12:41.098+00    | dev3      |  6990 |         5630.9 | f    | [(-121.900576,37.74452),(-121.900804,37.74889)]
+                                        |                               |           |       |                 |      |      |        |               |       |        |       |              |                  |       |                |                     |                      |                     |       |       |       |       |       |       |       |       | 2262-04-11 23:47:16.854776+00 | dev1      |  7060 |       -3230.17 | t    | [(-121.9044,37.895),(-121.9044,37.899)]
+ EFQEF                                  |                               |           |       |                 |      |      |        |               |       |        |       |              |                  |       |                |                     |                      |                     |       |       |       |       |       |       |       |       | 2262-04-11 23:47:16.854776+00 | dev2      | -7880 |         2330.8 | f    | [(-121.9026,37.843),(-121.9028,37.843)]
+(15 rows)
+
+--Testcase 117:
+SELECT s2.device_id,s2.sig1,s2.sig2,s2.sig3,s2.sig4,s2.sig5 FROM (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5,(fields->>'sig6')::bigint sig6, (fields->>'sig7')::float8 sig7,(fields->>'sig8')::float8 sig8,(fields->>'sig9')::float8 sig9,(fields->>'sig10')::bigint sig10,fields->>'sig11' sig11,fields->>'sig12' sig12, (fields->>'sig13')::boolean sig13, fields->>'sig14' sig14, (fields->>'sig15')::bigint sig15,(fields->>'sig16')::bigint sig16, (fields->>'sig17')::bigint sig17, fields->>'sig18' sig18,fields->>'sig19' sig19, fields->>'sig20' sig20, (fields->>'sig21')::boolean sig21, fields->>'sig22' sig22, (fields->>'sig23')::bigint sig23, (fields->>'sig24')::bigint sig24, (fields->>'sig25')::float8 sig25 FROM sctbl1) s1 NATURAL JOIN (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,fields->>'sig5' sig5 FROM sctbl2) s2;
+ERROR:  JOIN/USING types boolean and text cannot be matched
+--Testcase 118:
+SELECT s1.device_id,s1.sig11,s1.sig12,s1.sig13,s1.sig14,s1.sig15 FROM (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5,(fields->>'sig6')::bigint sig6, (fields->>'sig7')::float8 sig7,(fields->>'sig8')::float8 sig8,(fields->>'sig9')::float8 sig9,(fields->>'sig10')::bigint sig10,fields->>'sig11' sig11,fields->>'sig12' sig12, (fields->>'sig13')::boolean sig13, fields->>'sig14' sig14, (fields->>'sig15')::bigint sig15,(fields->>'sig16')::bigint sig16, (fields->>'sig17')::bigint sig17, fields->>'sig18' sig18,fields->>'sig19' sig19, fields->>'sig20' sig20, (fields->>'sig21')::boolean sig21, fields->>'sig22' sig22, (fields->>'sig23')::bigint sig23, (fields->>'sig24')::bigint sig24, (fields->>'sig25')::float8 sig25 FROM sctbl1) s1 JOIN (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,fields->>'sig5' sig5 FROM sctbl2) s2 on true;
+ device_id |    sig11     |      sig12       | sig13 |     sig14      |        sig15        
+-----------+--------------+------------------+-------+----------------+---------------------
+ dev1      | )#O3-kaej    | this is a string | t     | example string | 9223372036854775807
+ d ,=ev2   | Os           | this is a string | t     | example string | 9223372036854775807
+ dev2      | 3ae\aefw\naf | this is a string | t     | example string | 9223372036854775807
+ dev3      | wwefs        |                  | f     | example string | 9223372036854775807
+ "dev 1"   | 3333         | this is a string | t     | example string | 9223372036854775807
+ dev1      | ws           | this is a string | t     | example string | 9223372036854775807
+ dev2      | 333u         | this is a string | f     | example string | 9223372036854775807
+ dev3      | 1122e        |                  | t     | example string | 9223372036854775807
+ 'dev3'    | Zep          |                  | f     |                | 9223372036854775807
+ dev1      | )#O3-kaej    | this is a string | t     | example string | 9223372036854775807
+ d ,=ev2   | Os           | this is a string | t     | example string | 9223372036854775807
+ dev2      | 3ae\aefw\naf | this is a string | t     | example string | 9223372036854775807
+ dev3      | wwefs        |                  | f     | example string | 9223372036854775807
+ "dev 1"   | 3333         | this is a string | t     | example string | 9223372036854775807
+ dev1      | ws           | this is a string | t     | example string | 9223372036854775807
+ dev2      | 333u         | this is a string | f     | example string | 9223372036854775807
+ dev3      | 1122e        |                  | t     | example string | 9223372036854775807
+ 'dev3'    | Zep          |                  | f     |                | 9223372036854775807
+ dev1      | )#O3-kaej    | this is a string | t     | example string | 9223372036854775807
+ d ,=ev2   | Os           | this is a string | t     | example string | 9223372036854775807
+ dev2      | 3ae\aefw\naf | this is a string | t     | example string | 9223372036854775807
+ dev3      | wwefs        |                  | f     | example string | 9223372036854775807
+ "dev 1"   | 3333         | this is a string | t     | example string | 9223372036854775807
+ dev1      | ws           | this is a string | t     | example string | 9223372036854775807
+ dev2      | 333u         | this is a string | f     | example string | 9223372036854775807
+ dev3      | 1122e        |                  | t     | example string | 9223372036854775807
+ 'dev3'    | Zep          |                  | f     |                | 9223372036854775807
+ dev1      | )#O3-kaej    | this is a string | t     | example string | 9223372036854775807
+ d ,=ev2   | Os           | this is a string | t     | example string | 9223372036854775807
+ dev2      | 3ae\aefw\naf | this is a string | t     | example string | 9223372036854775807
+ dev3      | wwefs        |                  | f     | example string | 9223372036854775807
+ "dev 1"   | 3333         | this is a string | t     | example string | 9223372036854775807
+ dev1      | ws           | this is a string | t     | example string | 9223372036854775807
+ dev2      | 333u         | this is a string | f     | example string | 9223372036854775807
+ dev3      | 1122e        |                  | t     | example string | 9223372036854775807
+ 'dev3'    | Zep          |                  | f     |                | 9223372036854775807
+ dev1      | )#O3-kaej    | this is a string | t     | example string | 9223372036854775807
+ d ,=ev2   | Os           | this is a string | t     | example string | 9223372036854775807
+ dev2      | 3ae\aefw\naf | this is a string | t     | example string | 9223372036854775807
+ dev3      | wwefs        |                  | f     | example string | 9223372036854775807
+ "dev 1"   | 3333         | this is a string | t     | example string | 9223372036854775807
+ dev1      | ws           | this is a string | t     | example string | 9223372036854775807
+ dev2      | 333u         | this is a string | f     | example string | 9223372036854775807
+ dev3      | 1122e        |                  | t     | example string | 9223372036854775807
+ 'dev3'    | Zep          |                  | f     |                | 9223372036854775807
+ dev1      | )#O3-kaej    | this is a string | t     | example string | 9223372036854775807
+ d ,=ev2   | Os           | this is a string | t     | example string | 9223372036854775807
+ dev2      | 3ae\aefw\naf | this is a string | t     | example string | 9223372036854775807
+ dev3      | wwefs        |                  | f     | example string | 9223372036854775807
+ "dev 1"   | 3333         | this is a string | t     | example string | 9223372036854775807
+ dev1      | ws           | this is a string | t     | example string | 9223372036854775807
+ dev2      | 333u         | this is a string | f     | example string | 9223372036854775807
+ dev3      | 1122e        |                  | t     | example string | 9223372036854775807
+ 'dev3'    | Zep          |                  | f     |                | 9223372036854775807
+(54 rows)
+
+--Clean
+--Testcase 119:
+DROP FOREIGN TABLE sctbl1;
+DROP FOREIGN TABLE sctbl2;
+DROP USER MAPPING FOR CURRENT_USER SERVER influxdb_svr;
+DROP SERVER influxdb_svr CASCADE;
+DROP EXTENSION influxdb_fdw;

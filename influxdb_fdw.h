@@ -36,6 +36,10 @@
 #define INTERACTIVE_TIMEOUT 0
 #define INFLUXDB_TIME_COLUMN "time"
 #define INFLUXDB_TIME_TEXT_COLUMN "time_text"
+#define INFLUXDB_TAGS_COLUMN "tags"
+#define INFLUXDB_FIELDS_COLUMN "fields"
+#define INFLUXDB_TAGS_PGTYPE "jsonb"
+#define INFLUXDB_FIELDS_PGTYPE "jsonb"
 #define INFLUXDB_IS_TIME_COLUMN(X) (strcmp(X,INFLUXDB_TIME_COLUMN) == 0 || \
 						  strcmp(X,INFLUXDB_TIME_TEXT_COLUMN) == 0)
 #define CR_NO_ERROR 0
@@ -66,7 +70,7 @@
 #define INFLUXDB_TARGETS_MIXING_AGGREF_UNSAFE	(INFLUXDB_TARGETS_MARK_COLUMN | INFLUXDB_TARGETS_MARK_AGGREF)
 #define INFLUXDB_TARGETS_MIXING_AGGREF_SAFE		(0u)
 
-#define CODE_VERSION 10101
+#define CODE_VERSION 10200
 
 /*
  * Options structure to store the InfluxDB
@@ -81,7 +85,17 @@ typedef struct influxdb_opt
 	char	   *svr_username;	/* InfluxDB user name */
 	char	   *svr_password;	/* InfluxDB password */
 	List	   *tags_list;		/* Contain tag keys of a foreign table */
+	int			schemaless;		/* Schemaless mode */
 }			influxdb_opt;
+
+typedef struct schemaless_info
+{
+	bool		schemaless;			/* Enable schemaless check */
+	Oid			slcol_type_oid;		/* Schemaless column's jsonb type OID */
+	Oid			jsonb_op_oid;		/* Jsonb type "->>" arrow operator OID */
+
+	Oid			relid;				/* OID of the relation */
+}			schemaless_info;
 
 /*
  * FDW-specific information for ForeignScanState
@@ -131,6 +145,11 @@ typedef struct InfluxDBFdwExecState
 
 	/* Function pushdown support in target list */
 	bool		is_tlist_func_pushdown;
+
+	/* Schemaless info */
+	schemaless_info slinfo;
+
+	void       *temp_result;
 }			InfluxDBFdwExecState;
 
 typedef struct InfluxDBFdwRelationInfo
@@ -224,6 +243,13 @@ typedef struct InfluxDBFdwRelationInfo
 
 	/* Function pushdown support in target list */
 	bool		is_tlist_func_pushdown;
+
+	/* True means tlist is all except time column */
+	bool		all_fieldtag;
+	/* Schemaless info */
+	schemaless_info slinfo;
+	/* JsonB column list */
+	List       *slcols;
 }			InfluxDBFdwRelationInfo;
 
 extern bool influxdb_is_foreign_expr(PlannerInfo *root,
@@ -261,8 +287,9 @@ extern List *influxdb_build_tlist_to_deparse(RelOptInfo *foreignrel);
 extern int	influxdb_set_transmission_modes(void);
 extern void influxdb_reset_transmission_modes(int nestlevel);
 
-extern Datum influxdb_convert_to_pg(Oid pgtyp, int pgtypmod, char **row, int attnum);
-extern Datum influxdb_convert_record_to_datum(Oid pgtyp, int pgtypmod, char **row, int attnum, int ntags, int nfield, char **column, char *opername, Oid relid, int ncol);
+extern Datum influxdb_convert_to_pg(Oid pgtyp, int pgtypmod, char *value);
+extern Datum influxdb_convert_record_to_datum(Oid pgtyp, int pgtypmod, char **row, int attnum, int ntags, int nfield,
+											  char **column, char *opername, Oid relid, int ncol, bool is_schemaless);
 
 extern void influxdb_bind_sql_var(Oid type, int attnum, Datum value, bool *isnull,
 								  InfluxDBType * param_influxdb_types, InfluxDBValue * param_influxdb_values);
@@ -272,10 +299,21 @@ extern bool influxdb_is_tag_key(const char *colname, Oid reloid);
 extern char *influxdb_get_column_name(Oid relid, int attnum);
 extern char *influxdb_get_table_name(Relation rel);
 extern int	influxdb_get_number_field_key_match(Oid relid, char *regex);
-extern int	influxdb_get_number_tag_key(Oid relid);
+extern int	influxdb_get_number_tag_key(Oid relid, schemaless_info *pslinfo);
 extern bool influxdb_is_builtin(Oid oid);
 extern bool influxdb_is_regex_argument(Const *node, char **extval);
 extern bool influxdb_is_star_func(Oid funcid, char *in);
 extern List *influxdb_pull_func_clause(Node *node);
 extern bool influxdb_is_grouping_target(TargetEntry *tle, Query *query);
+extern char *influxdb_escape_json_string(char *string);
+extern char *influxdb_escape_record_string(char *string);
+
+extern List *influxdb_pull_slvars(Expr *expr, Index varno, List *columns, bool extract_raw, List *remote_exprs, schemaless_info *pslinfo);
+extern void influxdb_get_schemaless_info(schemaless_info *pslinfo, bool schemaless, Oid reloid);
+extern char *influxdb_get_slvar(Expr *node, schemaless_info *slinfo);
+
+extern bool influxdb_is_select_all(RangeTblEntry *rte, List *tlist, schemaless_info *pslinfo);
+extern bool influxdb_is_slvar(Oid oid, int attnum, schemaless_info *pslinfo, bool *is_tags, bool *is_fields);
+extern bool influxdb_is_slvar_fetch(Node *node, schemaless_info *pslinfo);
+extern bool influxdb_is_param_fetch(Node *node, schemaless_info *pslinfo);
 #endif							/* InfluxDB_FDW_H */

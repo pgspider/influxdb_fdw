@@ -14,3 +14,5 @@ influx -import -path=init/emp.txt -precision=ns
 influx -import -path=init/stud_emp.txt -precision=ns
 
 influx -import -path=init/init_post.txt -precision=ns
+
+influx -import -path=init/schemaless.txt -precision=ns

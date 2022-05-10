@@ -3243,6 +3243,19 @@ set work_mem to default;
 (0 rows)
 
 --Testcase 441:
+-- Clean up:
+delete from agg_data_2k;
+delete from agg_data_20k;
+delete from agg_group_1;
+delete from agg_group_2;
+delete from agg_group_3;
+delete from agg_group_4;
+delete from agg_hash_1;
+delete from agg_hash_2;
+delete from agg_hash_3;
+delete from agg_hash_4;
+drop foreign table agg_data_2k;
+drop foreign table agg_data_20k;
 drop foreign table agg_group_1;
 --Testcase 442:
 drop foreign table agg_group_2;
@@ -3269,6 +3282,25 @@ begin
   end loop;
 end;
 $d$;
+-- Clean up:
+DROP AGGREGATE IF EXISTS newavg (int4);
+DROP AGGREGATE IF EXISTS newsum (int4);
+DROP AGGREGATE IF EXISTS newcnt (*);
+DROP AGGREGATE IF EXISTS oldcnt (*);
+DROP AGGREGATE IF EXISTS newcnt ("any");
+DROP AGGREGATE IF EXISTS sum2(int8,int8);
+DROP FUNCTION IF EXISTS sum3(int8,int8,int8);
+DROP AGGREGATE IF EXISTS aggfns(integer,integer,text);
+DROP AGGREGATE IF EXISTS aggfstr(integer,integer,text);
+DROP FUNCTION IF EXISTS aggfns_trans(aggtype[],integer,integer,text);
+DROP FUNCTION IF EXISTS aggf_trans(aggtype[],integer,integer,text);
+DROP TYPE IF EXISTS aggtype;
+DROP AGGREGATE IF EXISTS test_percentile_disc(float8 ORDER BY anyelement);
+DROP AGGREGATE IF EXISTS test_rank(VARIADIC "any" ORDER BY VARIADIC "any");
+DROP AGGREGATE IF EXISTS cleast_agg(variadic items anycompatiblearray);
+NOTICE:  type "anycompatiblearray" does not exist, skipping
+DROP FUNCTION IF EXISTS cleast_accum(anycompatible, variadic anycompatiblearray);
+NOTICE:  type "anycompatible" does not exist, skipping
 --Testcase 449:
 DROP USER MAPPING FOR CURRENT_USER SERVER influxdb_svr;
 --Testcase 450:

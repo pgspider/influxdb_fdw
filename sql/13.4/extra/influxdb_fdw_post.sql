@@ -757,6 +757,7 @@ SELECT * FROM ft1, ft2, ft4, ft5, local_tbl WHERE ft1.c1 = ft2.c1 AND ft1.c2 = f
 RESET enable_nestloop;
 RESET enable_hashjoin;
 --Testcase 182:
+DELETE FROM local_tbl;
 DROP FOREIGN TABLE local_tbl;
 
 -- check join pushdown in situations where multiple userids are involved
@@ -1805,6 +1806,7 @@ SELECT * FROM foreign_tbl;
 --SELECT * FROM foreign_tbl;
 
 --Testcase 438:
+DELETE FROM foreign_tbl;
 DROP FOREIGN TABLE foreign_tbl CASCADE;
 --Testcase 439:
 DROP TRIGGER row_before_insupd_trigger ON base_tbl;
@@ -1910,6 +1912,9 @@ insert into grem1 (a) values (1), (22);
 select * from gloc1;
 --Testcase 470:
 select * from grem1;
+
+-- Clean up:
+delete from grem1;
 
 -- ===================================================================
 -- test local triggers
@@ -3262,6 +3267,34 @@ SELECT count(*) FROM ft1;
 --ROLLBACK;
 
 -- Clean-up
+delete from ft1;
+delete from ft2;
+delete from ft4;
+delete from ft5;
+delete from foo;
+delete from bar;
+delete from loct1;
+delete from loct2;
+delete from rem1;
+drop foreign table foo cascade;
+drop foreign table bar cascade;
+drop foreign table loct1;
+drop foreign table loct2;
+drop foreign table ft1;
+drop foreign table ft2;
+drop foreign table ft4;
+drop foreign table ft5;
+
+DROP TYPE IF EXISTS user_enum;
+DROP SCHEMA IF EXISTS "S 1" CASCADE;
+DROP FUNCTION IF EXISTS trigger_func();
+DROP FUNCTION IF EXISTS trig_row_before_insupdate();
+DROP FUNCTION IF EXISTS trig_null();
+DROP SCHEMA IF EXISTS import_influx1 CASCADE;
+DROP SCHEMA IF EXISTS import_influx2 CASCADE;
+DROP SCHEMA IF EXISTS import_influx3 CASCADE;
+DROP SCHEMA IF EXISTS import_influx4 CASCADE;
+
 --Testcase 621:
 DROP USER MAPPING FOR public SERVER testserver1;
 --Testcase 622:
