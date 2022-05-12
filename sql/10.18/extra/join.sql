@@ -670,9 +670,16 @@ DROP FOREIGN TABLE t2;
 DROP FOREIGN TABLE t3;
 
 --Testcase 133:
+DELETE FROM J1_TBL;
 DROP FOREIGN TABLE J1_TBL;
 --Testcase 134:
+DELETE FROM J2_TBL;
 DROP FOREIGN TABLE J2_TBL;
+
+DELETE FROM x;
+DELETE FROM y;
+DROP FOREIGN TABLE x;
+DROP FOREIGN TABLE y;
 
 -- Both DELETE and UPDATE allow the specification of additional tables
 -- to "join" against to determine which rows should be modified.
@@ -2141,6 +2148,10 @@ SELECT * FROM
      FROM int8_tbl LEFT JOIN innertab ON q2 = id) ss2
   ON true;
 
+-- Clean up
+DELETE FROM innertab;
+DROP FOREIGN TABLE innertab;
+
 rollback;
 
 -- another join removal bug: we must clean up correctly when removing a PHV
@@ -2917,6 +2928,25 @@ where exists (select 1 from j3
 drop table j3;
 
 -- Clean up
+DELETE FROM t1;
+DELETE FROM t2;
+DELETE FROM t3;
+DELETE FROM tt1;
+DELETE FROM tt2;
+DELETE FROM tt3;
+DELETE FROM tt4;
+DELETE FROM tt5;
+DELETE FROM tt6;
+DELETE FROM xx;
+DELETE FROM yy;
+DELETE FROM zt1;
+DELETE FROM zt2;
+DELETE FROM nt1;
+DELETE FROM nt2;
+DELETE FROM nt3;
+DELETE FROM parent;
+DELETE FROM child;
+
 DO $d$
 declare
   l_rec record;

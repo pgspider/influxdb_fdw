@@ -66,12 +66,16 @@ static struct InfluxDBFdwOption valid_options[] =
 	{"table", ForeignTableRelationId},
 	{"column_name", AttributeRelationId},
 	{"tags", ForeignTableRelationId},
+	{"schemaless", ForeignTableRelationId},
 
 #if (PG_VERSION_NUM >= 140000)
 	/* batch_size is available on both server and table */
 	{"batch_size", ForeignServerRelationId},
 	{"batch_size", ForeignTableRelationId},
 #endif
+
+	{"tags", AttributeRelationId},
+	{"fields", AttributeRelationId},
 
 	/* Sentinel */
 	{NULL, InvalidOid}
@@ -243,6 +247,9 @@ influxdb_get_options(Oid foreignoid)
 
 		if (strcmp(def->defname, "tags") == 0)
 			opt->tags_list = influxdbExtractTagsList(defGetString(def));
+
+		if (strcmp(def->defname, "schemaless") == 0)
+			opt->schemaless = defGetBoolean(def);
 	}
 
 	if (!opt->svr_table && f_table)

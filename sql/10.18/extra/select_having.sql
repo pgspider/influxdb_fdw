@@ -82,6 +82,8 @@ SELECT 1 AS one FROM test_having HAVING 1 < 2;
 SELECT 1 AS one FROM test_having WHERE 1/a = 1 HAVING 1 < 2;
 
 --Testcase 26:
+-- Clean up:
+DELETE FROM test_having;
 DROP FOREIGN TABLE test_having;
 --Testcase 27:
 DROP USER MAPPING FOR CURRENT_USER SERVER influxdb_svr;

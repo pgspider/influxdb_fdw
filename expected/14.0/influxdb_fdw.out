@@ -1128,14 +1128,14 @@ SELECT * FROM t5;
 SELECT * FROM public.influxdb_fdw_version();
  influxdb_fdw_version 
 ----------------------
-                10101
+                10200
 (1 row)
 
 --Testcase 146:
 SELECT influxdb_fdw_version();
  influxdb_fdw_version 
 ----------------------
-                10101
+                10200
 (1 row)
 
 --Test pushdown LIMIT...OFFSET
@@ -1579,6 +1579,8 @@ SELECT * FROM cpu;
  2021-02-03 09:00:03.123457+09 | 2021-02-03T00:00:03.123456789Z | tag1_C | tag2_D |    200 |    5.5 | test   | t
 (5 rows)
 
+-- Recover data
+\! influx -import -path=init/init.txt -precision=s > /dev/null
 --Testcase 201:
 DROP USER MAPPING FOR CURRENT_USER SERVER server1;
 --Testcase 202:
