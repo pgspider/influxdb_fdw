@@ -3457,6 +3457,7 @@ influxdbGetForeignUpperPaths(PlannerInfo *root, UpperRelationKind stage,
 
 	fpinfo = (InfluxDBFdwRelationInfo *) palloc0(sizeof(InfluxDBFdwRelationInfo));
 	fpinfo->pushdown_safe = false;
+	fpinfo->stage = stage;
 	output_rel->fdw_private = fpinfo;
 
 	switch (stage)

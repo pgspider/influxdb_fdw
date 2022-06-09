@@ -4,7 +4,7 @@ def BRANCH_NAME = 'Branch [' + env.BRANCH_NAME + ']'
 def BUILD_INFO = 'Jenkins job: ' + env.BUILD_URL + '\n'
 
 def INFLUXDB_DOCKER_PATH = '/home/jenkins/Docker/Server/Influx'
-def PGS_BRANCH = 'port14.0'
+def PGS_BRANCH = 'master'
 
 def make_check_test(String target, String version) {
     def prefix = ""
