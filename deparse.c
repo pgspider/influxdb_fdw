@@ -2305,14 +2305,11 @@ influxdb_deparse_var(Var *node, deparse_expr_cxt *context)
 		/* node->varlevelsup == 0) */
 	{
 		InfluxDBFdwRelationInfo *fpinfo = (InfluxDBFdwRelationInfo *) context->foreignrel->fdw_private;
-		bool		convert = true;
-
-		/*
-		 * Var with BOOLOID type should be deparsed without conversion in
-		 * target list.
-		 */
-		if (context->is_tlist && fpinfo->is_tlist_func_pushdown)
-			convert = false;
+		bool		convert = context->has_bool_cmp;	/* Boolean Var should be
+														 * deparsed with
+														 * conversion only when
+														 * there is boolean
+														 * comparison */
 
 		/* Var belongs to foreign table */
 		influxdb_deparse_column_ref(buf, node->varno, node->varattno, node->vartype, context->root, convert, &context->can_delete_directly);
