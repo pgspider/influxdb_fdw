@@ -241,6 +241,8 @@ For examples:
 - InfluxDB FDW supports bulk INSERT by using batch_size option from PostgreSQL version 14 or later.
 - WHERE clauses including timestamp, interval and `now()` functions are pushed down.
 - LIMIT...OFFSET clauses are pushed down when there is LIMIT clause only or both LIMIT and OFFSET.<br>
+- Support pushdown DISTINCT argument for only count clause.
+- Support pushdown ANY ARRAY.
 
 For PGSpider, influxdb_fdw can support some different features. For details, please refer to [`README_PGSpider.md`][5] file.
 ## Limitations
@@ -316,6 +318,10 @@ For example:
   - `fields, fields->>'c2', sqrt((fields->>'c1')::int)`: function `sqrt()` is not pushed down.
   - `fields, sqrt((fields->>'c1')::int)`: function `sqrt()` is not pushed down.
   - `fields->>'c2', sqrt((fields->>'c1')::int)`: there is no fields jsonb column, so function `sqrt()` is pushed down.
+
+## Notes
+- InfluxDB FDW does not return an error even if it is overflow.
+- EXP function of InfluxDB may return different precision number in different PC.
 
 ## Contributing
 Opening issues and pull requests on GitHub are welcome.
