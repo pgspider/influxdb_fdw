@@ -2931,18 +2931,25 @@ create foreign table c_nsc (
 ) server influxdb_svr OPTIONS (table 'c');
 --Testcase 247:
 insert into a_nsc (code) values ('p');
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 248:
 insert into a_nsc (code) values ('q');
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 249:
 insert into b_nsc (a, num) values ('p', 1);
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 250:
 insert into b_nsc (a, num) values ('p', 2);
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 251:
 insert into c_nsc (name, a) values ('A', 'p');
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 252:
 insert into c_nsc (name, a) values ('B', 'q');
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 253:
 insert into c_nsc (name, a) values ('C', null);
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 254:
 select c.name, ss.code, ss.b_cnt, ss.const
 from (select fields->>'name' "name", fields->>'a' a from c) c left join
@@ -2962,10 +2969,13 @@ order by c.name;
 
 --Testcase 255:
 DELETE FROM a_nsc;
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 256:
 DELETE FROM b_nsc;
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 257:
 DELETE FROM c_nsc;
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 258:
 DROP FOREIGN TABLE a;
 DROP FOREIGN TABLE a_nsc;
@@ -4873,12 +4883,16 @@ CREATE FOREIGN TABLE d (fields jsonb OPTIONS (fields 'true')) SERVER influxdb_sv
 CREATE FOREIGN TABLE d_nsc (a int, b int) SERVER influxdb_svr OPTIONS (table 'd');
 --Testcase 371:
 INSERT INTO a_nsc VALUES (0, 0), (1, NULL);
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 372:
 INSERT INTO b_nsc VALUES (0, 0), (1, NULL);
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 373:
 INSERT INTO c_nsc VALUES (0), (1);
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 374:
 INSERT INTO d_nsc VALUES (1,3), (2,2), (3,1);
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 -- all three cases should be optimizable into a simple seqscan
 --Testcase 375:
 explain (costs off) SELECT a.* FROM (select (fields->>'id')::int id, (fields->>'b_id')::int b_id from a) a LEFT JOIN (select (fields->>'id')::int id, (fields->>'c_id')::int c_id from b) b ON a.b_id = b.id;
@@ -5062,12 +5076,16 @@ select 1 from (select (a.fields->>'id')::int id FROM a left join b on (a.fields-
 
 --Testcase 386:
 DELETE FROM a_nsc;
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 387:
 DELETE FROM b_nsc;
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 388:
 DELETE FROM c_nsc;
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 389:
 DELETE FROM d_nsc;
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 390:
 DROP FOREIGN TABLE a;
 DROP FOREIGN TABLE a_nsc;
@@ -5194,8 +5212,10 @@ CREATE FOREIGN TABLE b (fields jsonb OPTIONS (fields 'true')) SERVER influxdb_sv
 CREATE FOREIGN TABLE b_nsc (id int, a_id int) SERVER influxdb_svr OPTIONS (table 'b');
 --Testcase 408:
 INSERT INTO a_nsc VALUES (0), (1);
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 409:
 INSERT INTO b_nsc VALUES (0, 0), (1, NULL);
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 410:
 SELECT * FROM (select (fields->>'id')::int id, (fields->>'a_id')::int a_id from b) b LEFT JOIN (select (fields->>'id')::int id from a) a ON ((b.a_id)::int = (a.id)::int) WHERE ((a.id)::int IS NULL OR (a.id)::int > 0);
  id | a_id | id 
@@ -5212,8 +5232,10 @@ SELECT b.* FROM (select (fields->>'id')::int id, (fields->>'a_id')::int a_id fro
 
 --Testcase 412:
 DELETE FROM a_nsc;
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 413:
 DELETE FROM b_nsc;
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 414:
 DROP FOREIGN TABLE a;
 DROP FOREIGN TABLE a_nsc;
@@ -5228,6 +5250,7 @@ create foreign table innertab (fields jsonb OPTIONS (fields 'true')) server infl
 create foreign table innertab_nsc (id int8, dat1 int8) server influxdb_svr OPTIONS (table 'innertab');
 --Testcase 417:
 insert into innertab_nsc values(123, 42);
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 418:
 SELECT * FROM
     (SELECT 1 AS x) ss1
@@ -5246,6 +5269,7 @@ SELECT * FROM
 
 -- Clean up
 DELETE FROM innertab_nsc;
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 DROP FOREIGN TABLE innertab;
 DROP FOREIGN TABLE innertab_nsc;
 rollback;
@@ -6771,8 +6795,10 @@ create foreign table fkest1 (fields jsonb OPTIONS (fields 'true')) server influx
 create foreign table fkest1_nsc (a int, b int) server influxdb_svr OPTIONS (table 'fkest1');
 --Testcase 506:
 insert into fkest_nsc select x/10, x%10, x from generate_series(1,1000) x;
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 507:
 insert into fkest1_nsc select x/10, x%10 from generate_series(1,1000) x;
+WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 508:
 explain (costs off)
 select *
