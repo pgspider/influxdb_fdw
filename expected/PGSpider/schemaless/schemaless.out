@@ -861,7 +861,7 @@ EXPLAIN VERBOSE
 SELECT sum((fields->>'sig1')::bigint),(fields->>'sig1')::bigint sig1 FROM sc1 GROUP BY (fields->>'sig1')::bigint ORDER BY (fields->>'sig1')::bigint;
                                             QUERY PLAN                                             
 ---------------------------------------------------------------------------------------------------
- Sort  (cost=1502.88..1503.38 rows=200 width=40)
+ Sort  (cost=1507.88..1508.38 rows=200 width=40)
    Output: (sum((((fields ->> 'sig1'::text))::bigint))), (((fields ->> 'sig1'::text))::bigint)
    Sort Key: (((sc1.fields ->> 'sig1'::text))::bigint)
    ->  HashAggregate  (cost=1491.24..1495.24 rows=200 width=40)

@@ -2,7 +2,7 @@
  *
  * InfluxDB Foreign Data Wrapper for PostgreSQL
  *
- * Portions Copyright (c) 2018-2021, TOSHIBA CORPORATION
+ * Portions Copyright (c) 2018, TOSHIBA CORPORATION
  *
  * IDENTIFICATION
  *        deparse.c
@@ -544,10 +544,15 @@ influxdb_foreign_expr_walker(Node *node,
 				if (c->consttype == INTERVALOID)
 				{
 					Interval   *interval = DatumGetIntervalP(c->constvalue);
+#if (PG_VERSION_NUM >= 150000)
+					struct pg_itm tm;
+					interval2itm(*interval, &tm);
+#else	
 					struct pg_tm tm;
 					fsec_t		fsec;
 
 					interval2tm(*interval, &tm, &fsec);
+#endif
 
 					/*
 					 * Not pushdown interval with month or year because
@@ -2304,7 +2309,6 @@ influxdb_deparse_var(Var *node, deparse_expr_cxt *context)
 		/* if (node->varno == context->foreignrel->relid && */
 		/* node->varlevelsup == 0) */
 	{
-		InfluxDBFdwRelationInfo *fpinfo = (InfluxDBFdwRelationInfo *) context->foreignrel->fdw_private;
 		bool		convert = context->has_bool_cmp;	/* Boolean Var should be
 														 * deparsed with
 														 * conversion only when
@@ -2441,16 +2445,25 @@ influxdb_deparse_const(Const *node, deparse_expr_cxt *context, int showtype)
 		case INTERVALOID:
 			{
 				Interval   *interval = DatumGetIntervalP(node->constvalue);
+#if (PG_VERSION_NUM >= 150000)
+				struct pg_itm tm;
+
+				interval2itm(*interval, &tm);
+#else
 				struct pg_tm tm;
 				fsec_t		fsec;
 
 				interval2tm(*interval, &tm, &fsec);
+#endif
 
+#if (PG_VERSION_NUM >= 150000)
+				appendStringInfo(buf, "%dd%ldh%dm%ds%du", tm.tm_mday, tm.tm_hour,
+								 tm.tm_min, tm.tm_sec, tm.tm_usec
+#else
 				appendStringInfo(buf, "%dd%dh%dm%ds%du", tm.tm_mday, tm.tm_hour,
 								 tm.tm_min, tm.tm_sec, fsec
+#endif
 					);
-
-
 				break;
 			}
 		default:
@@ -3249,7 +3262,11 @@ influxdb_print_remote_placeholder(Oid paramtype, int32 paramtypmod,
 bool
 influxdb_is_builtin(Oid oid)
 {
+#if (PG_VERSION_NUM >= 120000)
+	return (oid < FirstGenbkiObjectId);
+#else
 	return (oid < FirstBootstrapObjectId);
+#endif
 }
 
 bool

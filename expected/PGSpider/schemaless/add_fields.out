@@ -1294,7 +1294,11 @@ SELECT s1.device_id,s1.sig11,s1.sig12,s1.sig13,s1.sig14,s1.sig15 FROM (SELECT ti
 --Clean
 --Testcase 119:
 DROP FOREIGN TABLE sctbl1;
+--Testcase 120:
 DROP FOREIGN TABLE sctbl2;
+--Testcase 121:
 DROP USER MAPPING FOR CURRENT_USER SERVER influxdb_svr;
+--Testcase 122:
 DROP SERVER influxdb_svr CASCADE;
+--Testcase 123:
 DROP EXTENSION influxdb_fdw;

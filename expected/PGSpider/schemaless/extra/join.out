@@ -16,6 +16,7 @@ CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user :INFLUXDB
 CREATE FOREIGN TABLE J1_TBL (
   fields jsonb OPTIONS (fields 'true')
 ) SERVER influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 575:
 CREATE FOREIGN TABLE j1_tbl_nsc (
   i integer,
   j integer,
@@ -25,6 +26,7 @@ CREATE FOREIGN TABLE j1_tbl_nsc (
 CREATE FOREIGN TABLE J2_TBL (
   fields jsonb OPTIONS (fields 'true')
 ) SERVER influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 576:
 CREATE FOREIGN TABLE j2_tbl_nsc (
   i integer,
   k integer
@@ -1790,12 +1792,15 @@ where exists(select * from (select (fields->>'unique1')::int4 unique1, (fields->
 --
 --Testcase 75:
 CREATE FOREIGN TABLE t1 (fields jsonb OPTIONS (fields 'true')) SERVER influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 577:
 CREATE FOREIGN TABLE t1_nsc (name TEXT, n INTEGER) SERVER influxdb_svr OPTIONS (table 't1');
 --Testcase 76:
 CREATE FOREIGN TABLE t2 (fields jsonb OPTIONS (fields 'true')) SERVER influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 578:
 CREATE FOREIGN TABLE t2_nsc (name TEXT, n INTEGER) SERVER influxdb_svr OPTIONS (table 't2');
 --Testcase 77:
 CREATE FOREIGN TABLE t3 (fields jsonb OPTIONS (fields 'true')) SERVER influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 579:
 CREATE FOREIGN TABLE t3_nsc (name TEXT, n INTEGER) SERVER influxdb_svr OPTIONS (table 't3');
 --Testcase 78:
 INSERT INTO t1_nsc VALUES ( 'bb', 11 );
@@ -1981,6 +1986,7 @@ ON ((s1_n)::int = (s2_n)::int);
 -- Test for propagation of nullability constraints into sub-joins
 --Testcase 97:
 create foreign table x (fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 580:
 create foreign table x_nsc (x1 int, x2 int) server influxdb_svr OPTIONS (table 'x');
 --Testcase 98:
 insert into x_nsc values (1,11);
@@ -1994,6 +2000,7 @@ insert into x_nsc values (4,44);
 insert into x_nsc values (5,null);
 --Testcase 103:
 create foreign table y (fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 581:
 create foreign table y_nsc (y1 int, y2 int) server influxdb_svr OPTIONS (table 'y');
 --Testcase 104:
 insert into y_nsc values (1,111);
@@ -2173,32 +2180,32 @@ rollback;
 -- regression test: be sure we cope with proven-dummy append rels
 --
 --Testcase 124:
-create table b (aa int, bb int);
+CREATE FOREIGN TABLE b_star(fields jsonb OPTIONS (fields 'true')) SERVER influxdb_svr OPTIONS(schemaless 'true');
 --Testcase 125:
 explain (costs off)
-select aa, bb, tenk1.unique1::int, tenk1.unique1::int
-  from (select (fields->>'unique1')::int unique1, fields->>'unique2' unique2, fields->>'two' two, fields->>'four' four, fields->>'ten' ten, fields->>'twenty' twenty, fields->>'hundred' hundred, fields->>'thousand' thousand, fields->>'twothousand' twothousand, fields->>'fivethous' fivethous, fields->>'tenthous' tenthous, fields->>'odd' odd, fields->>'even' even, fields->>'stringu1' stringu1, fields->>'stringu2' stringu2, fields->>'string4' string4 from tenk1) tenk1 right join b on aa = tenk1.unique1::int
-  where bb < bb and bb is null;
-                             QUERY PLAN                              
----------------------------------------------------------------------
+select b_star.aa::int4, bb, tenk1.unique1::int, tenk1.unique1::int
+  from (select (fields->>'unique1')::int unique1, fields->>'unique2' unique2, fields->>'two' two, fields->>'four' four, fields->>'ten' ten, fields->>'twenty' twenty, fields->>'hundred' hundred, fields->>'thousand' thousand, fields->>'twothousand' twothousand, fields->>'fivethous' fivethous, fields->>'tenthous' tenthous, fields->>'odd' odd, fields->>'even' even, fields->>'stringu1' stringu1, fields->>'stringu2' stringu2, fields->>'string4' string4 from tenk1) tenk1 right join (select (fields->>'class')::char class, (fields->>'aa')::int4 aa, fields->>'bb' bb, (fields->>'a')::int4 a from b_star) b_star on b_star.aa::int4 = tenk1.unique1::int
+  where b_star.bb < b_star.bb and b_star.bb is null;
+                                                    QUERY PLAN                                                     
+-------------------------------------------------------------------------------------------------------------------
  Hash Right Join
-   Hash Cond: (((tenk1.fields ->> 'unique1'::text))::integer = b.aa)
+   Hash Cond: (((tenk1.fields ->> 'unique1'::text))::integer = ((b_star.fields ->> 'aa'::text))::integer)
    ->  Foreign Scan on tenk1
    ->  Hash
-         ->  Seq Scan on b
-               Filter: ((bb IS NULL) AND (bb < bb))
+         ->  Foreign Scan on b_star
+               Filter: (((fields ->> 'bb'::text) IS NULL) AND ((fields ->> 'bb'::text) < (fields ->> 'bb'::text)))
 (6 rows)
 
 --Testcase 126:
-select aa, bb, tenk1.unique1::int, tenk1.unique1::int
-  from (select (fields->>'unique1')::int unique1, fields->>'unique2' unique2, fields->>'two' two, fields->>'four' four, fields->>'ten' ten, fields->>'twenty' twenty, fields->>'hundred' hundred, fields->>'thousand' thousand, fields->>'twothousand' twothousand, fields->>'fivethous' fivethous, fields->>'tenthous' tenthous, fields->>'odd' odd, fields->>'even' even, fields->>'stringu1' stringu1, fields->>'stringu2' stringu2, fields->>'string4' string4 from tenk1) tenk1 right join b on aa = tenk1.unique1::int
-  where bb < bb and bb is null;
+select b_star.aa::int4, bb, tenk1.unique1::int, tenk1.unique1::int
+  from (select (fields->>'unique1')::int unique1, fields->>'unique2' unique2, fields->>'two' two, fields->>'four' four, fields->>'ten' ten, fields->>'twenty' twenty, fields->>'hundred' hundred, fields->>'thousand' thousand, fields->>'twothousand' twothousand, fields->>'fivethous' fivethous, fields->>'tenthous' tenthous, fields->>'odd' odd, fields->>'even' even, fields->>'stringu1' stringu1, fields->>'stringu2' stringu2, fields->>'string4' string4 from tenk1) tenk1 right join (select (fields->>'class')::char class, (fields->>'aa')::int4 aa, fields->>'bb' bb, (fields->>'a')::int4 a from b_star) b_star on b_star.aa::int4 = tenk1.unique1::int
+  where b_star.bb < b_star.bb and b_star.bb is null;
  aa | bb | unique1 | unique1 
 ----+----+---------+---------
 (0 rows)
 
 --Testcase 127:
-drop table b;
+drop foreign table b_star;
 --
 -- regression test: check handling of empty-FROM subquery underneath outer join
 --
@@ -2385,35 +2392,49 @@ DELETE FROM t2_nsc;
 DELETE FROM t3_nsc;
 --Testcase 140:
 DROP FOREIGN TABLE t1;
+--Testcase 582:
 DROP FOREIGN TABLE t1_nsc;
 --Testcase 141:
 DROP FOREIGN TABLE t2;
+--Testcase 583:
 DROP FOREIGN TABLE t2_nsc;
 --Testcase 142:
 DROP FOREIGN TABLE t3;
+--Testcase 584:
 DROP FOREIGN TABLE t3_nsc;
 --Testcase 143:
 DELETE FROM j1_tbl_nsc;
+--Testcase 585:
 DROP FOREIGN TABLE J1_TBL;
+--Testcase 586:
 DROP FOREIGN TABLE j1_tbl_nsc;
 --Testcase 144:
 DELETE FROM j2_tbl_nsc;
+--Testcase 587:
 DROP FOREIGN TABLE J2_TBL;
+--Testcase 588:
 DROP FOREIGN TABLE j2_tbl_nsc;
+--Testcase 589:
 DELETE FROM x_nsc;
+--Testcase 590:
 DELETE FROM y_nsc;
+--Testcase 591:
 DROP FOREIGN TABLE x_nsc;
+--Testcase 592:
 DROP FOREIGN TABLE y_nsc;
 -- Both DELETE and UPDATE allow the specification of additional tables
 -- to "join" against to determine which rows should be modified.
 --Testcase 145:
 CREATE FOREIGN TABLE t1 (fields jsonb OPTIONS (fields 'true')) SERVER influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 593:
 CREATE FOREIGN TABLE t1_nsc (a int, b int) SERVER influxdb_svr OPTIONS (table 't1');
 --Testcase 146:
 CREATE FOREIGN TABLE t2 (fields jsonb OPTIONS (fields 'true')) SERVER influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 594:
 CREATE FOREIGN TABLE t2_nsc (a int, b int) SERVER influxdb_svr OPTIONS (table 't2');
 --Testcase 147:
 CREATE FOREIGN TABLE t3 (fields jsonb OPTIONS (fields 'true')) SERVER influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 595:
 CREATE FOREIGN TABLE t3_nsc (x int, y int) SERVER influxdb_svr OPTIONS (table 't3');
 --Testcase 148:
 INSERT INTO t1_nsc VALUES (5, 10);
@@ -2503,6 +2524,7 @@ HINT:  Perhaps you meant to reference the column "t3.x".
 --
 --Testcase 169:
 CREATE FOREIGN TABLE tt1 ( fields jsonb OPTIONS (fields 'true') ) SERVER influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 596:
 CREATE FOREIGN TABLE tt1_nsc ( tt1_id int4, joincol int4 ) SERVER influxdb_svr OPTIONS (table 'tt1');
 --Testcase 170:
 INSERT INTO tt1_nsc VALUES (1, 11);
@@ -2510,6 +2532,7 @@ INSERT INTO tt1_nsc VALUES (1, 11);
 INSERT INTO tt1_nsc VALUES (2, NULL);
 --Testcase 172:
 CREATE FOREIGN TABLE tt2 ( fields jsonb OPTIONS (fields 'true') ) SERVER influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 597:
 CREATE FOREIGN TABLE tt2_nsc ( tt2_id int4, joincol int4 ) SERVER influxdb_svr OPTIONS (table 'tt2');
 --Testcase 173:
 INSERT INTO tt2_nsc VALUES (21, 11);
@@ -2584,11 +2607,13 @@ reset enable_memoize;
 --
 --Testcase 189:
 create foreign table tt3(fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 598:
 create foreign table tt3_nsc(f1 int, f2 text) server influxdb_svr OPTIONS (table 'tt3');
 --Testcase 190:
 insert into tt3_nsc select x, repeat('xyzzy', 100) from generate_series(1,10000) x;
 --Testcase 191:
 create foreign table tt4(fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 599:
 create foreign table tt4_nsc(f1 int) server influxdb_svr OPTIONS (table 'tt4');
 --Testcase 192:
 insert into tt4_nsc values (0),(1),(9999);
@@ -2657,9 +2682,11 @@ where not exists (
 --
 --Testcase 196:
 create foreign table tt5(fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 600:
 create foreign table tt5_nsc(f1 int, f2 int) server influxdb_svr OPTIONS (table 'tt5');
 --Testcase 197:
 create foreign table tt6(fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 601:
 create foreign table tt6_nsc(f1 int, f2 int) server influxdb_svr OPTIONS (table 'tt6');
 --Testcase 198:
 insert into tt5_nsc values(1, 10);
@@ -2683,9 +2710,11 @@ select * from (select (fields->>'f1')::int f1, (fields->>'f2')::int f2 from tt5)
 --
 --Testcase 204:
 create foreign table xx (fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 602:
 create foreign table xx_nsc (pkxx int) server influxdb_svr OPTIONS (table 'xx');
 --Testcase 205:
 create foreign table yy (fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 603:
 create foreign table yy_nsc (pkyy int, pkxx int) server influxdb_svr OPTIONS (table 'yy');
 --Testcase 206:
 insert into xx_nsc values (1);
@@ -2719,9 +2748,11 @@ from yy
 --
 --Testcase 213:
 create foreign table zt1 (fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 604:
 create foreign table zt1_nsc (f1 int) server influxdb_svr OPTIONS (table 'zt1');
 --Testcase 214:
 create foreign table zt2 (fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 605:
 create foreign table zt2_nsc (f2 int) server influxdb_svr OPTIONS (table 'zt2');
 --Testcase 215:
 create foreign table zt3 (fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS(schemaless 'true');
@@ -2910,6 +2941,7 @@ begin;
 create foreign table a (
      fields jsonb OPTIONS (fields 'true')
 ) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 606:
 create foreign table a_nsc (
      code char
 ) server influxdb_svr OPTIONS (table 'a');
@@ -2917,6 +2949,7 @@ create foreign table a_nsc (
 create foreign table b (
      fields jsonb OPTIONS (fields 'true')
 ) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 607:
 create foreign table b_nsc (
      a char,
      num integer
@@ -2925,6 +2958,7 @@ create foreign table b_nsc (
 create foreign table c (
      fields jsonb OPTIONS (fields 'true')
 ) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 608:
 create foreign table c_nsc (
      name char,
      a char
@@ -2978,12 +3012,15 @@ DELETE FROM c_nsc;
 WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 258:
 DROP FOREIGN TABLE a;
+--Testcase 609:
 DROP FOREIGN TABLE a_nsc;
 --Testcase 259:
 DROP FOREIGN TABLE b;
+--Testcase 610:
 DROP FOREIGN TABLE b_nsc;
 --Testcase 260:
 DROP FOREIGN TABLE c;
+--Testcase 611:
 DROP FOREIGN TABLE c_nsc;
 rollback;
 --
@@ -3086,6 +3123,7 @@ SELECT qq, (fields->>'unique1')::int4 unique1
 create foreign table nt1 (
   fields jsonb OPTIONS (fields 'true')
 ) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 612:
 create foreign table nt1_nsc (
   id int,
   a1 boolean,
@@ -3095,6 +3133,7 @@ create foreign table nt1_nsc (
 create foreign table nt2 (
   fields jsonb OPTIONS (fields 'true')
 ) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 613:
 create foreign table nt2_nsc (
   id int,
   nt1_id int,
@@ -3105,6 +3144,7 @@ create foreign table nt2_nsc (
 create foreign table nt3 (
   fields jsonb OPTIONS (fields 'true')
 ) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 614:
 create foreign table nt3_nsc (
   id int,
   nt2_id int,
@@ -4871,15 +4911,19 @@ reset enable_nestloop;
 begin;
 --Testcase 367:
 CREATE FOREIGN TABLE a (fields jsonb OPTIONS (fields 'true')) SERVER influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 615:
 CREATE FOREIGN TABLE a_nsc (id int, b_id int) SERVER influxdb_svr OPTIONS (table 'a');
 --Testcase 368:
 CREATE FOREIGN TABLE b (fields jsonb OPTIONS (fields 'true')) SERVER influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 616:
 CREATE FOREIGN TABLE b_nsc (id int, c_id int) SERVER influxdb_svr OPTIONS (table 'b');
 --Testcase 369:
 CREATE FOREIGN TABLE c (fields jsonb OPTIONS (fields 'true')) SERVER influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 617:
 CREATE FOREIGN TABLE c_nsc (id int) SERVER influxdb_svr OPTIONS (table 'c');
 --Testcase 370:
 CREATE FOREIGN TABLE d (fields jsonb OPTIONS (fields 'true')) SERVER influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 618:
 CREATE FOREIGN TABLE d_nsc (a int, b int) SERVER influxdb_svr OPTIONS (table 'd');
 --Testcase 371:
 INSERT INTO a_nsc VALUES (0, 0), (1, NULL);
@@ -5000,18 +5044,15 @@ select d.* from (select (fields->>'a')::int a, (fields->>'b')::int b from d) d l
   on (d.a)::int = (s.id)::int;
                                                  QUERY PLAN                                                  
 -------------------------------------------------------------------------------------------------------------
- Merge Right Join
-   Merge Cond: (s.id = (((d.fields ->> 'a'::text))::integer))
-   ->  Sort
-         Sort Key: s.id
+ Hash Left Join
+   Hash Cond: (((d.fields ->> 'a'::text))::integer = s.id)
+   ->  Foreign Scan on d
+   ->  Hash
          ->  Subquery Scan on s
                ->  HashAggregate
                      Group Key: ((b.fields ->> 'id'::text))::integer, ((b.fields ->> 'c_id'::text))::integer
                      ->  Foreign Scan on b
-   ->  Sort
-         Sort Key: (((d.fields ->> 'a'::text))::integer)
-         ->  Foreign Scan on d
-(11 rows)
+(8 rows)
 
 -- similarly, but keying off a DISTINCT clause
 --Testcase 382:
@@ -5020,18 +5061,15 @@ select d.* from (select (fields->>'a')::int a, (fields->>'b')::int b from d) d l
   on (d.a)::int = (s.id)::int;
                                                  QUERY PLAN                                                  
 -------------------------------------------------------------------------------------------------------------
- Merge Right Join
-   Merge Cond: (s.id = (((d.fields ->> 'a'::text))::integer))
-   ->  Sort
-         Sort Key: s.id
+ Hash Left Join
+   Hash Cond: (((d.fields ->> 'a'::text))::integer = s.id)
+   ->  Foreign Scan on d
+   ->  Hash
          ->  Subquery Scan on s
                ->  HashAggregate
                      Group Key: ((b.fields ->> 'id'::text))::integer, ((b.fields ->> 'c_id'::text))::integer
                      ->  Foreign Scan on b
-   ->  Sort
-         Sort Key: (((d.fields ->> 'a'::text))::integer)
-         ->  Foreign Scan on d
-(11 rows)
+(8 rows)
 
 -- check join removal works when uniqueness of the join condition is enforced
 -- by a UNION
@@ -5088,22 +5126,28 @@ DELETE FROM d_nsc;
 WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 390:
 DROP FOREIGN TABLE a;
+--Testcase 619:
 DROP FOREIGN TABLE a_nsc;
 --Testcase 391:
 DROP FOREIGN TABLE b;
+--Testcase 620:
 DROP FOREIGN TABLE b_nsc;
 --Testcase 392:
 DROP FOREIGN TABLE c;
+--Testcase 621:
 DROP FOREIGN TABLE c_nsc;
 --Testcase 393:
 DROP FOREIGN TABLE d;
+--Testcase 622:
 DROP FOREIGN TABLE d_nsc;
 rollback;
 --Testcase 394:
 create foreign table parent (fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 623:
 create foreign table parent_nsc (k int, pd int) server influxdb_svr OPTIONS (table 'parent');
 --Testcase 395:
 create foreign table child (fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 624:
 create foreign table child_nsc (k int, cd int) server influxdb_svr OPTIONS (table 'child');
 --Testcase 396:
 insert into parent_nsc values (1, 10), (2, 20), (3, 30);
@@ -5206,9 +5250,11 @@ select p.* from
 begin;
 --Testcase 406:
 CREATE FOREIGN TABLE a (fields jsonb OPTIONS (fields 'true')) SERVER influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 625:
 CREATE FOREIGN TABLE a_nsc (id int) SERVER influxdb_svr OPTIONS (table 'a');
 --Testcase 407:
 CREATE FOREIGN TABLE b (fields jsonb OPTIONS (fields 'true')) SERVER influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 626:
 CREATE FOREIGN TABLE b_nsc (id int, a_id int) SERVER influxdb_svr OPTIONS (table 'b');
 --Testcase 408:
 INSERT INTO a_nsc VALUES (0), (1);
@@ -5238,15 +5284,18 @@ DELETE FROM b_nsc;
 WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
 --Testcase 414:
 DROP FOREIGN TABLE a;
+--Testcase 627:
 DROP FOREIGN TABLE a_nsc;
 --Testcase 415:
 DROP FOREIGN TABLE b;
+--Testcase 628:
 DROP FOREIGN TABLE b_nsc;
 rollback;
 -- another join removal bug: this is not optimizable, either
 begin;
 --Testcase 416:
 create foreign table innertab (fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 629:
 create foreign table innertab_nsc (id int8, dat1 int8) server influxdb_svr OPTIONS (table 'innertab');
 --Testcase 417:
 insert into innertab_nsc values(123, 42);
@@ -5268,9 +5317,12 @@ SELECT * FROM
 (5 rows)
 
 -- Clean up
+--Testcase 630:
 DELETE FROM innertab_nsc;
 WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+--Testcase 631:
 DROP FOREIGN TABLE innertab;
+--Testcase 632:
 DROP FOREIGN TABLE innertab_nsc;
 rollback;
 -- another join removal bug: we must clean up correctly when removing a PHV
@@ -6533,6 +6585,10 @@ select * from
  3 | 3
 (6 rows)
 
+-- check the number of columns specified
+--Testcase 665:
+SELECT * FROM ((SELECT fields->>'q1', fields->>'q2' FROM int8_tbl) i cross join (SELECT fields->>'f1' FROM int4_tbl)  j) ss(a,b,c,d);
+ERROR:  join expression "ss" has 3 columns available but 4 columns specified
 -- check we don't try to do a unique-ified semijoin with LATERAL
 --Testcase 484:
 explain (verbose, costs off)
@@ -6789,9 +6845,11 @@ rollback;
 begin;
 --Testcase 504:
 create foreign table fkest (fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 633:
 create foreign table fkest_nsc (a int, b int, c int) server influxdb_svr OPTIONS (table 'fkest');
 --Testcase 505:
 create foreign table fkest1 (fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 634:
 create foreign table fkest1_nsc (a int, b int) server influxdb_svr OPTIONS (table 'fkest1');
 --Testcase 506:
 insert into fkest_nsc select x/10, x%10, x from generate_series(1,1000) x;
@@ -6831,12 +6889,15 @@ rollback;
 --
 --Testcase 509:
 create foreign table j1 (fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 635:
 create foreign table j1_nsc (id int) server influxdb_svr OPTIONS (table 'j1');
 --Testcase 510:
 create foreign table j2 (fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 636:
 create foreign table j2_nsc (id int) server influxdb_svr OPTIONS (table 'j2');
 --Testcase 511:
 create foreign table j3 (fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 637:
 create foreign table j3_nsc (id int) server influxdb_svr OPTIONS (table 'j3');
 --Testcase 512:
 insert into j1_nsc values(1),(2),(3);
@@ -7050,12 +7111,14 @@ select * from (select (fields->>'id')::int id from j1 j1) j1
 inner join (select (fields->>'id')::int id from j3 j3 group by fields->>'id') j3 on (j1.id)::int = (j3.id)::int;
                                               QUERY PLAN                                               
 -------------------------------------------------------------------------------------------------------
- Merge Join
-   Output: (((j1.fields ->> 'id'::text))::integer), j3.id
-   Merge Cond: (j3.id = (((j1.fields ->> 'id'::text))::integer))
-   ->  Sort
+ Hash Join
+   Output: ((j1.fields ->> 'id'::text))::integer, j3.id
+   Hash Cond: (((j1.fields ->> 'id'::text))::integer = j3.id)
+   ->  Foreign Scan on public.j1
+         Output: j1.fields
+         InfluxDB query: SELECT * FROM "j1"
+   ->  Hash
          Output: j3.id
-         Sort Key: j3.id
          ->  Subquery Scan on j3
                Output: j3.id
                ->  HashAggregate
@@ -7064,13 +7127,7 @@ inner join (select (fields->>'id')::int id from j3 j3 group by fields->>'id') j3
                      ->  Foreign Scan on public.j3 j3_1
                            Output: (j3_1.fields ->> 'id'::text), j3_1.fields
                            InfluxDB query: SELECT * FROM "j3"
-   ->  Sort
-         Output: j1.fields, (((j1.fields ->> 'id'::text))::integer)
-         Sort Key: (((j1.fields ->> 'id'::text))::integer)
-         ->  Foreign Scan on public.j1
-               Output: j1.fields, ((j1.fields ->> 'id'::text))::integer
-               InfluxDB query: SELECT * FROM "j1"
-(20 rows)
+(16 rows)
 
 --Testcase 525:
 delete from j1_nsc;
@@ -7080,22 +7137,28 @@ delete from j2_nsc;
 delete from j3_nsc;
 --Testcase 528:
 drop foreign table j1;
+--Testcase 638:
 drop foreign table j1_nsc;
 --Testcase 529:
 drop foreign table j2;
+--Testcase 639:
 drop foreign table j2_nsc;
 --Testcase 530:
 drop foreign table j3;
+--Testcase 640:
 drop foreign table j3_nsc;
 -- test more complex permutations of unique joins
 --Testcase 531:
 create foreign table j1 (fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 641:
 create foreign table j1_nsc (id1 int, id2 int) server influxdb_svr OPTIONS (table 'j1');
 --Testcase 532:
 create foreign table j2 (fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 642:
 create foreign table j2_nsc (id1 int, id2 int) server influxdb_svr OPTIONS (table 'j2');
 --Testcase 533:
 create foreign table j3 (fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS(schemaless 'true');
+--Testcase 643:
 create foreign table j3_nsc (id1 int, id2 int) server influxdb_svr OPTIONS (table 'j3');
 --Testcase 534:
 insert into j1_nsc values(1,1),(1,2);
@@ -7294,12 +7357,15 @@ delete from j2_nsc;
 delete from j3_nsc;
 --Testcase 557:
 drop foreign table j1;
+--Testcase 644:
 drop foreign table j1_nsc;
 --Testcase 558:
 drop foreign table j2;
+--Testcase 645:
 drop foreign table j2_nsc;
 --Testcase 559:
 drop foreign table j3;
+--Testcase 646:
 drop foreign table j3_nsc;
 -- check that semijoin inner is not seen as unique for a portion of the outerrel
 --Testcase 560:
@@ -7382,23 +7448,41 @@ where exists (select 1 from j3
 --Testcase 565:
 drop table j3;
 -- Clean up
+--Testcase 647:
 DELETE FROM t1_nsc;
+--Testcase 648:
 DELETE FROM t2_nsc;
+--Testcase 649:
 DELETE FROM t3_nsc;
+--Testcase 650:
 DELETE FROM tt1_nsc;
+--Testcase 651:
 DELETE FROM tt2_nsc;
+--Testcase 652:
 DELETE FROM tt3_nsc;
+--Testcase 653:
 DELETE FROM tt4_nsc;
+--Testcase 654:
 DELETE FROM tt5_nsc;
+--Testcase 655:
 DELETE FROM tt6_nsc;
+--Testcase 656:
 DELETE FROM xx_nsc;
+--Testcase 657:
 DELETE FROM yy_nsc;
+--Testcase 658:
 DELETE FROM zt1_nsc;
+--Testcase 659:
 DELETE FROM zt2_nsc;
+--Testcase 660:
 DELETE FROM nt1_nsc;
+--Testcase 661:
 DELETE FROM nt2_nsc;
+--Testcase 662:
 DELETE FROM nt3_nsc;
+--Testcase 663:
 DELETE FROM parent_nsc;
+--Testcase 664:
 DELETE FROM child_nsc;
 DO $d$
 declare

@@ -1839,8 +1839,8 @@ USING (name);
 ------+----+----
  bb   | 12 | 13
  cc   | 22 | 23
- dd   |    | 33
  ee   | 42 |   
+ dd   |    | 33
 (4 rows)
 
 -- Cases with non-nullable expressions in subquery results;
@@ -1877,8 +1877,8 @@ NATURAL FULL JOIN
 ------+------+------+------+------
  bb   |   12 |    2 |   13 |    3
  cc   |   22 |    2 |   23 |    3
- dd   |      |      |   33 |    3
  ee   |   42 |    2 |      |     
+ dd   |      |      |   33 |    3
 (4 rows)
 
 --Testcase 92:
@@ -2150,32 +2150,32 @@ rollback;
 -- regression test: be sure we cope with proven-dummy append rels
 --
 --Testcase 124:
-create table b (aa int, bb int);
+CREATE FOREIGN TABLE b_star(class char, aa int4, bb text, a int4) SERVER influxdb_svr;
 --Testcase 125:
 explain (costs off)
 select aa, bb, unique1, unique1
-  from tenk1 right join b on aa = unique1
+  from tenk1 right join b_star on aa = unique1
   where bb < bb and bb is null;
                      QUERY PLAN                     
 ----------------------------------------------------
  Hash Right Join
-   Hash Cond: (tenk1.unique1 = b.aa)
+   Hash Cond: (tenk1.unique1 = b_star.aa)
    ->  Foreign Scan on tenk1
    ->  Hash
-         ->  Seq Scan on b
+         ->  Foreign Scan on b_star
                Filter: ((bb IS NULL) AND (bb < bb))
 (6 rows)
 
 --Testcase 126:
 select aa, bb, unique1, unique1
-  from tenk1 right join b on aa = unique1
+  from tenk1 right join b_star on aa = unique1
   where bb < bb and bb is null;
  aa | bb | unique1 | unique1 
 ----+----+---------+---------
 (0 rows)
 
 --Testcase 127:
-drop table b;
+drop foreign table b_star;
 --
 -- regression test: check handling of empty-FROM subquery underneath outer join
 --
@@ -2365,13 +2365,19 @@ DROP FOREIGN TABLE t2;
 DROP FOREIGN TABLE t3;
 --Testcase 143:
 DELETE FROM J1_TBL;
+--Testcase 575:
 DROP FOREIGN TABLE J1_TBL;
 --Testcase 144:
 DELETE FROM J2_TBL;
+--Testcase 576:
 DROP FOREIGN TABLE J2_TBL;
+--Testcase 577:
 DELETE FROM x;
+--Testcase 578:
 DELETE FROM y;
+--Testcase 579:
 DROP FOREIGN TABLE x;
+--Testcase 580:
 DROP FOREIGN TABLE y;
 -- Both DELETE and UPDATE allow the specification of additional tables
 -- to "join" against to determine which rows should be modified.
@@ -4039,18 +4045,15 @@ select a.unique1, b.unique1, c.unique1, coalesce(b.twothousand, a.twothousand)
 -------------------------------------------------------------------
  Hash Left Join
    Hash Cond: (COALESCE(b.twothousand, a.twothousand) = c.unique2)
-   ->  Merge Left Join
-         Merge Cond: (a.unique1 = b.thousand)
+   ->  Hash Right Join
+         Hash Cond: (b.thousand = a.unique1)
          Filter: (COALESCE(b.twothousand, a.twothousand) = 44)
-         ->  Sort
-               Sort Key: a.unique1
+         ->  Foreign Scan on tenk1 b
+         ->  Hash
                ->  Foreign Scan on tenk1 a
-         ->  Sort
-               Sort Key: b.thousand
-               ->  Foreign Scan on tenk1 b
    ->  Hash
          ->  Foreign Scan on tenk1 c
-(13 rows)
+(10 rows)
 
 --Testcase 337:
 select a.unique1, b.unique1, c.unique1, coalesce(b.twothousand, a.twothousand)
@@ -4222,62 +4225,68 @@ select t1.* from
   on (t1.f1 = b1.d1)
   left join int4_tbl i4
   on (i8.q2 = i4.f1);
-                                                   QUERY PLAN                                                    
------------------------------------------------------------------------------------------------------------------
- Hash Left Join
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Merge Right Join
    Output: t1.f1
-   Hash Cond: (i8.q2 = i4.f1)
-   ->  Nested Loop Left Join
-         Output: t1.f1, i8.q2
-         Join Filter: (t1.f1 = '***'::text)
-         ->  Foreign Scan on public.text_tbl t1
-               Output: t1.f1
-               InfluxDB query: SELECT "f1" FROM "text_tbl"
-         ->  Materialize
-               Output: i8.q2
-               ->  Merge Left Join
-                     Output: i8.q2
-                     Merge Cond: (i8b1.q2 = (NULL::integer))
-                     ->  Sort
-                           Output: i8b1.q2
-                           Sort Key: i8b1.q2
-                           ->  Foreign Scan on public.int8_tbl i8b1
-                                 Output: i8b1.q2
-                                 InfluxDB query: SELECT "q2" FROM "int8_tbl"
-                     ->  Materialize
-                           Output: i8.q2, (NULL::integer)
-                           ->  Sort
-                                 Output: i8.q2, (NULL::integer)
-                                 Sort Key: (NULL::integer)
-                                 ->  Merge Left Join
-                                       Output: i8.q2, (NULL::integer)
-                                       Merge Cond: (i8.q1 = i8b2.q1)
-                                       ->  Sort
-                                             Output: i8.q1, i8.q2
-                                             Sort Key: i8.q1
-                                             ->  Foreign Scan on public.int8_tbl i8
-                                                   Output: i8.q1, i8.q2
-                                                   InfluxDB query: SELECT "q1", "q2" FROM "int8_tbl"
-                                       ->  Materialize
-                                             Output: i8b2.q1, (NULL::integer)
-                                             ->  Sort
-                                                   Output: i8b2.q1, (NULL::integer)
-                                                   Sort Key: i8b2.q1
-                                                   ->  Nested Loop
-                                                         Output: i8b2.q1, NULL::integer
-                                                         ->  Foreign Scan on public.int4_tbl i4b2
-                                                               InfluxDB query: SELECT * FROM "int4_tbl"
-                                                         ->  Materialize
-                                                               Output: i8b2.q1
-                                                               ->  Foreign Scan on public.int8_tbl i8b2
-                                                                     Output: i8b2.q1
-                                                                     InfluxDB query: SELECT "q1" FROM "int8_tbl"
-   ->  Hash
+   Merge Cond: (i4.f1 = i8.q2)
+   ->  Sort
          Output: i4.f1
+         Sort Key: i4.f1
          ->  Foreign Scan on public.int4_tbl i4
                Output: i4.f1
                InfluxDB query: SELECT "f1" FROM "int4_tbl"
-(53 rows)
+   ->  Materialize
+         Output: t1.f1, i8.q2
+         ->  Sort
+               Output: t1.f1, i8.q2
+               Sort Key: i8.q2
+               ->  Nested Loop Left Join
+                     Output: t1.f1, i8.q2
+                     Join Filter: (t1.f1 = '***'::text)
+                     ->  Foreign Scan on public.text_tbl t1
+                           Output: t1.f1
+                           InfluxDB query: SELECT "f1" FROM "text_tbl"
+                     ->  Materialize
+                           Output: i8.q2
+                           ->  Merge Left Join
+                                 Output: i8.q2
+                                 Merge Cond: (i8b1.q2 = (NULL::integer))
+                                 ->  Sort
+                                       Output: i8b1.q2
+                                       Sort Key: i8b1.q2
+                                       ->  Foreign Scan on public.int8_tbl i8b1
+                                             Output: i8b1.q2
+                                             InfluxDB query: SELECT "q2" FROM "int8_tbl"
+                                 ->  Materialize
+                                       Output: i8.q2, (NULL::integer)
+                                       ->  Sort
+                                             Output: i8.q2, (NULL::integer)
+                                             Sort Key: (NULL::integer)
+                                             ->  Merge Left Join
+                                                   Output: i8.q2, (NULL::integer)
+                                                   Merge Cond: (i8.q1 = i8b2.q1)
+                                                   ->  Sort
+                                                         Output: i8.q1, i8.q2
+                                                         Sort Key: i8.q1
+                                                         ->  Foreign Scan on public.int8_tbl i8
+                                                               Output: i8.q1, i8.q2
+                                                               InfluxDB query: SELECT "q1", "q2" FROM "int8_tbl"
+                                                   ->  Materialize
+                                                         Output: i8b2.q1, (NULL::integer)
+                                                         ->  Sort
+                                                               Output: i8b2.q1, (NULL::integer)
+                                                               Sort Key: i8b2.q1
+                                                               ->  Nested Loop
+                                                                     Output: i8b2.q1, NULL::integer
+                                                                     ->  Foreign Scan on public.int4_tbl i4b2
+                                                                           InfluxDB query: SELECT * FROM "int4_tbl"
+                                                                     ->  Materialize
+                                                                           Output: i8b2.q1
+                                                                           ->  Foreign Scan on public.int8_tbl i8b2
+                                                                                 Output: i8b2.q1
+                                                                                 InfluxDB query: SELECT "q1" FROM "int8_tbl"
+(59 rows)
 
 --Testcase 344:
 select t1.* from
@@ -4709,17 +4718,14 @@ explain (costs off)
 --Testcase 360:
 explain (costs off)
   select * from tenk1 a full join tenk1 b using(unique2) where unique2 = 42;
-              QUERY PLAN               
----------------------------------------
- Merge Full Join
-   Merge Cond: (a.unique2 = b.unique2)
-   ->  Sort
-         Sort Key: a.unique2
-         ->  Foreign Scan on tenk1 a
-   ->  Sort
-         Sort Key: b.unique2
+              QUERY PLAN              
+--------------------------------------
+ Hash Full Join
+   Hash Cond: (a.unique2 = b.unique2)
+   ->  Foreign Scan on tenk1 a
+   ->  Hash
          ->  Foreign Scan on tenk1 b
-(8 rows)
+(5 rows)
 
 --
 -- test that quals attached to an outer join have correct semantics,
@@ -5159,8 +5165,10 @@ SELECT * FROM
 (5 rows)
 
 -- Clean up
+--Testcase 581:
 DELETE FROM innertab;
 WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+--Testcase 582:
 DROP FOREIGN TABLE innertab;
 rollback;
 -- another join removal bug: we must clean up correctly when removing a PHV
@@ -6236,37 +6244,43 @@ select * from
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop
    Output: c.q1, c.q2, a.q1, a.q2, b.q1, (COALESCE(b.q2, '42'::bigint)), d.q1, (COALESCE((COALESCE(b.q2, '42'::bigint)), d.q2)), ((COALESCE((COALESCE(b.q2, '42'::bigint)), d.q2)))
-   ->  Hash Right Join
+   ->  Merge Left Join
          Output: c.q1, c.q2, a.q1, a.q2, b.q1, d.q1, (COALESCE(b.q2, '42'::bigint)), (COALESCE((COALESCE(b.q2, '42'::bigint)), d.q2))
-         Hash Cond: (d.q1 = c.q2)
-         ->  Nested Loop
-               Output: a.q1, a.q2, b.q1, d.q1, (COALESCE(b.q2, '42'::bigint)), (COALESCE((COALESCE(b.q2, '42'::bigint)), d.q2))
-               ->  Merge Left Join
-                     Output: a.q1, a.q2, b.q1, (COALESCE(b.q2, '42'::bigint))
-                     Merge Cond: (a.q2 = b.q1)
-                     ->  Sort
-                           Output: a.q1, a.q2
-                           Sort Key: a.q2
-                           ->  Foreign Scan on public.int8_tbl a
-                                 Output: a.q1, a.q2
-                                 InfluxDB query: SELECT "q1", "q2" FROM "int8_tbl"
-                     ->  Sort
-                           Output: b.q1, (COALESCE(b.q2, '42'::bigint))
-                           Sort Key: b.q1
-                           ->  Foreign Scan on public.int8_tbl b
-                                 Output: b.q1, COALESCE(b.q2, '42'::bigint)
-                                 InfluxDB query: SELECT "q1", "q2" FROM "int8_tbl"
-               ->  Foreign Scan on public.int8_tbl d
-                     Output: d.q1, COALESCE((COALESCE(b.q2, '42'::bigint)), d.q2)
-                     InfluxDB query: SELECT "q1", "q2" FROM "int8_tbl"
-         ->  Hash
+         Merge Cond: (c.q2 = d.q1)
+         ->  Sort
                Output: c.q1, c.q2
+               Sort Key: c.q2
                ->  Foreign Scan on public.int8_tbl c
                      Output: c.q1, c.q2
                      InfluxDB query: SELECT "q1", "q2" FROM "int8_tbl"
+         ->  Materialize
+               Output: a.q1, a.q2, b.q1, d.q1, (COALESCE(b.q2, '42'::bigint)), (COALESCE((COALESCE(b.q2, '42'::bigint)), d.q2))
+               ->  Sort
+                     Output: a.q1, a.q2, b.q1, d.q1, (COALESCE(b.q2, '42'::bigint)), (COALESCE((COALESCE(b.q2, '42'::bigint)), d.q2))
+                     Sort Key: d.q1
+                     ->  Nested Loop
+                           Output: a.q1, a.q2, b.q1, d.q1, (COALESCE(b.q2, '42'::bigint)), (COALESCE((COALESCE(b.q2, '42'::bigint)), d.q2))
+                           ->  Merge Left Join
+                                 Output: a.q1, a.q2, b.q1, (COALESCE(b.q2, '42'::bigint))
+                                 Merge Cond: (a.q2 = b.q1)
+                                 ->  Sort
+                                       Output: a.q1, a.q2
+                                       Sort Key: a.q2
+                                       ->  Foreign Scan on public.int8_tbl a
+                                             Output: a.q1, a.q2
+                                             InfluxDB query: SELECT "q1", "q2" FROM "int8_tbl"
+                                 ->  Sort
+                                       Output: b.q1, (COALESCE(b.q2, '42'::bigint))
+                                       Sort Key: b.q1
+                                       ->  Foreign Scan on public.int8_tbl b
+                                             Output: b.q1, COALESCE(b.q2, '42'::bigint)
+                                             InfluxDB query: SELECT "q1", "q2" FROM "int8_tbl"
+                           ->  Foreign Scan on public.int8_tbl d
+                                 Output: d.q1, COALESCE((COALESCE(b.q2, '42'::bigint)), d.q2)
+                                 InfluxDB query: SELECT "q1", "q2" FROM "int8_tbl"
    ->  Result
          Output: (COALESCE((COALESCE(b.q2, '42'::bigint)), d.q2))
-(32 rows)
+(38 rows)
 
 -- case that breaks the old ph_may_need optimization
 --Testcase 479:
@@ -6407,6 +6421,10 @@ select * from
  3 | 3
 (6 rows)
 
+-- check the number of columns specified
+--Testcase 601:
+SELECT * FROM (int8_tbl i cross join int4_tbl j) ss(a,b,c,d);
+ERROR:  join expression "ss" has 3 columns available but 4 columns specified
 -- check we don't try to do a unique-ified semijoin with LATERAL
 --Testcase 484:
 explain (verbose, costs off)
@@ -7247,23 +7265,41 @@ where exists (select 1 from j3
 --Testcase 565:
 drop table j3;
 -- Clean up
+--Testcase 583:
 DELETE FROM t1;
+--Testcase 584:
 DELETE FROM t2;
+--Testcase 585:
 DELETE FROM t3;
+--Testcase 586:
 DELETE FROM tt1;
+--Testcase 587:
 DELETE FROM tt2;
+--Testcase 588:
 DELETE FROM tt3;
+--Testcase 589:
 DELETE FROM tt4;
+--Testcase 590:
 DELETE FROM tt5;
+--Testcase 591:
 DELETE FROM tt6;
+--Testcase 592:
 DELETE FROM xx;
+--Testcase 593:
 DELETE FROM yy;
+--Testcase 594:
 DELETE FROM zt1;
+--Testcase 595:
 DELETE FROM zt2;
+--Testcase 596:
 DELETE FROM nt1;
+--Testcase 597:
 DELETE FROM nt2;
+--Testcase 598:
 DELETE FROM nt3;
+--Testcase 599:
 DELETE FROM parent;
+--Testcase 600:
 DELETE FROM child;
 DO $d$
 declare

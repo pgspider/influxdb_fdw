@@ -4,3 +4,25 @@
 q1 q1=1i 0000000000000000001
 
 q2 q2=0i 0000000000000000001
+
+
+b_star class="b",aa=3i,bb="mumble" 0000000000000000001
+b_star class="b",aa=4i 0000000000000000002
+b_star class="b",bb="bumble" 0000000000000000003
+b_star class="" 0000000000000000004
+b_star class="d",aa=7i,bb="grumble" 0000000000000000005
+b_star class="d",aa=8i,bb="stumble" 0000000000000000006
+b_star class="d",aa=9i,bb="rumble" 0000000000000000007
+b_star class="d",aa=10i 0000000000000000008
+b_star class="d",bb="crumble" 0000000000000000009
+b_star class="d",aa=11i,bb="fumble" 0000000000000000010
+b_star class="d",aa=12i 0000000000000000011
+b_star class="d",aa=13i 0000000000000000012
+b_star class="d",bb="tumble" 0000000000000000013
+b_star class="d",bb="humble" 0000000000000000014
+b_star class="d" 0000000000000000015
+b_star class="d",aa=14i 0000000000000000016
+b_star class="d",bb="jumble" 0000000000000000017
+b_star class="d" 0000000000000000018
+b_star class="d" 0000000000000000019
+b_star class="d" 0000000000000000020
