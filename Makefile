@@ -2,7 +2,7 @@
 #
 # InfluxDB Foreign Data Wrapper for PostgreSQL
 #
-# Portions Copyright (c) 2018-2021, TOSHIBA CORPORATION
+# Portions Copyright (c) 2018-2022, TOSHIBA CORPORATION
 #
 # IDENTIFICATION
 # 		Makefile
@@ -43,8 +43,8 @@ MAJORVERSION := $(basename $(VERSION))
 endif
 endif
 
-ifeq (,$(findstring $(MAJORVERSION), 10 11 12 13 14))
-$(error PostgreSQL 10, 11, 12, 13 or 14 is required to compile this extension)
+ifeq (,$(findstring $(MAJORVERSION), 11 12 13 14 15))
+$(error PostgreSQL 11, 12, 13, 14 or 15 is required to compile this extension)
 endif
 
 ifdef REGRESS_PREFIX

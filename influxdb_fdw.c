@@ -2,7 +2,7 @@
  *
  * InfluxDB Foreign Data Wrapper for PostgreSQL
  *
- * Portions Copyright (c) 2018-2021, TOSHIBA CORPORATION
+ * Portions Copyright (c) 2018, TOSHIBA CORPORATION
  *
  * IDENTIFICATION
  *        influxdb_fdw.c
@@ -248,9 +248,9 @@ static void influxdb_extract_slcols(InfluxDBFdwRelationInfo *fpinfo, PlannerInfo
  */
 enum FdwPathPrivateIndex
 {
-	/* has-final-sort flag (as an integer Value node) */
+	/* has-final-sort flag (as a Boolean node) */
 	FdwPathPrivateHasFinalSort,
-	/* has-limit flag (as an integer Value node) */
+	/* has-limit flag (as a Boolean node) */
 	FdwPathPrivateHasLimit
 };
 
@@ -282,11 +282,11 @@ enum FdwDirectModifyPrivateIndex
 {
 	/* SQL statement to execute remotely (as a String node) */
 	FdwDirectModifyPrivateUpdateSql,
-	/* has-returning flag (as an integer Value node) */
+	/* has-returning flag (as an Boolean node) */
 	FdwDirectModifyPrivateHasReturning,
 	/* Integer list of attribute numbers retrieved by RETURNING */
 	FdwDirectModifyPrivateRetrievedAttrs,
-	/* set-processed flag (as an integer Value node) */
+	/* set-processed flag (as an Boolean node) */
 	FdwDirectModifyPrivateSetProcessed
 };
 
@@ -781,7 +781,11 @@ influxdbGetForeignPlan(PlannerInfo *root,
 	 */
 	if (best_path->fdw_private)
 	{
+#if (PG_VERSION_NUM >= 150000)
+		has_limit = boolVal(list_nth(best_path->fdw_private, FdwPathPrivateHasLimit));
+#else
 		has_limit = intVal(list_nth(best_path->fdw_private, FdwPathPrivateHasLimit));
+#endif
 	}
 
 	/*
@@ -2044,8 +2048,8 @@ influxdbExecForeignBatchInsert(EState *estate,
  *		Determine the maximum number of tuples that can be inserted in bulk
  *
  * Returns the batch size specified for server or table. When batching is not
- * allowed (e.g. for tables with AFTER ROW triggers or with RETURNING clause),
- * returns 1.
+ * allowed (e.g. for tables with BEFORE/AFTER ROW triggers or with RETURNING
+ * clause), returns 1.
  */
 static int
 influxdbGetForeignModifyBatchSize(ResultRelInfo *resultRelInfo)
@@ -2076,10 +2080,24 @@ influxdbGetForeignModifyBatchSize(ResultRelInfo *resultRelInfo)
 	else
 		batch_size = influxdb_get_batch_size_option(resultRelInfo->ri_RelationDesc);
 
-	/* Disable batching when we have to use RETURNING. */
+	/*
+	 * Disable batching when we have to use RETURNING or there are any
+	 * BEFORE/AFTER ROW INSERT triggers on the foreign table.
+	 *
+	 * When there are any BEFORE ROW INSERT triggers on the table, we can't
+	 * support it, because such triggers might query the table we're inserting
+	 * into and act differently if the tuples that have already been processed
+	 * and prepared for insertion are not there.
+	 */
+
 	if (resultRelInfo->ri_projectReturning != NULL ||
 		(resultRelInfo->ri_TrigDesc &&
+#if (PG_VERSION_NUM >= 150000)
+		 (resultRelInfo->ri_TrigDesc->trig_insert_before_row ||
+		  resultRelInfo->ri_TrigDesc->trig_insert_after_row)))
+#else
 		 resultRelInfo->ri_TrigDesc->trig_insert_after_row))
+#endif
 		return 1;
 
 	/*
@@ -2400,11 +2418,17 @@ influxdbPlanDirectModify(PlannerInfo *root,
 	 * Update the fdw_private list that will be available to the executor.
 	 * Items in the list must match enum FdwDirectModifyPrivateIndex, above.
 	 */
+#if (PG_VERSION_NUM >= 150000)
+	fscan->fdw_private = list_make4(makeString(sql.data),
+									makeBoolean(retrieved_attrs != NIL),
+									retrieved_attrs,
+									makeBoolean(plan->canSetTag));
+#else
 	fscan->fdw_private = list_make4(makeString(sql.data),
 									makeInteger(0),
 									retrieved_attrs,
 									makeInteger(plan->canSetTag));
-
+#endif
 	/*
 	 * Update the foreign-join-related fields.
 	 */
@@ -2487,12 +2511,22 @@ influxdbBeginDirectModify(ForeignScanState *node, int eflags)
 	/* Get private info created by planner functions. */
 	dmstate->query = strVal(list_nth(fsplan->fdw_private,
 									 FdwDirectModifyPrivateUpdateSql));
+#if (PG_VERSION_NUM >= 150000)
+	dmstate->has_returning = boolVal(list_nth(fsplan->fdw_private,
+											 FdwDirectModifyPrivateHasReturning));
+#else
 	dmstate->has_returning = intVal(list_nth(fsplan->fdw_private,
 											 FdwDirectModifyPrivateHasReturning));
+#endif
 	dmstate->retrieved_attrs = (List *) list_nth(fsplan->fdw_private,
 												 FdwDirectModifyPrivateRetrievedAttrs);
+#if (PG_VERSION_NUM >= 150000)
+	dmstate->set_processed = boolVal(list_nth(fsplan->fdw_private,
+											 FdwDirectModifyPrivateSetProcessed));
+#else
 	dmstate->set_processed = intVal(list_nth(fsplan->fdw_private,
 											 FdwDirectModifyPrivateSetProcessed));
+#endif
 
 	/*
 	 * Prepare for processing of parameters used in remote query, if any.
@@ -3386,13 +3420,17 @@ add_foreign_final_paths(PlannerInfo *root, RelOptInfo *input_rel,
 	 * Build the fdw_private list that will be used by influxdbGetForeignPlan.
 	 * Items in the list must match order in enum FdwPathPrivateIndex.
 	 */
+#if (PG_VERSION_NUM >= 150000)
+	fdw_private = list_make2(makeBoolean(has_final_sort),
+							 makeBoolean(extra->limit_needed));
+#else
 	fdw_private = list_make2(makeInteger(has_final_sort)
 #if (PG_VERSION_NUM >= 120000)
 							 ,makeInteger(extra->limit_needed));
 #else
 							 ,makeInteger(false));
 #endif
-
+#endif
 	/*
 	 * Create foreign final path; this gets rid of a no-longer-needed outer
 	 * plan (if any), which makes the EXPLAIN output look cleaner

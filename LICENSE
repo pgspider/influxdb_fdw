@@ -1,7 +1,7 @@
 InfluxDB Foreign Data Wrapper for PostgreSQL
 
-Portions Copyright (c) 2018-2021, TOSHIBA CORPORATION
-Portions Copyright (c) 2011-2016, EnterpriseDB Corporation
+Copyright (c) 2018, TOSHIBA CORPORATION
+Copyright (c) 2011-2016, EnterpriseDB Corporation
 
 Permission to use, copy, modify, and distribute this software and its
 documentation for any purpose, without fee, and without a written agreement is

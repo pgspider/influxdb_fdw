@@ -27,6 +27,7 @@ CREATE TYPE user_enum AS ENUM ('foo', 'bar', 'buz');
 CREATE SCHEMA "S 1";
 --Testcase 10:
 CREATE FOREIGN TABLE "S 1"."T 0" (time timestamp, tags jsonb OPTIONS(tags 'true'), fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (table 'T0', tags 'c3', schemaless 'true');
+--Testcase 783:
 CREATE FOREIGN TABLE "S 1".s1t0 (
 	"C 1" int NOT NULL,
 	c2 int NOT NULL,
@@ -38,6 +39,7 @@ CREATE FOREIGN TABLE "S 1".s1t0 (
 ) SERVER influxdb_svr OPTIONS (table 'T0', tags 'c3');
 --Testcase 11:
 CREATE FOREIGN TABLE "S 1"."T 1" (time timestamp, tags jsonb OPTIONS(tags 'true'), fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (table 'T1', tags 'c3', schemaless 'true');
+--Testcase 784:
 CREATE FOREIGN TABLE "S 1".s1t1 (
 	"C 1" int NOT NULL,
 	c2 int NOT NULL,
@@ -49,12 +51,14 @@ CREATE FOREIGN TABLE "S 1".s1t1 (
 ) SERVER influxdb_svr OPTIONS (table 'T1', tags 'c3');
 --Testcase 12:
 CREATE FOREIGN TABLE "S 1"."T 2" (tags jsonb OPTIONS(tags 'true'), fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (table 'T2', tags 'c2', schemaless 'true');
+--Testcase 785:
 CREATE FOREIGN TABLE "S 1".s1t2 (
 	c1 int NOT NULL,
 	c2 text
 ) SERVER influxdb_svr OPTIONS (table 'T2', tags 'c2');
 --Testcase 13:
 CREATE FOREIGN TABLE "S 1"."T 3" (tags jsonb OPTIONS(tags 'true'), fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (table 'T3', tags 'c3', schemaless 'true');
+--Testcase 786:
 CREATE FOREIGN TABLE "S 1".s1t3 (
 	c1 int NOT NULL,
 	c2 int NOT NULL,
@@ -62,6 +66,7 @@ CREATE FOREIGN TABLE "S 1".s1t3 (
 ) SERVER influxdb_svr OPTIONS (table 'T3', tags 'c3');
 --Testcase 14:
 CREATE FOREIGN TABLE "S 1"."T 4" (tags jsonb OPTIONS(tags 'true'), fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (table 'T4', tags 'c3', schemaless 'true');
+--Testcase 787:
 CREATE FOREIGN TABLE "S 1".s1t4 (
 	c1 int NOT NULL,
 	c2 int NOT NULL,
@@ -112,6 +117,7 @@ DELETE FROM "S 1".s1t4 WHERE c1 % 3 != 0;	-- delete for outer join tests
 -- ===================================================================
 --Testcase 21:
 CREATE FOREIGN TABLE ft1 (time timestamp, tags jsonb OPTIONS(tags 'true'), fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 788:
 CREATE FOREIGN TABLE ft1_nsc (
 	c0 int,
 	c1 int NOT NULL,
@@ -126,6 +132,7 @@ CREATE FOREIGN TABLE ft1_nsc (
 ALTER FOREIGN TABLE ft1_nsc DROP COLUMN c0;
 --Testcase 23:
 CREATE FOREIGN TABLE ft2 (time timestamp, tags jsonb OPTIONS(tags 'true'), fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 789:
 CREATE FOREIGN TABLE ft2_nsc (
 	c1 int NOT NULL,
 	c2 int NOT NULL,
@@ -140,6 +147,7 @@ CREATE FOREIGN TABLE ft2_nsc (
 ALTER FOREIGN TABLE ft2_nsc DROP COLUMN cx;
 --Testcase 25:
 CREATE FOREIGN TABLE ft4 (tags jsonb OPTIONS(tags 'true'), fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (table 'T3', tags 'c3', schemaless 'true');
+--Testcase 790:
 CREATE FOREIGN TABLE ft4_nsc (
 	c1 int NOT NULL,
 	c2 int NOT NULL,
@@ -147,6 +155,7 @@ CREATE FOREIGN TABLE ft4_nsc (
 ) SERVER influxdb_svr OPTIONS (table 'T3', tags 'c3');
 --Testcase 26:
 CREATE FOREIGN TABLE ft5 (tags jsonb OPTIONS(tags 'true'), fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (table 'T4', tags 'c3', schemaless 'true');
+--Testcase 791:
 CREATE FOREIGN TABLE ft5_nsc (
 	c1 int NOT NULL,
 	c2 int NOT NULL,
@@ -264,6 +273,13 @@ SELECT tags->>'c3' c3, time FROM ft1 ORDER BY tags->>'c3', (fields->>'C 1')::int
 (1 row)
 
 \set VERBOSITY default
+-- ===================================================================
+-- test error case for create publication on foreign table
+-- ===================================================================
+--Testcase 765:
+CREATE PUBLICATION testpub_ftbl FOR TABLE ft1;  -- should fail
+ERROR:  cannot add relation "ft1" to publication
+DETAIL:  This operation is not supported for foreign tables.
 -- ===================================================================
 -- simple queries
 -- ===================================================================
@@ -733,6 +749,7 @@ RESET enable_nestloop;
 -- a sensible value even when the rel has tuples=0
 --Testcase 71:
 CREATE FOREIGN TABLE loct_empty (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 792:
 CREATE FOREIGN TABLE loct_empty_nsc (c1 int NOT NULL, c2 text) SERVER influxdb_svr OPTIONS (table 'loct_empty');
 --Testcase 72:
 CREATE FOREIGN TABLE ft_empty (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (table 'loct_empty', schemaless 'true');
@@ -741,6 +758,7 @@ INSERT INTO loct_empty_nsc
   SELECT id, 'AAA' || to_char(id, 'FM000') FROM generate_series(1, 100) id;
 --Testcase 74:
 DELETE FROM loct_empty_nsc;
+--Testcase 793:
 DROP FOREIGN TABLE loct_empty_nsc;
 --ANALYZE ft_empty;
 --Testcase 75:
@@ -1252,6 +1270,116 @@ SELECT * FROM ft1 t1 WHERE (t1.fields->>'C 1')::int === (t1.fields->>'c2')::int 
 --------------------------+-----------------+---------------------------------------------------------------------
  Fri Jan 02 00:00:00 1970 | {"c3": "00001"} | {"c2": "1", "c6": "1", "c7": "1         ", "c8": "foo", "C 1": "1"}
 (1 row)
+
+-- Test CASE pushdown
+--Testcase 854:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT fields->>'C 1',fields->>'c2',tags->>'c3' FROM ft2 WHERE CASE WHEN (fields->>'C 1')::int > 990 THEN (fields->>'C 1')::int END < 1000 ORDER BY (fields->>'C 1')::int;
+                                                                       QUERY PLAN                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: ((fields ->> 'C 1'::text)), ((fields ->> 'c2'::text)), ((tags ->> 'c3'::text)), (((fields ->> 'C 1'::text))::integer)
+   Sort Key: (((ft2.fields ->> 'C 1'::text))::integer)
+   ->  Foreign Scan on public.ft2
+         Output: (fields ->> 'C 1'::text), (fields ->> 'c2'::text), (tags ->> 'c3'::text), ((fields ->> 'C 1'::text))::integer
+         Filter: (CASE WHEN (((ft2.fields ->> 'C 1'::text))::integer > 990) THEN ((ft2.fields ->> 'C 1'::text))::integer ELSE NULL::integer END < 1000)
+         InfluxDB query: SELECT "C 1", "c2", "c3" FROM "T1"
+(7 rows)
+
+--Testcase 855:
+SELECT fields->>'C 1',fields->>'c2',tags->>'c3' FROM ft2 WHERE CASE WHEN (fields->>'C 1')::int > 990 THEN (fields->>'C 1')::int END < 1000 ORDER BY (fields->>'C 1')::int;
+ ?column? | ?column? | ?column? 
+----------+----------+----------
+ 991      | 1        | 00991
+ 992      | 2        | 00992
+ 993      | 3        | 00993
+ 994      | 4        | 00994
+ 995      | 5        | 00995
+ 996      | 6        | 00996
+ 997      | 7        | 00997
+ 998      | 8        | 00998
+ 999      | 9        | 00999
+(9 rows)
+
+-- Nested CASE
+--Testcase 856:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT fields->>'C 1',fields->>'c2',tags->>'c3' FROM ft2 WHERE CASE CASE WHEN (fields->>'c2')::int > 0 THEN (fields->>'c2')::int END WHEN 100 THEN 601 WHEN (fields->>'c2')::int THEN (fields->>'c2')::int ELSE 0 END > 600 ORDER BY (fields->>'C 1')::int;
+                                                                                                                                 QUERY PLAN                                                                                                                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: ((fields ->> 'C 1'::text)), ((fields ->> 'c2'::text)), ((tags ->> 'c3'::text)), (((fields ->> 'C 1'::text))::integer)
+   Sort Key: (((ft2.fields ->> 'C 1'::text))::integer)
+   ->  Foreign Scan on public.ft2
+         Output: (fields ->> 'C 1'::text), (fields ->> 'c2'::text), (tags ->> 'c3'::text), ((fields ->> 'C 1'::text))::integer
+         Filter: (CASE CASE WHEN (((ft2.fields ->> 'c2'::text))::integer > 0) THEN ((ft2.fields ->> 'c2'::text))::integer ELSE NULL::integer END WHEN 100 THEN 601 WHEN ((ft2.fields ->> 'c2'::text))::integer THEN ((ft2.fields ->> 'c2'::text))::integer ELSE 0 END > 600)
+         InfluxDB query: SELECT "C 1", "c2", "c3" FROM "T1"
+(7 rows)
+
+--Testcase 857:
+SELECT fields->>'C 1',fields->>'c2',tags->>'c3' FROM ft2 WHERE CASE CASE WHEN (fields->>'c2')::int > 0 THEN (fields->>'c2')::int END WHEN 100 THEN 601 WHEN (fields->>'c2')::int THEN (fields->>'c2')::int ELSE 0 END > 600 ORDER BY (fields->>'C 1')::int;
+ ?column? | ?column? | ?column? 
+----------+----------+----------
+(0 rows)
+
+-- CASE arg WHEN
+--Testcase 858:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM ft1 WHERE (fields->>'C 1')::int > (CASE mod((fields->>'C 1')::int, 4) WHEN 0 THEN 1 WHEN 2 THEN 50 ELSE 100 END);
+                                                                      QUERY PLAN                                                                      
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.ft1
+   Output: "time", tags, fields
+   Filter: (((ft1.fields ->> 'C 1'::text))::integer > CASE mod(((ft1.fields ->> 'C 1'::text))::integer, 4) WHEN 0 THEN 1 WHEN 2 THEN 50 ELSE 100 END)
+   InfluxDB query: SELECT * FROM "T1"
+(4 rows)
+
+-- CASE cannot be pushed down because of unshippable arg clause
+--Testcase 859:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM ft1 WHERE (fields->>'C 1')::int > (CASE random()::integer WHEN 0 THEN 1 WHEN 2 THEN 50 ELSE 100 END);
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.ft1
+   Output: "time", tags, fields
+   Filter: (((ft1.fields ->> 'C 1'::text))::integer > CASE (random())::integer WHEN 0 THEN 1 WHEN 2 THEN 50 ELSE 100 END)
+   InfluxDB query: SELECT * FROM "T1"
+(4 rows)
+
+-- these are shippable
+--Testcase 860:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM ft1 WHERE CASE (fields->>'c6')::text WHEN 'foo' THEN true ELSE (tags->>'c3')::text < 'bar' END;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.ft1
+   Output: "time", tags, fields
+   Filter: CASE (ft1.fields ->> 'c6'::text) WHEN 'foo'::text THEN true ELSE ((ft1.tags ->> 'c3'::text) < 'bar'::text) END
+   InfluxDB query: SELECT * FROM "T1"
+(4 rows)
+
+--Testcase 861:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM ft1 WHERE CASE (tags->>'c3')::text WHEN (fields->>'c6')::text THEN true ELSE (tags->>'c3')::text < 'bar' END;
+                                                               QUERY PLAN                                                               
+----------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.ft1
+   Output: "time", tags, fields
+   Filter: CASE (ft1.tags ->> 'c3'::text) WHEN (ft1.fields ->> 'c6'::text) THEN true ELSE ((ft1.tags ->> 'c3'::text) < 'bar'::text) END
+   InfluxDB query: SELECT * FROM "T1"
+(4 rows)
+
+-- but this is not because of collation
+--Testcase 862:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM ft1 WHERE CASE (tags->>'c3')::text COLLATE "C" WHEN (fields->>'c6')::text THEN true ELSE (tags->>'c3')::text < 'bar' END;
+                                                                   QUERY PLAN                                                                   
+------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.ft1
+   Output: "time", tags, fields
+   Filter: CASE ((ft1.tags ->> 'c3'::text))::text WHEN (ft1.fields ->> 'c6'::text) THEN true ELSE ((ft1.tags ->> 'c3'::text) < 'bar'::text) END
+   InfluxDB query: SELECT * FROM "T1"
+(4 rows)
 
 -- ===================================================================
 -- JOIN queries
@@ -2600,26 +2728,25 @@ SELECT (t1.fields->>'C 1')::int c1 FROM ft1 t1 WHERE EXISTS (SELECT 1 FROM ft2 t
 --Testcase 177:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT (t1.fields->>'C 1')::int c1 FROM ft1 t1 WHERE NOT EXISTS (SELECT 1 FROM ft2 t2 WHERE (t1.fields->>'C 1')::int = (t2.fields->>'c2')::int) ORDER BY (t1.fields->>'C 1')::int OFFSET 100 LIMIT 10;
-                                                QUERY PLAN                                                
-----------------------------------------------------------------------------------------------------------
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
  Limit
    Output: (((t1.fields ->> 'C 1'::text))::integer)
-   ->  Merge Anti Join
+   ->  Sort
          Output: (((t1.fields ->> 'C 1'::text))::integer)
-         Merge Cond: ((((t1.fields ->> 'C 1'::text))::integer) = (((t2.fields ->> 'c2'::text))::integer))
-         ->  Sort
-               Output: t1.fields, (((t1.fields ->> 'C 1'::text))::integer)
-               Sort Key: (((t1.fields ->> 'C 1'::text))::integer)
+         Sort Key: (((t1.fields ->> 'C 1'::text))::integer)
+         ->  Hash Anti Join
+               Output: ((t1.fields ->> 'C 1'::text))::integer
+               Hash Cond: (((t1.fields ->> 'C 1'::text))::integer = ((t2.fields ->> 'c2'::text))::integer)
                ->  Foreign Scan on public.ft1 t1
-                     Output: t1.fields, ((t1.fields ->> 'C 1'::text))::integer
+                     Output: t1.fields
                      InfluxDB query: SELECT * FROM "T1"
-         ->  Sort
-               Output: t2.fields, (((t2.fields ->> 'c2'::text))::integer)
-               Sort Key: (((t2.fields ->> 'c2'::text))::integer)
-               ->  Foreign Scan on public.ft2 t2
-                     Output: t2.fields, ((t2.fields ->> 'c2'::text))::integer
-                     InfluxDB query: SELECT * FROM "T1"
-(17 rows)
+               ->  Hash
+                     Output: t2.fields
+                     ->  Foreign Scan on public.ft2 t2
+                           Output: t2.fields
+                           InfluxDB query: SELECT * FROM "T1"
+(16 rows)
 
 --Testcase 178:
 SELECT (t1.fields->>'C 1')::int c1 FROM ft1 t1 WHERE NOT EXISTS (SELECT 1 FROM ft2 t2 WHERE (t1.fields->>'C 1')::int = (t2.fields->>'c2')::int) ORDER BY (t1.fields->>'C 1')::int OFFSET 100 LIMIT 10;
@@ -3061,6 +3188,7 @@ SELECT ft5, (ft5.fields->>'c1')::int c1, (ft5.fields->>'c2')::int c2, ft5.tags->
 -- (this case used to have EPQ-related planning problems)
 --Testcase 199:
 CREATE FOREIGN TABLE local_tbl (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (table 'local_tbl', schemaless 'true');
+--Testcase 794:
 CREATE FOREIGN TABLE local_tbl_nsc (c1 int NOT NULL, c2 int NOT NULL, c3 text) SERVER influxdb_svr OPTIONS (table 'local_tbl');
 --Testcase 200:
 INSERT INTO local_tbl_nsc SELECT id, id % 10, to_char(id, 'FM0000') FROM generate_series(1, 1000) id;
@@ -3150,7 +3278,9 @@ RESET enable_nestloop;
 RESET enable_hashjoin;
 --Testcase 207:
 DELETE FROM local_tbl_nsc;
+--Testcase 795:
 DROP FOREIGN TABLE local_tbl;
+--Testcase 796:
 DROP FOREIGN TABLE local_tbl_nsc;
 -- check join pushdown in situations where multiple userids are involved
 --Testcase 208:
@@ -4294,6 +4424,20 @@ select array_agg((fields->>'C 1')::int order by (fields->>'C 1')::int using oper
                InfluxDB query: SELECT * FROM "T1" WHERE (("C 1" < 100)) AND (("c2" = 6))
 (9 rows)
 
+-- This should not be pushed either.
+--Testcase 766:
+explain (verbose, costs off)
+select * from ft2 order by (fields->>'C 1')::int using operator(public.<^);
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ Sort
+   Output: "time", tags, fields, (((fields ->> 'C 1'::text))::integer)
+   Sort Key: (((ft2.fields ->> 'C 1'::text))::integer) USING <^
+   ->  Foreign Scan on public.ft2
+         Output: "time", tags, fields, ((fields ->> 'C 1'::text))::integer
+         InfluxDB query: SELECT * FROM "T1"
+(6 rows)
+
 -- Update local stats on ft2
 --ANALYZE ft2;
 -- Add into extension
@@ -4332,6 +4476,21 @@ select array_agg((fields->>'C 1')::int order by (fields->>'C 1')::int using oper
 --------------------------------
  {6,16,26,36,46,56,66,76,86,96}
 (1 row)
+
+-- This should be pushed too.
+-- Influx not support user-defined operator
+--Testcase 767:
+explain (verbose, costs off)
+select * from ft2 order by (fields->>'C 1')::int using operator(public.<^);
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ Sort
+   Output: "time", tags, fields, (((fields ->> 'C 1'::text))::integer)
+   Sort Key: (((ft2.fields ->> 'C 1'::text))::integer) USING <^
+   ->  Foreign Scan on public.ft2
+         Output: "time", tags, fields, ((fields ->> 'C 1'::text))::integer
+         InfluxDB query: SELECT * FROM "T1"
+(6 rows)
 
 -- Remove from extension
 --Testcase 307:
@@ -4410,12 +4569,14 @@ select count(*), x.b from ft1, (select (fields->>'c2')::int a, sum((fields->>'C 
    ->  HashAggregate
          Output: count(*), x.b
          Group Key: x.b
-         ->  Merge Join
+         ->  Hash Join
                Output: x.b
-               Merge Cond: (x.a = (((ft1.fields ->> 'c2'::text))::integer))
-               ->  Sort
+               Hash Cond: (((ft1.fields ->> 'c2'::text))::integer = x.a)
+               ->  Foreign Scan on public.ft1
+                     Output: ft1.fields
+                     InfluxDB query: SELECT * FROM "T1"
+               ->  Hash
                      Output: x.b, x.a
-                     Sort Key: x.a
                      ->  Subquery Scan on x
                            Output: x.b, x.a
                            ->  HashAggregate
@@ -4424,13 +4585,7 @@ select count(*), x.b from ft1, (select (fields->>'c2')::int a, sum((fields->>'C 
                                  ->  Foreign Scan on public.ft1 ft1_1
                                        Output: (ft1_1.fields ->> 'c2'::text), ft1_1.fields
                                        InfluxDB query: SELECT * FROM "T1"
-               ->  Sort
-                     Output: ft1.fields, (((ft1.fields ->> 'c2'::text))::integer)
-                     Sort Key: (((ft1.fields ->> 'c2'::text))::integer)
-                     ->  Foreign Scan on public.ft1
-                           Output: ft1.fields, ((ft1.fields ->> 'c2'::text))::integer
-                           InfluxDB query: SELECT * FROM "T1"
-(26 rows)
+(22 rows)
 
 --Testcase 322:
 select count(*), x.b from ft1, (select (fields->>'c2')::int a, sum((fields->>'C 1')::int) b from ft1 group by fields->>'c2') x where (ft1.fields->>'c2')::int = x.a group by x.b order by 1, 2;
@@ -5413,8 +5568,66 @@ DROP TABLE reind_fdw_parent;
 --  WHERE ftx.x1 = (ft2.fields->>'C 1')::int AND ftx.x1 = 1; -- ERROR
 --Testcase 417:
 --SELECT sum(c2), array_agg(c8) FROM ft1 GROUP BY c8; -- ERROR
---Testcase 418:
---ALTER FOREIGN TABLE ft1 ALTER COLUMN c8 TYPE text;
+-- ANALYZE ft1; -- ERROR
+--ALTER FOREIGN TABLE ft1 ALTER COLUMN c8 TYPE user_enum;
+-- ===================================================================
+-- local type can be different from remote type in some cases,
+-- in particular if similarly-named operators do equivalent things
+-- ===================================================================
+--Testcase 768:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM ft1 WHERE (fields->>'c8')::text = 'foo' LIMIT 1;
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Foreign Scan on public.ft1
+   Output: "time", tags, fields
+   InfluxDB query: SELECT * FROM "T1" WHERE (("c8" = 'foo')) LIMIT 1
+(3 rows)
+
+--Testcase 769:
+SELECT * FROM ft1 WHERE (fields->>'c8')::text = 'foo' LIMIT 1;
+           time           |      tags       |                                fields                                 
+--------------------------+-----------------+-----------------------------------------------------------------------
+ Thu Jan 01 00:00:00 1970 | {"c3": "00100"} | {"c2": "0", "c6": "0", "c7": "0         ", "c8": "foo", "C 1": "100"}
+(1 row)
+
+--Testcase 770:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM ft1 WHERE 'foo' = (fields->>'c8')::text LIMIT 1;
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Foreign Scan on public.ft1
+   Output: "time", tags, fields
+   InfluxDB query: SELECT * FROM "T1" WHERE (('foo' = "c8")) LIMIT 1
+(3 rows)
+
+--Testcase 771:
+SELECT * FROM ft1 WHERE 'foo' = (fields->>'c8')::text LIMIT 1;
+           time           |      tags       |                                fields                                 
+--------------------------+-----------------+-----------------------------------------------------------------------
+ Thu Jan 01 00:00:00 1970 | {"c3": "00100"} | {"c2": "0", "c6": "0", "c7": "0         ", "c8": "foo", "C 1": "100"}
+(1 row)
+
+-- we declared c8 to be text locally, but it's still the same type on
+-- the remote which will balk if we try to do anything incompatible
+-- with that remote type
+-- Can not create user define type in InfluxDB.
+-- Type c8 of foreign table ft1 and remote table T1 are 
+-- match. These case below not error with influxdb_fdw. 
+--Testcase 772:
+SELECT * FROM ft1 WHERE (fields->>'c8')::text LIKE 'foo' LIMIT 1; -- ERROR
+           time           |      tags       |                                fields                                 
+--------------------------+-----------------+-----------------------------------------------------------------------
+ Thu Jan 01 00:00:00 1970 | {"c3": "00100"} | {"c2": "0", "c6": "0", "c7": "0         ", "c8": "foo", "C 1": "100"}
+(1 row)
+
+--Testcase 773:
+SELECT * FROM ft1 WHERE ((fields->>'c8')::text)::text LIKE 'foo' LIMIT 1; -- ERROR; cast not pushed down
+           time           |      tags       |                                fields                                 
+--------------------------+-----------------+-----------------------------------------------------------------------
+ Thu Jan 01 00:00:00 1970 | {"c3": "00100"} | {"c2": "0", "c6": "0", "c7": "0         ", "c8": "foo", "C 1": "100"}
+(1 row)
+
 /*
 -- influxdb_fdw does not support transactions
 -- ===================================================================
@@ -7070,6 +7283,7 @@ CREATE FUNCTION row_before_insupd_trigfunc() RETURNS trigger AS $$BEGIN NEW.a :=
 --Testcase 496:
 CREATE FOREIGN TABLE base_tbl (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (table 'base_tbl', schemaless 'true');
 --ALTER FOREIGN TABLE base_tbl SET (autovacuum_enabled = 'false');
+--Testcase 797:
 CREATE FOREIGN TABLE base_tbl_nsc (a int, b int) SERVER influxdb_svr OPTIONS (table 'base_tbl');
 --Testcase 497:
 CREATE TRIGGER row_before_insupd_trigger BEFORE INSERT OR UPDATE ON base_tbl_nsc FOR EACH ROW EXECUTE PROCEDURE row_before_insupd_trigfunc();
@@ -7078,6 +7292,7 @@ CREATE FOREIGN TABLE foreign_tbl (fields jsonb OPTIONS(fields 'true')) SERVER in
 --Testcase 499:
 CREATE VIEW rw_view AS SELECT * FROM base_tbl
   WHERE (fields->>'a')::int < (fields->>'b')::int WITH CHECK OPTION;
+--Testcase 798:
 CREATE VIEW rw_view_nsc AS SELECT * FROM base_tbl_nsc
   WHERE a < b WITH CHECK OPTION;
 --Testcase 500:
@@ -7137,12 +7352,14 @@ SELECT * FROM foreign_tbl;
 --SELECT * FROM foreign_tbl;
 --Testcase 506:
 DELETE FROM foreign_tbl;
+--Testcase 799:
 DROP FOREIGN TABLE foreign_tbl CASCADE;
 --Testcase 507:
 DROP TRIGGER row_before_insupd_trigger ON base_tbl_nsc;
 --Testcase 508:
 DROP FOREIGN TABLE base_tbl CASCADE;
 NOTICE:  drop cascades to view rw_view
+--Testcase 800:
 DROP FOREIGN TABLE base_tbl_nsc CASCADE;
 NOTICE:  drop cascades to view rw_view_nsc
 -- influxdb_fdw does not support partitions
@@ -7150,6 +7367,7 @@ NOTICE:  drop cascades to view rw_view_nsc
 --Testcase 509:
 CREATE FOREIGN TABLE child_tbl (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (table 'child_tbl', schemaless 'true');
 --ALTER FOREIGN TABLE child_tbl SET (autovacuum_enabled = 'false');
+--Testcase 801:
 CREATE FOREIGN TABLE child_tbl_nsc (a int, b int) SERVER influxdb_svr OPTIONS (table 'child_tbl');
 --Testcase 510:
 CREATE TRIGGER row_before_insupd_trigger BEFORE INSERT OR UPDATE ON child_tbl_nsc FOR EACH ROW EXECUTE PROCEDURE row_before_insupd_trigfunc();
@@ -7158,6 +7376,11 @@ CREATE FOREIGN TABLE foreign_tbl (fields jsonb OPTIONS(fields 'true')) SERVER in
 --Testcase 512:
 CREATE TABLE parent_tbl (a int, b int) PARTITION BY RANGE(a);
 --Testcase 513:
+ALTER TABLE parent_tbl ATTACH PARTITION child_tbl_nsc FOR VALUES FROM (0) TO (100);
+-- Detach and re-attach once, to stress the concurrent detach case.
+--Testcase 774:
+ALTER TABLE parent_tbl DETACH PARTITION child_tbl_nsc CONCURRENTLY;
+--Testcase 775:
 ALTER TABLE parent_tbl ATTACH PARTITION child_tbl_nsc FOR VALUES FROM (0) TO (100);
 --Testcase 514:
 CREATE VIEW rw_view AS SELECT * FROM parent_tbl
@@ -7221,6 +7444,7 @@ DROP FOREIGN TABLE foreign_tbl CASCADE;
 DROP TRIGGER row_before_insupd_trigger ON child_tbl_nsc;
 --Testcase 523:
 DROP FOREIGN TABLE child_tbl CASCADE;
+--Testcase 802:
 DROP FOREIGN TABLE child_tbl_nsc CASCADE;
 --Testcase 524:
 DROP TABLE parent_tbl CASCADE;
@@ -7233,10 +7457,12 @@ DROP FUNCTION row_before_insupd_trigfunc;
 --Testcase 526:
 create foreign table loc1 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (table 'loc1', schemaless 'true');
 --alter foreign table loc1 set (autovacuum_enabled = 'false');
+--Testcase 803:
 create foreign table loc1_nsc (f1 serial, f2 text)
   server influxdb_svr options(table 'loc1');
 --Testcase 527:
 create foreign table rem1 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (table 'loc1', schemaless 'true');
+--Testcase 804:
 create foreign table rem1_nsc (f1 serial, f2 text)
   server influxdb_svr options(table 'loc1');
 --Testcase 528:
@@ -7280,12 +7506,14 @@ select * from rem1;
 --Testcase 535:
 create foreign table gloc1 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (table 'gloc1', schemaless 'true');
 --alter foreign table gloc1 set (autovacuum_enabled = 'false');
+--Testcase 805:
 create foreign table gloc1_nsc (
   a int,
   b int generated always as (a * 2) stored)
   server influxdb_svr options(table 'gloc1');
 --Testcase 536:
 create foreign table grem1 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (table 'gloc1', schemaless 'true');
+--Testcase 806:
 create foreign table grem1_nsc (
   a int,
   b int generated always as (a * 2) stored)
@@ -8077,31 +8305,37 @@ NOTICE:  drop cascades to table b
 -- Check SELECT FOR UPDATE/SHARE with an inherited source table
 --Testcase 658:
 create foreign table loct1 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (table 'loct1', schemaless 'true');
+--Testcase 807:
 create foreign table loct1_nsc (f1 int, f2 int, f3 int) server influxdb_svr options(table 'loct1');
 --Testcase 659:
 create foreign table loct2 (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (table 'loct2', schemaless 'true');
+--Testcase 808:
 create foreign table loct2_nsc (f1 int, f2 int, f3 int) server influxdb_svr options(table 'loct2');
 --alter table loct1 set (autovacuum_enabled = 'false');
 --alter table loct2 set (autovacuum_enabled = 'false');
 --Testcase 660:
 create foreign table foo (fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (table 'foo', schemaless 'true');
+--Testcase 809:
 create foreign table foo_nsc (f1 int, f2 int)
   server influxdb_svr options (table 'foo');
 --Testcase 661:
 create foreign table foo2 (fields jsonb OPTIONS(fields 'true')) inherits (foo)
   server influxdb_svr options (table 'loct1', schemaless 'true');
 NOTICE:  merging column "fields" with inherited definition
+--Testcase 810:
 create foreign table foo2_nsc (f3 int) inherits (foo_nsc)
   server influxdb_svr options (table 'loct1');
 --Testcase 662:
 create foreign table bar (fields jsonb OPTIONS(fields 'true'))
   server influxdb_svr options (table 'bar', schemaless 'true');
+--Testcase 811:
 create foreign table bar_nsc (f1 int, f2 int)
   server influxdb_svr options (table 'bar');
 --Testcase 663:
 create foreign table bar2 (fields jsonb OPTIONS(fields 'true')) inherits (bar)
   server influxdb_svr options (table 'loct2', schemaless 'true');
 NOTICE:  merging column "fields" with inherited definition
+--Testcase 812:
 create foreign table bar2_nsc (f3 int) inherits (bar_nsc)
   server influxdb_svr options (table 'loct2');
 --alter table foo set (autovacuum_enabled = 'false');
@@ -9260,7 +9494,7 @@ $d$;
 CREATE USER MAPPING FOR public SERVER loopback_nopw;
 CREATE USER MAPPING FOR CURRENT_USER SERVER loopback_nopw;
 
-CREATE FOREIGN TABLE ft1_nopw (
+CREATE FOREIGN TABLE pg_temp.ft1_nopw (
 	c1 int NOT NULL,
 	c2 int NOT NULL,
 	c3 text,
@@ -9576,10 +9810,12 @@ ROLLBACK;
 --Testcase 709:
 CREATE FOREIGN TABLE batch_table (fields jsonb OPTIONS(fields 'true')) 
   SERVER influxdb_svr options (schemaless 'true');
+--Testcase 813:
 CREATE FOREIGN TABLE batch_table_nsc ( x int ) SERVER influxdb_svr OPTIONS (table 'batch_table');
 --Testcase 710:
 CREATE FOREIGN TABLE ftable (fields jsonb OPTIONS(fields 'true')) 
   SERVER influxdb_svr options ( table 'batch_table', batch_size '10', schemaless 'true');
+--Testcase 814:
 CREATE FOREIGN TABLE ftable_nsc ( x int ) SERVER influxdb_svr OPTIONS ( table 'batch_table', batch_size '10' );
 --Testcase 711:
 EXPLAIN (VERBOSE, COSTS OFF) INSERT INTO ftable_nsc SELECT * FROM generate_series(1, 10) i;
@@ -9611,11 +9847,13 @@ SELECT COUNT(*) FROM ftable;
 DELETE FROM batch_table_nsc;
 --Testcase 718:
 DROP FOREIGN TABLE ftable;
+--Testcase 815:
 DROP FOREIGN TABLE ftable_nsc;
 -- try if large batches exceed max number of bind parameters
 --Testcase 719:
 CREATE FOREIGN TABLE ftable (fields jsonb OPTIONS(fields 'true')) 
   SERVER influxdb_svr OPTIONS ( table 'batch_table', batch_size '100000', schemaless 'true' );
+--Testcase 816:
 CREATE FOREIGN TABLE ftable_nsc ( x int ) SERVER influxdb_svr OPTIONS ( table 'batch_table', batch_size '100000' );
 --Testcase 720:
 INSERT INTO ftable_nsc SELECT * FROM generate_series(1, 70000) i;
@@ -9630,11 +9868,13 @@ SELECT COUNT(*) FROM ftable;
 DELETE FROM batch_table_nsc;
 --Testcase 723:
 DROP FOREIGN TABLE ftable;
+--Testcase 817:
 DROP FOREIGN TABLE ftable_nsc;
 -- Disable batch insert
 --Testcase 724:
 CREATE FOREIGN TABLE ftable (fields jsonb OPTIONS(fields 'true')) 
   SERVER influxdb_svr OPTIONS ( table 'batch_table', batch_size '1', schemaless 'true' );
+--Testcase 818:
 CREATE FOREIGN TABLE ftable_nsc ( x int ) SERVER influxdb_svr OPTIONS ( table 'batch_table', batch_size '1' );
 --Testcase 725:
 EXPLAIN (VERBOSE, COSTS OFF) INSERT INTO ftable_nsc VALUES (1), (2);
@@ -9655,12 +9895,48 @@ SELECT COUNT(*) FROM ftable;
      2
 (1 row)
 
+-- Disable batch inserting into foreign tables with BEFORE ROW INSERT triggers
+-- even if the batch_size option is enabled.
+--Testcase 776:
+ALTER FOREIGN TABLE ftable OPTIONS ( SET batch_size '10' );
+--Testcase 777:
+CREATE TRIGGER trig_row_before BEFORE INSERT ON ftable_nsc
+FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
+--Testcase 778:
+EXPLAIN (VERBOSE, COSTS OFF) INSERT INTO ftable_nsc VALUES (3), (4);
+             QUERY PLAN             
+------------------------------------
+ Insert on public.ftable_nsc
+   Batch Size: 1
+   ->  Values Scan on "*VALUES*"
+         Output: "*VALUES*".column1
+(4 rows)
+
+--Testcase 779:
+INSERT INTO ftable_nsc VALUES (3), (4);
+NOTICE:  trig_row_before(23, skidoo) BEFORE ROW INSERT ON ftable_nsc
+NOTICE:  NEW: (3)
+NOTICE:  trig_row_before(23, skidoo) BEFORE ROW INSERT ON ftable_nsc
+NOTICE:  NEW: (4)
+--Testcase 780:
+SELECT COUNT(*) FROM ftable;
+ count 
+-------
+     4
+(1 row)
+
+-- Clean up
+--Testcase 781:
+DROP TRIGGER trig_row_before ON ftable_nsc;
 --Testcase 728:
 DROP FOREIGN TABLE ftable;
+--Testcase 819:
 DROP FOREIGN TABLE ftable_nsc;
 --Testcase 729:
 DELETE FROM batch_table_nsc;
+--Testcase 820:
 DROP FOREIGN TABLE batch_table;
+--Testcase 821:
 DROP FOREIGN TABLE batch_table_nsc;
 -- influxdb_fdw does not support partition insert
 -- Use partitioning
@@ -9810,6 +10086,13 @@ INSERT INTO result_tbl SELECT * FROM async_pt WHERE b === 505;
 SELECT * FROM result_tbl ORDER BY a;
 DELETE FROM result_tbl;
 
+EXPLAIN (VERBOSE, COSTS OFF)
+INSERT INTO result_tbl SELECT a, b, 'AAA' || c FROM async_pt WHERE b === 505;
+INSERT INTO result_tbl SELECT a, b, 'AAA' || c FROM async_pt WHERE b === 505;
+
+SELECT * FROM result_tbl ORDER BY a;
+DELETE FROM result_tbl;
+
 -- Check case where multiple partitions use the same connection
 CREATE TABLE base_tbl3 (a int, b int, c text);
 CREATE FOREIGN TABLE async_p3 PARTITION OF async_pt FOR VALUES FROM (3000) TO (4000)
@@ -9847,6 +10130,13 @@ CREATE TABLE join_tbl (a1 int, b1 int, c1 text, a2 int, b2 int, c2 text);
 EXPLAIN (VERBOSE, COSTS OFF)
 INSERT INTO join_tbl SELECT * FROM async_pt t1, async_pt t2 WHERE t1.a = t2.a AND t1.b = t2.b AND t1.b % 100 = 0;
 INSERT INTO join_tbl SELECT * FROM async_pt t1, async_pt t2 WHERE t1.a = t2.a AND t1.b = t2.b AND t1.b % 100 = 0;
+
+SELECT * FROM join_tbl ORDER BY a1;
+DELETE FROM join_tbl;
+
+EXPLAIN (VERBOSE, COSTS OFF)
+INSERT INTO join_tbl SELECT t1.a, t1.b, 'AAA' || t1.c, t2.a, t2.b, 'AAA' || t2.c FROM async_pt t1, async_pt t2 WHERE t1.a = t2.a AND t1.b = t2.b AND t1.b % 100 = 0;
+INSERT INTO join_tbl SELECT t1.a, t1.b, 'AAA' || t1.c, t2.a, t2.b, 'AAA' || t2.c FROM async_pt t1, async_pt t2 WHERE t1.a = t2.a AND t1.b = t2.b AND t1.b % 100 = 0;
 
 SELECT * FROM join_tbl ORDER BY a1;
 DELETE FROM join_tbl;
@@ -9921,6 +10211,46 @@ DROP TABLE local_tbl;
 DROP INDEX base_tbl1_idx;
 DROP INDEX base_tbl2_idx;
 DROP INDEX async_p3_idx;
+
+-- UNION queries
+EXPLAIN (VERBOSE, COSTS OFF)
+INSERT INTO result_tbl
+(SELECT a, b, 'AAA' || c FROM async_p1 ORDER BY a LIMIT 10)
+UNION
+(SELECT a, b, 'AAA' || c FROM async_p2 WHERE b < 10);
+INSERT INTO result_tbl
+(SELECT a, b, 'AAA' || c FROM async_p1 ORDER BY a LIMIT 10)
+UNION
+(SELECT a, b, 'AAA' || c FROM async_p2 WHERE b < 10);
+
+SELECT * FROM result_tbl ORDER BY a;
+DELETE FROM result_tbl;
+
+EXPLAIN (VERBOSE, COSTS OFF)
+INSERT INTO result_tbl
+(SELECT a, b, 'AAA' || c FROM async_p1 ORDER BY a LIMIT 10)
+UNION ALL
+(SELECT a, b, 'AAA' || c FROM async_p2 WHERE b < 10);
+INSERT INTO result_tbl
+(SELECT a, b, 'AAA' || c FROM async_p1 ORDER BY a LIMIT 10)
+UNION ALL
+(SELECT a, b, 'AAA' || c FROM async_p2 WHERE b < 10);
+
+SELECT * FROM result_tbl ORDER BY a;
+DELETE FROM result_tbl;
+
+-- Disable async execution if we use gating Result nodes for pseudoconstant
+-- quals
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM async_pt WHERE CURRENT_USER = SESSION_USER;
+
+EXPLAIN (VERBOSE, COSTS OFF)
+(SELECT * FROM async_p1 WHERE CURRENT_USER = SESSION_USER)
+UNION ALL
+(SELECT * FROM async_p2 WHERE CURRENT_USER = SESSION_USER);
+
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM ((SELECT * FROM async_p1 WHERE b < 10) UNION ALL (SELECT * FROM async_p2 WHERE b < 10)) s WHERE CURRENT_USER = SESSION_USER;
 
 -- Test that pending requests are processed properly
 SET enable_mergejoin TO false;
@@ -10004,11 +10334,28 @@ DROP TABLE base_tbl2;
 DROP TABLE result_tbl;
 DROP TABLE join_tbl;
 
+-- Test that an asynchronous fetch is processed before restarting the scan in
+-- ReScanForeignScan
+CREATE TABLE base_tbl (a int, b int);
+INSERT INTO base_tbl VALUES (1, 11), (2, 22), (3, 33);
+CREATE FOREIGN TABLE foreign_tbl (b int)
+  SERVER loopback OPTIONS (table_name 'base_tbl');
+CREATE FOREIGN TABLE foreign_tbl2 () INHERITS (foreign_tbl)
+  SERVER loopback OPTIONS (table_name 'base_tbl');
+
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT a FROM base_tbl WHERE a IN (SELECT a FROM foreign_tbl);
+SELECT a FROM base_tbl WHERE a IN (SELECT a FROM foreign_tbl);
+
+-- Clean up
+DROP FOREIGN TABLE foreign_tbl CASCADE;
+DROP TABLE base_tbl;
+
 ALTER SERVER loopback OPTIONS (DROP async_capable);
 ALTER SERVER loopback2 OPTIONS (DROP async_capable);
 */
 -- ===================================================================
--- test invalid server and foreign table options
+-- test invalid server, foreign table and foreign data wrapper options
 -- ===================================================================
 /*
 -- InfluxDB FDW does not have these options
@@ -10027,32 +10374,156 @@ CREATE FOREIGN TABLE inv_fsz (c1 int )
 CREATE FOREIGN TABLE inv_bsz (fields jsonb OPTIONS(fields 'true')) 
   SERVER influxdb_svr OPTIONS (batch_size '100$%$#$#', schemaless 'true');
 ERROR:  invalid value for integer option "batch_size": 100$%$#$#
+-- No option is allowed to be specified at foreign data wrapper level
+--Testcase 782:
+ALTER FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (nonexistent 'fdw');
+ERROR:  invalid option "nonexistent"
+HINT:  There are no valid options in this context.
+/*
+-- ===================================================================
+-- application_name is an option in libpq of postgres
+-- so Influxdb_fdw not support application_name.
+-- test postgres_fdw.application_name GUC
+-- ===================================================================
+--- Turn debug_discard_caches off for this test to make sure that
+--- the remote connection is alive when checking its application_name.
+SET debug_discard_caches = 0;
+
+-- Specify escape sequences in application_name option of a server
+-- object so as to test that they are replaced with status information
+-- expectedly.
+--
+-- Since pg_stat_activity.application_name may be truncated to less than
+-- NAMEDATALEN characters, note that substring() needs to be used
+-- at the condition of test query to make sure that the string consisting
+-- of database name and process ID is also less than that.
+ALTER SERVER loopback2 OPTIONS (application_name 'fdw_%d%p');
+SELECT 1 FROM ft6 LIMIT 1;
+SELECT pg_terminate_backend(pid, 180000) FROM pg_stat_activity
+  WHERE application_name =
+    substring('fdw_' || current_database() || pg_backend_pid() for
+      current_setting('max_identifier_length')::int);
+
+-- postgres_fdw.application_name overrides application_name option
+-- of a server object if both settings are present.
+SET postgres_fdw.application_name TO 'fdw_%a%u%%';
+SELECT 1 FROM ft6 LIMIT 1;
+SELECT pg_terminate_backend(pid, 180000) FROM pg_stat_activity
+  WHERE application_name =
+    substring('fdw_' || current_setting('application_name') ||
+      CURRENT_USER || '%' for current_setting('max_identifier_length')::int);
+
+-- Test %c (session ID) and %C (cluster name) escape sequences.
+SET postgres_fdw.application_name TO 'fdw_%C%c';
+SELECT 1 FROM ft6 LIMIT 1;
+SELECT pg_terminate_backend(pid, 180000) FROM pg_stat_activity
+  WHERE application_name =
+    substring('fdw_' || current_setting('cluster_name') ||
+      to_hex(trunc(EXTRACT(EPOCH FROM (SELECT backend_start FROM
+      pg_stat_get_activity(pg_backend_pid()))))::integer) || '.' ||
+      to_hex(pg_backend_pid())
+      for current_setting('max_identifier_length')::int);
+
+--Clean up
+RESET postgres_fdw.application_name;
+RESET debug_discard_caches;
+
+-- ===================================================================
+-- test parallel commit
+-- ===================================================================
+ALTER SERVER loopback OPTIONS (ADD parallel_commit 'true');
+ALTER SERVER loopback2 OPTIONS (ADD parallel_commit 'true');
+
+CREATE TABLE ploc1 (f1 int, f2 text);
+CREATE FOREIGN TABLE prem1 (f1 int, f2 text)
+  SERVER loopback OPTIONS (table_name 'ploc1');
+CREATE TABLE ploc2 (f1 int, f2 text);
+CREATE FOREIGN TABLE prem2 (f1 int, f2 text)
+  SERVER loopback2 OPTIONS (table_name 'ploc2');
+
+BEGIN;
+INSERT INTO prem1 VALUES (101, 'foo');
+INSERT INTO prem2 VALUES (201, 'bar');
+COMMIT;
+SELECT * FROM prem1;
+SELECT * FROM prem2;
+
+BEGIN;
+SAVEPOINT s;
+INSERT INTO prem1 VALUES (102, 'foofoo');
+INSERT INTO prem2 VALUES (202, 'barbar');
+RELEASE SAVEPOINT s;
+COMMIT;
+SELECT * FROM prem1;
+SELECT * FROM prem2;
+
+-- This tests executing DEALLOCATE ALL against foreign servers in parallel
+-- during pre-commit
+BEGIN;
+SAVEPOINT s;
+INSERT INTO prem1 VALUES (103, 'baz');
+INSERT INTO prem2 VALUES (203, 'qux');
+ROLLBACK TO SAVEPOINT s;
+RELEASE SAVEPOINT s;
+INSERT INTO prem1 VALUES (104, 'bazbaz');
+INSERT INTO prem2 VALUES (204, 'quxqux');
+COMMIT;
+SELECT * FROM prem1;
+SELECT * FROM prem2;
+
+ALTER SERVER loopback OPTIONS (DROP parallel_commit);
+ALTER SERVER loopback2 OPTIONS (DROP parallel_commit);
+*/
 -- Clean-up
+--Testcase 822:
 DELETE FROM ft1_nsc;
+--Testcase 823:
 DELETE FROM ft2_nsc;
+--Testcase 824:
 DELETE FROM ft4_nsc;
+--Testcase 825:
 DELETE FROM ft5_nsc;
+--Testcase 826:
 DELETE FROM foo_nsc;
+--Testcase 827:
 DELETE FROM bar_nsc;
+--Testcase 828:
 DELETE FROM loct1_nsc;
+--Testcase 829:
 DELETE FROM loct2_nsc;
+--Testcase 830:
 DELETE FROM rem1_nsc;
+--Testcase 831:
 DROP FOREIGN TABLE foo_nsc cascade;
 NOTICE:  drop cascades to foreign table foo2_nsc
+--Testcase 832:
 DROP FOREIGN TABLE bar_nsc cascade;
 NOTICE:  drop cascades to foreign table bar2_nsc
+--Testcase 833:
 DROP FOREIGN TABLE loct1_nsc;
+--Testcase 834:
 DROP FOREIGN TABLE loct2_nsc;
+--Testcase 835:
 DROP FOREIGN TABLE "S 1".s1t0;
+--Testcase 836:
 DROP FOREIGN TABLE "S 1".s1t1;
+--Testcase 837:
 DROP FOREIGN TABLE "S 1".s1t2;
+--Testcase 838:
 DROP FOREIGN TABLE "S 1".s1t3;
+--Testcase 839:
 DROP FOREIGN TABLE "S 1".s1t4;
+--Testcase 840:
 DROP FOREIGN TABLE ft1_nsc;
+--Testcase 841:
 DROP FOREIGN TABLE ft2_nsc;
+--Testcase 842:
 DROP FOREIGN TABLE ft4_nsc;
+--Testcase 843:
 DROP FOREIGN TABLE ft5_nsc;
+--Testcase 844:
 DROP TYPE IF EXISTS user_enum;
+--Testcase 845:
 DROP SCHEMA IF EXISTS "S 1" CASCADE;
 NOTICE:  drop cascades to 6 other objects
 DETAIL:  drop cascades to foreign table "S 1"."T 0"
@@ -10061,9 +10532,13 @@ drop cascades to foreign table "S 1"."T 2"
 drop cascades to foreign table "S 1"."T 3"
 drop cascades to foreign table "S 1"."T 4"
 drop cascades to function "S 1".f_brtrig()
+--Testcase 846:
 DROP FUNCTION IF EXISTS trigger_func();
+--Testcase 847:
 DROP FUNCTION IF EXISTS trig_row_before_insupdate();
+--Testcase 848:
 DROP FUNCTION IF EXISTS trig_null();
+--Testcase 849:
 DROP SCHEMA IF EXISTS import_influx1 CASCADE;
 NOTICE:  drop cascades to 9 other objects
 DETAIL:  drop cascades to foreign table import_influx1."T1"
@@ -10075,8 +10550,11 @@ drop cascades to foreign table import_influx1.foo
 drop cascades to foreign table import_influx1.loc1
 drop cascades to foreign table import_influx1.loct1
 drop cascades to foreign table import_influx1.loct2
+--Testcase 850:
 DROP SCHEMA IF EXISTS import_influx2 CASCADE;
+--Testcase 851:
 DROP SCHEMA IF EXISTS import_influx3 CASCADE;
+--Testcase 852:
 DROP SCHEMA IF EXISTS import_influx4 CASCADE;
 NOTICE:  drop cascades to 9 other objects
 DETAIL:  drop cascades to foreign table import_influx4."T1"
@@ -10088,6 +10566,7 @@ drop cascades to foreign table import_influx4.foo
 drop cascades to foreign table import_influx4.loc1
 drop cascades to foreign table import_influx4.loct1
 drop cascades to foreign table import_influx4.loct2
+--Testcase 853:
 DROP TABLE IF EXISTS batch_cp_upd_test1;
 --Testcase 758:
 DROP USER MAPPING FOR public SERVER testserver1;
