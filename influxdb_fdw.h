@@ -13,7 +13,13 @@
 #ifndef INFLUXDB_FDW_H
 #define INFLUXDB_FDW_H
 
+#ifdef GO_CLIENT
 #include "_obj/_cgo_export.h"
+#else
+#ifdef CXX_CLIENT
+#include "query_cxx.h"
+#endif
+#endif
 
 #include "foreign/foreign.h"
 #include "lib/stringinfo.h"
