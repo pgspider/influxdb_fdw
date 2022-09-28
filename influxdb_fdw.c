@@ -239,6 +239,10 @@ static int	influxdb_get_batch_size_option(Relation rel);
 #endif
 static void influxdb_extract_slcols(InfluxDBFdwRelationInfo *fpinfo, PlannerInfo *root, RelOptInfo *baserel, List *tlist);
 
+#ifdef CXX_CLIENT
+#define free(x) pfree(x)
+#endif
+
 /*
  * This enum describes what's kept in the fdw_private list for a ForeignPath.
  * We store:

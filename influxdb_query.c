@@ -371,6 +371,7 @@ influxdb_bind_sql_var(Oid type, int idx, Datum value, bool *isnull,
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
 			{
+#ifdef GO_CLIENT
 				/* Bind as string, but types is time */
 				char	   *outputString = NULL;
 				Oid			outputFunctionId = InvalidOid;
@@ -379,6 +380,14 @@ influxdb_bind_sql_var(Oid type, int idx, Datum value, bool *isnull,
 				getTypeOutputInfo(type, &outputFunctionId, &typeVarLength);
 				outputString = OidOutputFunctionCall(outputFunctionId, value);
 				param_influxdb_values[idx].s = outputString;
+#endif
+#ifdef CXX_CLIENT
+				const int64 postgres_to_unux_epoch_usecs = (POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * USECS_PER_DAY;
+				Timestamp	valueTimestamp = DatumGetTimestamp(value);
+				int64		valueNanoSecs = (valueTimestamp + postgres_to_unux_epoch_usecs) * 1000;
+
+				param_influxdb_values[idx].i = valueNanoSecs;
+#endif
 				param_influxdb_types[idx] = INFLUXDB_TIME;
 				break;
 			}

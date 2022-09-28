@@ -3,24 +3,50 @@ This PostgreSQL extension is a Foreign Data Wrapper (FDW) for InfluxDB (version 
 
 The current version can work with PostgreSQL 11, 12, 13, 14 and 15.
 
-Go version should be 1.10.4 or later.
 ## Installation
-Install InfluxDB Go client library
+Influxdb_fdw supports 2 different client: Go client and Influxdb_cxx client. The installation for each kind of client is described as below.
+### Install InfluxDB Go client library
+Go version should be 1.10.4 or later.
 <pre>
 go get github.com/influxdata/influxdb1-client/v2
 </pre>
+To use Go client, use GO_CLIENT=1 flag when compile the source code
 
+### Install Influxdb_cxx client library
+Get source from Gitlab repository 'influxdb-cxx' and install as manual
+
+Update LD_LIBRARY_PATH follow the installation folder of Influxdb_cxx client
+
+To use Influxdb_cxx, use CXX_CLIENT=1 flag when compile the source code. It is required to use gcc version 7 to build influxdb_fdw with influxdb_cxx client.
+
+### Compile source code and install
 Add a directory of pg_config to PATH and build and install influxdb_fdw.
+
+Using Go client
 <pre>
-make USE_PGXS=1 with_llvm=no
-make install USE_PGXS=1 with_llvm=no
+make USE_PGXS=1 with_llvm=no GO_CLIENT=1
+make install USE_PGXS=1 with_llvm=no GO_CLIENT=1
+</pre>
+
+Using Influxdb_cxx client
+<pre>
+make USE_PGXS=1 with_llvm=no CXX_CLIENT=1
+make install USE_PGXS=1 with_llvm=no CXX_CLIENT=1
 </pre>
 with_llvm=no is necessary to disable llvm bit code generation when PostgreSQL is configured with --with-llvm because influxdb_fdw use go code and cannot be compiled to llvm bit code.
 
 If you want to build influxdb_fdw in a source tree of PostgreSQL instead, use
+
+Using Go client
 <pre>
-make with_llvm=no
-make install  with_llvm=no
+make with_llvm=no GO_CLIENT=1
+make install  with_llvm=no GO_CLIENT=1
+</pre>
+
+Using Influxdb_cxx client
+<pre>
+make with_llvm=no CXX_CLIENT=1
+make install  with_llvm=no CXX_CLIENT=1
 </pre>
 
 ## Usage

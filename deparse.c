@@ -3033,7 +3033,7 @@ influxdb_deparse_scalar_array_op_expr(ScalarArrayOpExpr *node, deparse_expr_cxt 
 						/* Remove '\"' and process the next character. */
 						if (ch == '\"' && !isEscape)
 						{
-							inString = ~inString;
+							inString = !inString;
 							continue;
 						}
 						/* Add escape character '\'' for '\'' */
