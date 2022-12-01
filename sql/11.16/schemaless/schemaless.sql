@@ -15,10 +15,10 @@ DROP EXTENSION IF EXISTS influxdb_fdw CASCADE;
 CREATE EXTENSION influxdb_fdw CASCADE;
 
 --Testcase 5:
-CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname 'schemalessdb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
+CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname 'schemalessdb', :SERVER);
 
 --Testcase 6:
-CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (:AUTHENTICATION);
 
 -- create foreign table
 --Testcase 7:

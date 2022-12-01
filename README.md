@@ -56,15 +56,37 @@ CREATE EXTENSION influxdb_fdw;
 </pre>
 
 ### Create server
+#### Go Client connect to InfluxDB ver 1.x
 <pre>
 CREATE SERVER influxdb_server FOREIGN DATA WRAPPER influxdb_fdw OPTIONS
 (dbname 'mydb', host 'http://localhost', port '8086') ;
 </pre>
+#### Influxdb_cxx Client connect to InfluxDB ver 1.x
+<pre>
+CREATE SERVER influxdb_server FOREIGN DATA WRAPPER influxdb_fdw OPTIONS
+(dbname 'mydb', host 'http://localhost', port '8086', version '1') ;
+</pre>
+#### Influxdb_cxx Client connect to InfluxDB ver 2.x
+<pre>
+CREATE SERVER influxdb_server FOREIGN DATA WRAPPER influxdb_fdw OPTIONS
+(dbname 'mydb', host 'http://localhost', port '8086', version '2', retention_policy '') ;
+</pre>
+
 
 ### Create user mapping
+#### Go Client connect to InfluxDB ver 1.x
 <pre>
 CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_server OPTIONS(user 'user', password 'pass');
 </pre>
+#### Influxdb_cxx Client connect to InfluxDB ver 1.x
+<pre>
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_server OPTIONS(user 'user', password 'pass');
+</pre>
+#### Influxdb_cxx Client connect to InfluxDB ver 2.x
+<pre>
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_server OPTIONS(auth_token 'token');
+</pre>
+
 
 ### Create foreign table
 You need to declare a column named "time" to access InfluxDB time column.
@@ -80,6 +102,16 @@ CREATE FOREIGN TABLE t2(tag1 text, field1 integer, tag2 text, field2 integer) SE
 <pre>
 IMPORT FOREIGN SCHEMA public FROM SERVER influxdb_server INTO public;
 </pre>
+
+Following options are supported:
+* **host** - the address used to connect to InfluxDB server.
+* **port** - the port used to connect to InfluxDB server.
+* **dbname** - target database name
+* **retention_policy** - retention policy of target database (default empty ``).
+* **user** - username for V1 basic authentication.
+* **password** - password for V1 basic authentication.
+* **auth_token** - token for V2 Token authentication.
+* **version** - InfluxDB server version which to connect to (Only `1` or `2`). If not, InfluxDB FDW will try to connect to InfluxDB V2 first. If unsuccessful, it will try to connect to InfluxDB V1. If it is still unsuccessful, error will be raised.
 
 ### Access foreign table
 <pre>

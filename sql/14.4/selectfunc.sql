@@ -11,9 +11,9 @@ SET timezone='Japan';
 CREATE EXTENSION influxdb_fdw;
 --Testcase 4:
 CREATE SERVER server1 FOREIGN DATA WRAPPER influxdb_fdw OPTIONS
-(dbname 'mydb2', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
+(dbname 'mydb2', :SERVER);
 --Testcase 5:
-CREATE USER MAPPING FOR CURRENT_USER SERVER server1 OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
+CREATE USER MAPPING FOR CURRENT_USER SERVER server1 OPTIONS (:AUTHENTICATION);
 
 --IMPORT FOREIGN SCHEMA public FROM SERVER server1 INTO public OPTIONS(import_time_text 'false');
 --Testcase 6:

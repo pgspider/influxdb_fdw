@@ -14,9 +14,9 @@ SET timezone='Japan';
 CREATE EXTENSION influxdb_fdw;
 --Testcase 4:
 CREATE SERVER server1 FOREIGN DATA WRAPPER influxdb_fdw OPTIONS
-(dbname 'mydb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
+(dbname 'mydb', :SERVER);
 --Testcase 5:
-CREATE USER MAPPING FOR CURRENT_USER SERVER server1 OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
+CREATE USER MAPPING FOR CURRENT_USER SERVER server1 OPTIONS (:AUTHENTICATION);
 -- import time column as timestamp and text type
 IMPORT FOREIGN SCHEMA public FROM SERVER server1 INTO public OPTIONS(import_time_text 'true');
 --Testcase 6:
@@ -585,7 +585,9 @@ DELETE FROM cpu WHERE time_text = '2021-02-02 00:00:00' OR time ='2029-02-02 05:
 SELECT * FROM cpu;
 
 -- Recover data
-\! influx -import -path=init/init.txt -precision=s > /dev/null
+:RECOVER_INIT_TXT_DROP_BUCKET;
+:RECOVER_INIT_TXT_CREATE_BUCKET;
+:RECOVER_INIT_TXT;
 
 --Testcase 201:
 DROP USER MAPPING FOR CURRENT_USER SERVER server1;

@@ -7,14 +7,14 @@ SET timezone='UTC';
 \set ECHO all
 
 -- Init data original
-\! influx -import -path=init/tag_original.txt -precision=s > /dev/null
+:INIT_TAG_ORIGINAL;
 -- Before update data
 -- Testcase 1:
 CREATE EXTENSION influxdb_fdw CASCADE;
 --Testcase 2:
-CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname 'schemalessdb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
+CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname 'schemalessdb', :SERVER);
 --Testcase 3:
-CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (:AUTHENTICATION);
 
 --Testcase 4:
 CREATE FOREIGN TABLE sctbl9 (tags jsonb OPTIONS(tags 'true'), fields jsonb OPTIONS(fields 'true'), time timestamp) SERVER influxdb_svr OPTIONS (schemaless 'true', tags 'sid, sname');
@@ -39,7 +39,7 @@ select bool_or((fields->>'sig1')::bigint >= 1234), stddev((fields->>'sig1')::big
 
 --------------------------------------------------------------------------------------- Update: Add 1 tag --------------------------------------------------------------------------------------------------------------
 -- Update data : add 1 tag
-\! influx -import -path=init/tag_add_1.txt -precision=s > /dev/null
+:RECOVER_INIT_TAG_ADD_1;
 
 --Testcase 12:
 DROP FOREIGN TABLE sctbl4;
@@ -114,7 +114,7 @@ select sum(sig3::double precision), string_agg(sig2, sname), count(sid) from (se
 
 --------------------------------------------------------------------------------------- Update: Add 20 tag --------------------------------------------------------------------------------------------------------------
 -- Update data : add 1 tag
-\! influx -import -path=init/tag_add_20.txt -precision=s > /dev/null
+:RECOVER_INIT_TAG_ADD_20;
 --Testcase 41:
 DROP FOREIGN TABLE sctbl4;
 --Testcase 42:

@@ -1,0 +1,26 @@
+# DDL
+# DROP DATABASE schemalessdb
+# CREATE DATABASE schemalessdb
+
+# DML
+# CONTEXT-DATABASE: schemalessdb
+
+sctbl1,device_id=dev1 sig1=11i,sig2="2e2eawekfrjq2o",sig3=-0.79769313486,sig4=true 1556813561098000000
+sctbl1,device_id=d\ \,\=ev2 sig1=2222i,sig2="x'a8a9aaabacadaeaf'",sig3=-1.0,sig4=false 1465839830100400200
+sctbl1,device_id='dev3' sig1=34422i,sig2="散りぬるを我が世誰",sig3=0.32,sig4=false 9223372036854775806
+sctbl1,device_id=dev1 sig1=-664i,sig3=0.78,sig4=true -9223372036854775806
+sctbl1,device_id=dev2 sig1=35655i,sig2="abcdefghijklmnopqrstuvwxyz",sig3=0.25,sig4=false 1465839830100400200
+sctbl1,device_id=dev3 sig1=65535i,sig2="`~!@#$%^&*()_+=",sig3=-0.91,sig4=false 1465839830100400200
+sctbl1,device_id="dev\ 1" sig1=70220i,sig2="いろはにほへど　ちりぬるをわがよたれぞ",sig3=0.37,sig4=true 1556813561098000000
+sctbl1,device_id=dev2 sig1=-8555i,sig2="AHWEMAKDF",sig3=0.34,sig4=false 1556813561098000000
+sctbl1,device_id=dev3 sig1=319i,sig2="P_AEF-wefA",sig3=0.32,sig4=false 1556813561098000000
+
+sctbl2,device_id=dev1 sig1=102i,sig2="~!*)!@*#a",sig3=-8810.1,sig5="[(-122.0265,37.049),(-122.0271,37.045)]" 1465839830100400200
+sctbl2,device_id=dev2 sig1=-20i,sig2="+(#@!_#(_",sig3=4282.8730,sig4=false,sig5="[(-122.103913,37.66632),(-122.104037,37.66611),(-122.104051,37.66609)]" 1556813561098000000
+sctbl2,device_id=dev3 sig1=-30i,sig3=102.3827810127,sig4=false,sig5="[(-122.106469,37.66446),(-122.1067,37.664)]" -9223372036854775806
+sctbl2,device_id=dev1 sig1=640i,sig2="敷ヘカウ告政ヨハツヤ",sig3=20.4222211221,sig4=true,sig5="[(-122.107,37.664),(-122.107101,37.66425),(-122.1074,37.665)]" 1465839830100400200
+sctbl2,device_id=dev2 sig1=7950i,sig2="`~!@#$%^&*()_+=-{}[]|:;<>?/.",sig3=220.2215,sig4=false,sig5="[(-122.2364,37.436),(-122.2364,37.443)]" 1556813561098000000
+sctbl2,device_id=dev3 sig1=660i,sig2="ăâđêôơư",sig3=35520.12126,sig4=false,sig5="[(-121.742,37.829),(-121.742,37.822)]" 1556813561098000000
+sctbl2,device_id=dev1 sig1=7060i,sig3=-3230.17,sig4=true,sig5="[(-121.9044,37.895),(-121.9044,37.899)]" 9223372036854775806
+sctbl2,device_id=dev2 sig1=-7880i,sig2="EFQEF",sig3=2330.8,sig4=false,sig5="[(-121.9026,37.843),(-121.9028,37.843)]" 9223372036854775806
+sctbl2,device_id=dev3 sig1=6990i,sig2="wr3wri",sig3=5630.9,sig4=false,sig5="[(-121.900576,37.74452),(-121.900804,37.74889)]" 1556813561098000000

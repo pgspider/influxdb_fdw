@@ -6,9 +6,9 @@
 CREATE EXTENSION influxdb_fdw;
 --Testcase 2:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw
-  OPTIONS (dbname 'coredb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
+  OPTIONS (dbname 'coredb', :SERVER);
 --Testcase 3:
-CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (:AUTHENTICATION);
 
 --
 -- insert with DEFAULT in the target_list
