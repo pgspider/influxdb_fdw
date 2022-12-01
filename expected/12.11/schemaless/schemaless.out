@@ -10,9 +10,9 @@ NOTICE:  extension "influxdb_fdw" does not exist, skipping
 --Testcase 4:
 CREATE EXTENSION influxdb_fdw CASCADE;
 --Testcase 5:
-CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname 'schemalessdb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
+CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname 'schemalessdb', :SERVER);
 --Testcase 6:
-CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (:AUTHENTICATION);
 -- create foreign table
 --Testcase 7:
 CREATE FOREIGN TABLE sc1(time timestamp with time zone, tags jsonb OPTIONS(tags 'true'), fields jsonb OPTIONS (fields 'true')) SERVER influxdb_svr OPTIONS(table 'sc1', tags 'device_id', schemaless 'true');

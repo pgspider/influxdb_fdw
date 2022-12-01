@@ -3,14 +3,14 @@ SET datestyle=ISO;
 SET timezone='UTC';
 \set ECHO none
 -- Init data
-\! influx -import -path=init/fields_original.txt -precision=ns > /dev/null
+:INIT_FIELDS_ORIGINAL;
 --Before update data
 --Testcase 1:
 CREATE EXTENSION influxdb_fdw CASCADE;
 --Testcase 2:
-CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname 'schemalessdb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
+CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname 'schemalessdb', :SERVER);
 --Testcase 3:
-CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (:AUTHENTICATION);
 --Testcase 4:
 CREATE FOREIGN TABLE sctbl1 (time timestamp with time zone, tags jsonb OPTIONS(tags 'true'), fields jsonb OPTIONS(fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true', tags 'device_id');
 --Testcase 5:
@@ -112,7 +112,7 @@ SELECT upper(fields->>'sig2'), upper(fields->>'sig2'), lower(fields->>'sig2'), l
 
 -------------------------------------------------------------------------------------------Update data--Add 1 field------------------------------------------------------------------------------------------------------------
 --Update data
-\! influx -import -path=init/fields_add_1.txt -precision=ns > /dev/null
+:RECOVER_INIT_FIELDS_ADD_1;
 --Testcase 13:
 DROP FOREIGN TABLE sctbl1;
 --Testcase 14:
@@ -659,7 +659,7 @@ SELECT s1.tags->>'device_id' device_id,(s1.fields->>'sig1')::bigint sig1,s1.fiel
 
 -------------------------------------------------------------------------------------------Update data--Add 20 field------------------------------------------------------------------------------------------------------------
 --Update data
-\! influx -import -path=init/fields_add_20.txt -precision=ns > /dev/null
+:RECOVER_INIT_FIELDS_ADD_20;
 --Testcase 64:
 DROP FOREIGN TABLE sctbl1;
 --Testcase 65:

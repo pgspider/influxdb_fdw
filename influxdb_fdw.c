@@ -1066,6 +1066,13 @@ influxdbBeginForeignScan(ForeignScanState *node, int eflags)
 		rtindex = bms_next_member(fsplan->fs_relids, -1);
 	rte = exec_rt_fetch(rtindex, estate);
 
+	/* Fetch options */
+	festate->influxdbFdwOptions = influxdb_get_options(rte->relid);
+#ifdef CXX_CLIENT
+	if (!festate->influxdbFdwOptions->svr_version)
+		festate->influxdbFdwOptions->svr_version = influxdb_get_version_option(festate->influxdbFdwOptions);
+#endif
+
 	influxdb_get_schemaless_info(&(festate->slinfo), schemaless, rte->relid);
 
 	/* Prepare for output conversion of parameters used in remote query. */
@@ -1601,7 +1608,7 @@ influxdbIterateForeignScan(ForeignScanState *node)
 	rte = rt_fetch(rtindex, estate->es_range_table);
 
 	/* Fetch the options */
-	options = influxdb_get_options(rte->relid);
+	options = festate->influxdbFdwOptions;
 
 	/*
 	 * If this is the first call after Begin or ReScan, we need to create the
@@ -1623,6 +1630,10 @@ influxdbIterateForeignScan(ForeignScanState *node)
 			ret = InfluxDBQuery(festate->query, options->svr_address, options->svr_port,
 								options->svr_username, options->svr_password,
 								options->svr_database,
+#ifdef CXX_CLIENT
+								options->svr_version, options->svr_token,
+								options->svr_retention_policy,
+#endif
 								festate->param_influxdb_types,
 								festate->param_influxdb_values,
 								festate->numParams);
@@ -1903,6 +1914,10 @@ influxdbBeginForeignModify(ModifyTableState *mtstate,
 
 	/* Stash away the state info we have already */
 	fmstate->influxdbFdwOptions = influxdb_get_options(foreignTableId);
+#ifdef CXX_CLIENT
+	if (!fmstate->influxdbFdwOptions->svr_version)
+		fmstate->influxdbFdwOptions->svr_version = influxdb_get_version_option(fmstate->influxdbFdwOptions);
+#endif
 	fmstate->rel = rel;
 	fmstate->query = strVal(list_nth(fdw_private, FdwModifyPrivateUpdateSql));
 	fmstate->retrieved_attrs = (List *) list_nth(fdw_private, FdwModifyPrivateTargetAttnums);
@@ -2174,6 +2189,10 @@ influxdbExecForeignDelete(EState *estate,
 	ret = InfluxDBQuery(fmstate->query, fmstate->influxdbFdwOptions->svr_address,
 						fmstate->influxdbFdwOptions->svr_port, fmstate->influxdbFdwOptions->svr_username,
 						fmstate->influxdbFdwOptions->svr_password, fmstate->influxdbFdwOptions->svr_database,
+#ifdef CXX_CLIENT
+						fmstate->influxdbFdwOptions->svr_version, fmstate->influxdbFdwOptions->svr_token,
+						fmstate->influxdbFdwOptions->svr_retention_policy,
+#endif
 						fmstate->param_influxdb_types, fmstate->param_influxdb_values, fmstate->p_nums);
 	if (ret.r1 != NULL)
 	{
@@ -2493,6 +2512,10 @@ influxdbBeginDirectModify(ForeignScanState *node, int eflags)
 
 	/* Fetch options */
 	dmstate->influxdbFdwOptions = influxdb_get_options(rte->relid);
+#ifdef CXX_CLIENT
+	if (!dmstate->influxdbFdwOptions->svr_version)
+		dmstate->influxdbFdwOptions->svr_version = influxdb_get_version_option(dmstate->influxdbFdwOptions);
+#endif
 
 	/* Update the foreign-join-related fields. */
 	if (fsplan->scan.scanrelid == 0)
@@ -2717,7 +2740,12 @@ influxdbImportForeignSchema(ImportForeignSchemaStmt *stmt,
 	options = influxdb_get_options(serverOid);
 	ret = InfluxDBSchemaInfo(options->svr_address, options->svr_port,
 							 options->svr_username, options->svr_password,
+#ifndef CXX_CLIENT
 							 options->svr_database);
+#else
+							 options->svr_database, options->svr_version,
+							 options->svr_token, options->svr_retention_policy);
+#endif
 	if (ret.r2 != NULL)
 	{
 		char	   *err = pstrdup(ret.r2);
@@ -3854,6 +3882,10 @@ execute_dml_stmt(ForeignScanState *node)
 	ret = InfluxDBQuery(dmstate->query, dmstate->influxdbFdwOptions->svr_address,
 						dmstate->influxdbFdwOptions->svr_port, dmstate->influxdbFdwOptions->svr_username,
 						dmstate->influxdbFdwOptions->svr_password, dmstate->influxdbFdwOptions->svr_database,
+#ifdef CXX_CLIENT
+						dmstate->influxdbFdwOptions->svr_version, dmstate->influxdbFdwOptions->svr_token,
+						dmstate->influxdbFdwOptions->svr_retention_policy,
+#endif
 						dmstate->param_influxdb_types, dmstate->param_influxdb_values, dmstate->numParams);
 	if (ret.r1 != NULL)
 	{
@@ -3978,7 +4010,14 @@ execute_foreign_insert_modify(EState *estate,
 	/* Insert the record */
 	ret = InfluxDBInsert(fmstate->influxdbFdwOptions->svr_address, fmstate->influxdbFdwOptions->svr_port,
 						 fmstate->influxdbFdwOptions->svr_username, fmstate->influxdbFdwOptions->svr_password,
+#ifndef CXX_CLIENT
 						 fmstate->influxdbFdwOptions->svr_database, tablename, fmstate->param_column_info,
+#else
+						 fmstate->influxdbFdwOptions->svr_database, tablename,
+						 fmstate->influxdbFdwOptions->svr_version, fmstate->influxdbFdwOptions->svr_token,
+						 fmstate->influxdbFdwOptions->svr_retention_policy,
+						 fmstate->param_column_info,
+#endif
 						 fmstate->param_influxdb_types, fmstate->param_influxdb_values, fmstate->p_nums, numSlots);
 	if (ret != NULL)
 		elog(ERROR, "influxdb_fdw : %s", ret);

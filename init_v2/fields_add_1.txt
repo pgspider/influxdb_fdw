@@ -1,0 +1,12 @@
+# DML
+# CONTEXT-DATABASE: schemalessdb
+
+sctbl1,device_id=dev1 sig1=11i,sig2="2e2eawekfrjq2o",sig3=-0.79769313486,sig4=true,sig5=T 1556813561098000000
+sctbl1,device_id=d\ \,\=ev2 sig1=2222i,sig2="x'a8a9aaabacadaeaf'",sig3=-1.0,sig4=false,sig5=F 1465839830100400200
+sctbl1,device_id='dev3' sig1=34422i,sig2="散りぬるを我が世誰",sig3=0.32,sig4=false,sig5=t 9223372036854775806
+sctbl1,device_id=dev1 sig1=-664i,sig3=0.78,sig4=true,sig5=f -9223372036854775806
+sctbl1,device_id=dev2 sig1=35655i,sig2="abcdefghijklmnopqrstuvwxyz",sig3=0.25,sig4=false,sig5=T 1465839830100400200
+sctbl1,device_id=dev3 sig1=65535i,sig2="`~!@#$%^&*()_+=",sig3=-0.91,sig4=false,sig5=T 1465839830100400200
+sctbl1,device_id="dev\ 1" sig1=70220i,sig2="いろはにほへど　ちりぬるをわがよたれぞ",sig3=0.37,sig4=true,sig5=F 1556813561098000000
+sctbl1,device_id=dev2 sig1=-8555i,sig2="AHWEMAKDF",sig3=0.34,sig4=false,sig5=F 1556813561098000000
+sctbl1,device_id=dev3 sig1=319i,sig2="P_AEF-wefA",sig3=0.32,sig4=false,sig5=T 1556813561098000000

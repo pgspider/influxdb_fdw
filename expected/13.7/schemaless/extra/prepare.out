@@ -6,9 +6,9 @@
 CREATE EXTENSION influxdb_fdw;
 --Testcase 28:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw
-  OPTIONS (dbname 'coredb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
+  OPTIONS (dbname 'coredb', :SERVER);
 --Testcase 29:
-CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (:AUTHENTICATION);
 --Testcase 30:
 CREATE FOREIGN TABLE tenk1 (
 	fields jsonb OPTIONS (fields 'true')

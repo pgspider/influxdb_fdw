@@ -41,6 +41,7 @@ std::vector<std::string> timestampFormats =
 };
 
 static size_t InfluxDBSeries_get_total_row(std::vector<influxdb::InfluxDBSeries> series);
+static std::unique_ptr<influxdb::InfluxDB> create_influxDB_client(char* addr, int port, char* user, char* pass, char* db, int version, char* auth_token, char* retention_policy);
 
 std::chrono::system_clock::time_point parseTimeStamp(const std::string& value);
 
@@ -49,7 +50,7 @@ std::chrono::system_clock::time_point parseTimeStamp(const std::string& value);
  *      Returns information of table if success
  */
 extern "C" struct InfluxDBSchemaInfo_return
-InfluxDBSchemaInfo(char* addr, int port, char* user, char* pass, char* db)
+InfluxDBSchemaInfo(char* addr, int port, char* user, char* pass, char* db, int version, char* auth_token, char* retention_policy)
 {
     struct InfluxDBSchemaInfo_return res;
     std::string     query;
@@ -59,9 +60,7 @@ InfluxDBSchemaInfo(char* addr, int port, char* user, char* pass, char* db)
 
     try
     {
-        auto influx = influxdb::InfluxDBFactory::GetV1(std::string(addr), port, std::string(db), std::string(user), std::string(pass));
-        if (!influx)
-            elog(ERROR, "Fail to create influxDB client");
+        auto influx = create_influxDB_client(addr, port, user, pass, db, version, auth_token, retention_policy);
 
         query = "SHOW MEASUREMENTS ON " + std::string(db);
 
@@ -288,14 +287,13 @@ InfluxDBSeries_to_InfluxDBResult(std::vector<influxdb::InfluxDBSeries> series)
  *      execute single InfluxQL query
  */
 extern "C" struct InfluxDBQuery_return
-InfluxDBQuery(char* cquery, char* addr, int port, char* username, char* password, char* db, InfluxDBType* ctypes, InfluxDBValue* cvalues, int cparamNum)
+InfluxDBQuery(char* cquery, char* addr, int port, char* username, char* password, char* db, int version, char* auth_token, char* retention_policy, InfluxDBType* ctypes, InfluxDBValue* cvalues, int cparamNum)
 {
     InfluxDBQuery_return *res = (InfluxDBQuery_return *) palloc0(sizeof(InfluxDBQuery_return));
-    auto influx = influxdb::InfluxDBFactory::GetV1(std::string(addr), port, std::string(db), std::string(username), std::string(password));
-    auto params = bindParameter(ctypes, cvalues, cparamNum);
 
-    if (!influx)
-        elog(ERROR, "Fail to create influxDB client");
+    auto influx = create_influxDB_client(addr, port, username, password, db, version, auth_token, retention_policy);
+
+    auto params = bindParameter(ctypes, cvalues, cparamNum);
 
     try
     {
@@ -397,15 +395,12 @@ makeRecord(influxdb::Point& record, struct InfluxDBColumnInfo* pColInfo, InfluxD
  *      Insert record to influxdb
  */
 extern "C" char *
-InfluxDBInsert(char* addr, int port, char* user, char* pass, char* db, char* tablename, struct InfluxDBColumnInfo* ccolumns, InfluxDBType* ctypes, InfluxDBValue* cvalues, int cparamNum, int cnumSlots)
+InfluxDBInsert(char* addr, int port, char* user, char* pass, char* db, char* tablename, int version, char* auth_token, char* retention_policy, struct InfluxDBColumnInfo* ccolumns, InfluxDBType* ctypes, InfluxDBValue* cvalues, int cparamNum, int cnumSlots)
 {
     char* retMsg = NULL;
 
     /* Create a new HTTPClient */
-    auto influxdb = influxdb::InfluxDBFactory::GetV1(std::string(addr), port, std::string(db), std::string(user), std::string(pass));
-
-    if (!influxdb)
-        elog(ERROR, "Fail to create influxDB client");
+    auto influxdb = create_influxDB_client(addr, port, user, pass, db, version, auth_token, retention_policy);
 
     try
     {
@@ -476,4 +471,58 @@ std::chrono::system_clock::time_point parseTimeStamp(const std::string& value)
     }
 
     throw std::runtime_error("Unsupported timestamp format: " + value);
+}
+
+/* Provides InfluxDB client which can connect to InfluxDB server */
+static std::unique_ptr<influxdb::InfluxDB>
+create_influxDB_client(char* addr, int port, char* user, char* pass, char* db, int version, char* auth_token, char* retention_policy)
+{
+    auto influx = [&]() -> std::unique_ptr<influxdb::InfluxDB>
+        {
+            if (version == INFLUXDB_VERSION_2)
+                return influxdb::InfluxDBFactory::GetV2(std::string(addr), port, std::string(db), std::string(auth_token), std::string(retention_policy));
+            else
+                return influxdb::InfluxDBFactory::GetV1(std::string(addr), port, std::string(db), std::string(user), std::string(pass));
+        }();
+
+    if (!influx)
+            elog(ERROR, "Fail to create influxDB client");
+
+    return influx;
+}
+
+/* If version not set, check to which version can be connected  */
+extern "C" int
+check_connected_influxdb_version(char* addr, int port, char* user, char* pass, char* db, char* auth_token, char* retention_policy)
+{
+    std::unique_ptr<influxdb::InfluxDB> influx;
+    std::string                         query;
+
+    query = "SHOW MEASUREMENTS ON " + std::string(db);
+
+    influx = influxdb::InfluxDBFactory::GetV2(std::string(addr), port, std::string(db), std::string(auth_token), std::string(retention_policy));
+
+    try
+    {
+        auto measurements = influx->query(query);
+        return INFLUXDB_VERSION_2;
+    }
+    catch(const std::exception& e)
+    {
+        /* do nothing */
+    }
+
+    influx = influxdb::InfluxDBFactory::GetV1(std::string(addr), port, std::string(db), std::string(user), std::string(pass));
+
+    try
+    {
+        auto measurements = influx->query(query);
+        return INFLUXDB_VERSION_1;
+    }
+    catch(const std::exception& e)
+    {
+        elog(ERROR, "Could not connect to InfluxDB.");
+    }
+
+    elog(ERROR, "Could not connect to InfluxDB.");
 }

@@ -1,0 +1,3 @@
+# DDL
+# DROP DATABASE postdb
+# CREATE DATABASE postdb

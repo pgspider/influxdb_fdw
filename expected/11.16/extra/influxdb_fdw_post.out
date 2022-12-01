@@ -8,16 +8,16 @@ CREATE EXTENSION influxdb_fdw;
 CREATE SERVER testserver1 FOREIGN DATA WRAPPER influxdb_fdw;
 --Testcase 3:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw
-    OPTIONS (dbname 'postdb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
+    OPTIONS (dbname 'postdb', :SERVER);
 --Testcase 4:
 CREATE SERVER influxdb_svr2 FOREIGN DATA WRAPPER influxdb_fdw
-    OPTIONS (dbname 'postdb', host :INFLUXDB_HOST, port :INFLUXDB_PORT);
+    OPTIONS (dbname 'postdb', :SERVER);
 --Testcase 5:
 CREATE USER MAPPING FOR public SERVER testserver1 OPTIONS (user 'value', password 'value');
 --Testcase 6:
-CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (:AUTHENTICATION);
 --Testcase 7:
-CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr2 OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr2 OPTIONS (:AUTHENTICATION);
 -- ===================================================================
 -- create objects used through FDW influxdb server
 -- ===================================================================
@@ -3044,7 +3044,7 @@ DROP FOREIGN TABLE local_tbl;
 --Testcase 183:
 CREATE ROLE regress_view_owner SUPERUSER;
 --Testcase 184:
-CREATE USER MAPPING FOR regress_view_owner SERVER influxdb_svr OPTIONS (user :INFLUXDB_USER, password :INFLUXDB_PASS);
+CREATE USER MAPPING FOR regress_view_owner SERVER influxdb_svr OPTIONS (:AUTHENTICATION);
 GRANT SELECT ON ft4 TO regress_view_owner;
 GRANT SELECT ON ft5 TO regress_view_owner;
 --Testcase 185:

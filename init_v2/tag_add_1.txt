@@ -1,0 +1,12 @@
+# DML
+# CONTEXT-DATABASE: schemalessdb
+
+sctbl4,sid=id1 sig1=12120i,sig2="aoaowejf",sig3=4098219035,sig4=true 5235
+sctbl4,sid=id2 sig1=2120i,sig2="BAEFOAWJ#AWEK",sig3=1023108589,sig4=false 525245
+sctbl4,sid=id3 sig1=-230i,sig2="C)@maEFJAe=3kake",sig3=0,sig4=false 43546
+sctbl4,sid=id4 sig1=-340i,sig2="装置開発機能仕",sig3=9384972,sig4=true 52566
+sctbl4,sid=id1 sig1=1250i,sig2="システムGUIソフトウエア",sig3=-10000,sig4=false 8578
+sctbl4,sid=id3 sig1=9260i,sig2="インターフェース設計検討資料",sig3=-24,sig4=false 986
+sctbl4,sid=id2 sig1=370i,sig2="g029012",sig3=109489057,sig4=true 99
+sctbl4,sid=id4 sig1=480i,sig2="+!2-3-12030_!@#!)~_#@%)",sig3=9826357635,sig4=false 12431
+sctbl4,sid=id1 sig1=190i,sig2="012002'akewo02",sig3=3452697758,sig4=false 2425
