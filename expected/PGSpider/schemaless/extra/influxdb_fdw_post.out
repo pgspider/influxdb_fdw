@@ -1381,6 +1381,29 @@ SELECT * FROM ft1 WHERE CASE (tags->>'c3')::text COLLATE "C" WHEN (fields->>'c6'
    InfluxDB query: SELECT * FROM "T1"
 (4 rows)
 
+-- This test case drop configuration when execute non-schemaless before
+DROP TEXT SEARCH CONFIGURATION IF EXISTS public.custom_search;
+-- check schema-qualification of regconfig constant
+CREATE TEXT SEARCH CONFIGURATION public.custom_search
+  (COPY = pg_catalog.english);
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT (fields->>'C 1')::int c1, to_tsvector('custom_search'::regconfig, tags->>'c3') FROM ft1
+WHERE (fields->>'C 1')::int = 642 AND length(to_tsvector('custom_search'::regconfig, tags->>'c3')) > 0;
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.ft1
+   Output: ((fields ->> 'C 1'::text))::integer, to_tsvector('custom_search'::regconfig, (tags ->> 'c3'::text))
+   Filter: (length(to_tsvector('custom_search'::regconfig, (ft1.tags ->> 'c3'::text))) > 0)
+   InfluxDB query: SELECT "C 1", "c3" FROM "T1" WHERE (("C 1" = 642))
+(4 rows)
+
+SELECT (fields->>'C 1')::int c1, to_tsvector('custom_search'::regconfig, tags->>'c3') FROM ft1
+WHERE (fields->>'C 1')::int = 642 AND length(to_tsvector('custom_search'::regconfig, tags->>'c3')) > 0;
+ c1  | to_tsvector 
+-----+-------------
+ 642 | '00642':1
+(1 row)
+
 -- ===================================================================
 -- JOIN queries
 -- ===================================================================
@@ -2728,25 +2751,26 @@ SELECT (t1.fields->>'C 1')::int c1 FROM ft1 t1 WHERE EXISTS (SELECT 1 FROM ft2 t
 --Testcase 177:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT (t1.fields->>'C 1')::int c1 FROM ft1 t1 WHERE NOT EXISTS (SELECT 1 FROM ft2 t2 WHERE (t1.fields->>'C 1')::int = (t2.fields->>'c2')::int) ORDER BY (t1.fields->>'C 1')::int OFFSET 100 LIMIT 10;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
  Limit
    Output: (((t1.fields ->> 'C 1'::text))::integer)
-   ->  Sort
+   ->  Merge Anti Join
          Output: (((t1.fields ->> 'C 1'::text))::integer)
-         Sort Key: (((t1.fields ->> 'C 1'::text))::integer)
-         ->  Hash Anti Join
-               Output: ((t1.fields ->> 'C 1'::text))::integer
-               Hash Cond: (((t1.fields ->> 'C 1'::text))::integer = ((t2.fields ->> 'c2'::text))::integer)
+         Merge Cond: ((((t1.fields ->> 'C 1'::text))::integer) = (((t2.fields ->> 'c2'::text))::integer))
+         ->  Sort
+               Output: t1.fields, (((t1.fields ->> 'C 1'::text))::integer)
+               Sort Key: (((t1.fields ->> 'C 1'::text))::integer)
                ->  Foreign Scan on public.ft1 t1
-                     Output: t1.fields
+                     Output: t1.fields, ((t1.fields ->> 'C 1'::text))::integer
                      InfluxDB query: SELECT * FROM "T1"
-               ->  Hash
-                     Output: t2.fields
-                     ->  Foreign Scan on public.ft2 t2
-                           Output: t2.fields
-                           InfluxDB query: SELECT * FROM "T1"
-(16 rows)
+         ->  Sort
+               Output: t2.fields, (((t2.fields ->> 'c2'::text))::integer)
+               Sort Key: (((t2.fields ->> 'c2'::text))::integer)
+               ->  Foreign Scan on public.ft2 t2
+                     Output: t2.fields, ((t2.fields ->> 'c2'::text))::integer
+                     InfluxDB query: SELECT * FROM "T1"
+(17 rows)
 
 --Testcase 178:
 SELECT (t1.fields->>'C 1')::int c1 FROM ft1 t1 WHERE NOT EXISTS (SELECT 1 FROM ft2 t2 WHERE (t1.fields->>'C 1')::int = (t2.fields->>'c2')::int) ORDER BY (t1.fields->>'C 1')::int OFFSET 100 LIMIT 10;
@@ -3276,6 +3300,77 @@ SELECT * FROM ft1, ft2, ft4, ft5, local_tbl WHERE (ft1.fields->>'C 1')::int = (f
 RESET enable_nestloop;
 --Testcase 206:
 RESET enable_hashjoin;
+-- test that add_paths_with_pathkeys_for_rel() arranges for the epq_path to
+-- return columns needed by the parent ForeignScan node
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM local_tbl LEFT JOIN (SELECT ft1.*, COALESCE(ft1.tags->>'c3' || (ft2.tags->>'c3')::text, 'foobar') FROM ft1 INNER JOIN ft2 ON (ft1.fields->>'C 1' = ft2.fields->>'C 1' AND (ft1.fields->>'C 1')::int < 100)) ss ON (local_tbl.fields->>'c1' = ss.fields->>'C 1') ORDER BY local_tbl.fields->>'c1' FOR UPDATE OF local_tbl;
+                                                                                                        QUERY PLAN                                                                                                        
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ LockRows
+   Output: local_tbl.fields, ft1."time", ft1.tags, ft1.fields, (COALESCE(((ft1.tags ->> 'c3'::text) || (ft2.tags ->> 'c3'::text)), 'foobar'::text)), ((local_tbl.fields ->> 'c1'::text)), local_tbl.*, ft1.*, ft2.*
+   ->  Merge Left Join
+         Output: local_tbl.fields, ft1."time", ft1.tags, ft1.fields, (COALESCE(((ft1.tags ->> 'c3'::text) || (ft2.tags ->> 'c3'::text)), 'foobar'::text)), ((local_tbl.fields ->> 'c1'::text)), local_tbl.*, ft1.*, ft2.*
+         Merge Cond: (((local_tbl.fields ->> 'c1'::text)) = ((ft1.fields ->> 'C 1'::text)))
+         ->  Sort
+               Output: local_tbl.fields, local_tbl.*, ((local_tbl.fields ->> 'c1'::text))
+               Sort Key: ((local_tbl.fields ->> 'c1'::text))
+               ->  Foreign Scan on public.local_tbl
+                     Output: local_tbl.fields, local_tbl.*, (local_tbl.fields ->> 'c1'::text)
+                     InfluxDB query: SELECT * FROM "local_tbl"
+         ->  Sort
+               Output: ft1."time", ft1.tags, ft1.fields, ft1.*, ft2.*, (COALESCE(((ft1.tags ->> 'c3'::text) || (ft2.tags ->> 'c3'::text)), 'foobar'::text)), ((ft1.fields ->> 'C 1'::text))
+               Sort Key: ((ft1.fields ->> 'C 1'::text))
+               ->  Hash Join
+                     Output: ft1."time", ft1.tags, ft1.fields, ft1.*, ft2.*, COALESCE(((ft1.tags ->> 'c3'::text) || (ft2.tags ->> 'c3'::text)), 'foobar'::text), (ft1.fields ->> 'C 1'::text)
+                     Hash Cond: ((ft2.fields ->> 'C 1'::text) = (ft1.fields ->> 'C 1'::text))
+                     ->  Foreign Scan on public.ft2
+                           Output: ft2.*, ft2.fields, ft2.tags
+                           InfluxDB query: SELECT * FROM "T1"
+                     ->  Hash
+                           Output: ft1."time", ft1.tags, ft1.fields, ft1.*
+                           ->  Foreign Scan on public.ft1
+                                 Output: ft1."time", ft1.tags, ft1.fields, ft1.*
+                                 InfluxDB query: SELECT * FROM "T1" WHERE (("C 1" < 100))
+(25 rows)
+
+-- ALTER SERVER loopback OPTIONS (DROP extensions);
+-- ALTER SERVER loopback OPTIONS (ADD fdw_startup_cost '10000.0');
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM local_tbl LEFT JOIN (SELECT ft1.* FROM ft1 INNER JOIN ft2 ON ((ft1.fields->>'C 1')::int = (ft2.fields->>'C 1')::int AND (ft1.fields->>'C 1')::int < 100 AND (ft1.fields->>'C 1')::int = influxdb_fdw_abs((ft2.fields->>'C 1')::int))) ss ON (local_tbl.fields->>'c3' = ss.tags->>'c3') ORDER BY local_tbl.fields->>'c1' FOR UPDATE OF local_tbl;
+                                                                                                                  QUERY PLAN                                                                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ LockRows
+   Output: local_tbl.fields, ft1."time", ft1.tags, ft1.fields, ((local_tbl.fields ->> 'c1'::text)), local_tbl.*, ft1.*, ft2.*
+   ->  Sort
+         Output: local_tbl.fields, ft1."time", ft1.tags, ft1.fields, ((local_tbl.fields ->> 'c1'::text)), local_tbl.*, ft1.*, ft2.*
+         Sort Key: ((local_tbl.fields ->> 'c1'::text))
+         ->  Hash Left Join
+               Output: local_tbl.fields, ft1."time", ft1.tags, ft1.fields, (local_tbl.fields ->> 'c1'::text), local_tbl.*, ft1.*, ft2.*
+               Hash Cond: ((local_tbl.fields ->> 'c3'::text) = (ft1.tags ->> 'c3'::text))
+               ->  Foreign Scan on public.local_tbl
+                     Output: local_tbl.fields, local_tbl.*
+                     InfluxDB query: SELECT * FROM "local_tbl"
+               ->  Hash
+                     Output: ft1."time", ft1.tags, ft1.fields, ft1.*, ft2.*
+                     ->  Merge Join
+                           Output: ft1."time", ft1.tags, ft1.fields, ft1.*, ft2.*
+                           Merge Cond: (((((ft1.fields ->> 'C 1'::text))::integer) = (influxdb_fdw_abs(((ft2.fields ->> 'C 1'::text))::integer))) AND ((((ft1.fields ->> 'C 1'::text))::integer) = (((ft2.fields ->> 'C 1'::text))::integer)))
+                           ->  Sort
+                                 Output: ft1."time", ft1.tags, ft1.fields, ft1.*, (((ft1.fields ->> 'C 1'::text))::integer)
+                                 Sort Key: (((ft1.fields ->> 'C 1'::text))::integer)
+                                 ->  Foreign Scan on public.ft1
+                                       Output: ft1."time", ft1.tags, ft1.fields, ft1.*, ((ft1.fields ->> 'C 1'::text))::integer
+                                       InfluxDB query: SELECT * FROM "T1" WHERE (("C 1" < 100))
+                           ->  Sort
+                                 Output: ft2.*, ft2.fields, (influxdb_fdw_abs(((ft2.fields ->> 'C 1'::text))::integer)), (((ft2.fields ->> 'C 1'::text))::integer)
+                                 Sort Key: (influxdb_fdw_abs(((ft2.fields ->> 'C 1'::text))::integer)), (((ft2.fields ->> 'C 1'::text))::integer)
+                                 ->  Foreign Scan on public.ft2
+                                       Output: ft2.*, ft2.fields, influxdb_fdw_abs(((ft2.fields ->> 'C 1'::text))::integer), ((ft2.fields ->> 'C 1'::text))::integer
+                                       InfluxDB query: SELECT * FROM "T1"
+(28 rows)
+
+-- ALTER SERVER loopback OPTIONS (DROP fdw_startup_cost);
+-- ALTER SERVER loopback OPTIONS (ADD extensions 'postgres_fdw');
 --Testcase 207:
 DELETE FROM local_tbl_nsc;
 --Testcase 795:
@@ -4569,14 +4664,12 @@ select count(*), x.b from ft1, (select (fields->>'c2')::int a, sum((fields->>'C 
    ->  HashAggregate
          Output: count(*), x.b
          Group Key: x.b
-         ->  Hash Join
+         ->  Merge Join
                Output: x.b
-               Hash Cond: (((ft1.fields ->> 'c2'::text))::integer = x.a)
-               ->  Foreign Scan on public.ft1
-                     Output: ft1.fields
-                     InfluxDB query: SELECT * FROM "T1"
-               ->  Hash
+               Merge Cond: (x.a = (((ft1.fields ->> 'c2'::text))::integer))
+               ->  Sort
                      Output: x.b, x.a
+                     Sort Key: x.a
                      ->  Subquery Scan on x
                            Output: x.b, x.a
                            ->  HashAggregate
@@ -4585,7 +4678,13 @@ select count(*), x.b from ft1, (select (fields->>'c2')::int a, sum((fields->>'C 
                                  ->  Foreign Scan on public.ft1 ft1_1
                                        Output: (ft1_1.fields ->> 'c2'::text), ft1_1.fields
                                        InfluxDB query: SELECT * FROM "T1"
-(22 rows)
+               ->  Sort
+                     Output: ft1.fields, (((ft1.fields ->> 'c2'::text))::integer)
+                     Sort Key: (((ft1.fields ->> 'c2'::text))::integer)
+                     ->  Foreign Scan on public.ft1
+                           Output: ft1.fields, ((ft1.fields ->> 'c2'::text))::integer
+                           InfluxDB query: SELECT * FROM "T1"
+(26 rows)
 
 --Testcase 322:
 select count(*), x.b from ft1, (select (fields->>'c2')::int a, sum((fields->>'C 1')::int) b from ft1 group by fields->>'c2') x where (ft1.fields->>'c2')::int = x.a group by x.b order by 1, 2;
@@ -7350,6 +7449,25 @@ SELECT * FROM foreign_tbl;
 --UPDATE rw_view SET b = b + 15;
 --UPDATE rw_view SET b = b + 15; -- ok
 --SELECT * FROM foreign_tbl;
+-- We don't allow batch insert when there are any WCO constraints
+ALTER SERVER influxdb_svr OPTIONS (ADD batch_size '10');
+EXPLAIN (VERBOSE, COSTS OFF)
+INSERT INTO rw_view VALUES (0, 15), (0, 5);
+ERROR:  INSERT has more expressions than target columns
+LINE 2: INSERT INTO rw_view VALUES (0, 15), (0, 5);
+                                       ^
+INSERT INTO rw_view VALUES (0, 15), (0, 5); -- should fail
+ERROR:  INSERT has more expressions than target columns
+LINE 1: INSERT INTO rw_view VALUES (0, 15), (0, 5);
+                                       ^
+SELECT * FROM foreign_tbl;
+         fields         
+------------------------
+ {"a": "10", "b": "5"}
+ {"a": "10", "b": "15"}
+(2 rows)
+
+ALTER SERVER influxdb_svr OPTIONS (DROP batch_size);
 --Testcase 506:
 DELETE FROM foreign_tbl;
 --Testcase 799:
@@ -7438,6 +7556,25 @@ SELECT * FROM foreign_tbl;
 --UPDATE rw_view SET b = b + 15;
 --UPDATE rw_view SET b = b + 15; -- ok
 --SELECT * FROM foreign_tbl;
+-- We don't allow batch insert when there are any WCO constraints
+ALTER SERVER influxdb_svr OPTIONS (ADD batch_size '10');
+EXPLAIN (VERBOSE, COSTS OFF)
+INSERT INTO rw_view VALUES (0, 15), (0, 5);
+                       QUERY PLAN                       
+--------------------------------------------------------
+ Insert on public.parent_tbl
+   ->  Values Scan on "*VALUES*"
+         Output: "*VALUES*".column1, "*VALUES*".column2
+(3 rows)
+
+INSERT INTO rw_view VALUES (0, 15), (0, 5); -- should fail
+ERROR:  Not support partition insert
+SELECT * FROM foreign_tbl;
+ fields 
+--------
+(0 rows)
+
+ALTER SERVER influxdb_svr OPTIONS (DROP batch_size);
 --Testcase 521:
 DROP FOREIGN TABLE foreign_tbl CASCADE;
 --Testcase 522:

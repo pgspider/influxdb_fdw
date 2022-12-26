@@ -552,6 +552,17 @@ SELECT * FROM ft1 WHERE CASE (tags->>'c3')::text WHEN (fields->>'c6')::text THEN
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT * FROM ft1 WHERE CASE (tags->>'c3')::text COLLATE "C" WHEN (fields->>'c6')::text THEN true ELSE (tags->>'c3')::text < 'bar' END;
 
+-- This test case drop configuration when execute non-schemaless before
+DROP TEXT SEARCH CONFIGURATION IF EXISTS public.custom_search;
+-- check schema-qualification of regconfig constant
+CREATE TEXT SEARCH CONFIGURATION public.custom_search
+  (COPY = pg_catalog.english);
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT (fields->>'C 1')::int c1, to_tsvector('custom_search'::regconfig, tags->>'c3') FROM ft1
+WHERE (fields->>'C 1')::int = 642 AND length(to_tsvector('custom_search'::regconfig, tags->>'c3')) > 0;
+SELECT (fields->>'C 1')::int c1, to_tsvector('custom_search'::regconfig, tags->>'c3') FROM ft1
+WHERE (fields->>'C 1')::int = 642 AND length(to_tsvector('custom_search'::regconfig, tags->>'c3')) > 0;
+
 -- ===================================================================
 -- JOIN queries
 -- ===================================================================
@@ -855,6 +866,19 @@ SELECT * FROM ft1, ft2, ft4, ft5, local_tbl WHERE (ft1.fields->>'C 1')::int = (f
 RESET enable_nestloop;
 --Testcase 206:
 RESET enable_hashjoin;
+
+-- test that add_paths_with_pathkeys_for_rel() arranges for the epq_path to
+-- return columns needed by the parent ForeignScan node
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM local_tbl LEFT JOIN (SELECT ft1.*, COALESCE(ft1.tags->>'c3' || (ft2.tags->>'c3')::text, 'foobar') FROM ft1 INNER JOIN ft2 ON (ft1.fields->>'C 1' = ft2.fields->>'C 1' AND (ft1.fields->>'C 1')::int < 100)) ss ON (local_tbl.fields->>'c1' = ss.fields->>'C 1') ORDER BY local_tbl.fields->>'c1' FOR UPDATE OF local_tbl;
+
+-- ALTER SERVER loopback OPTIONS (DROP extensions);
+-- ALTER SERVER loopback OPTIONS (ADD fdw_startup_cost '10000.0');
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM local_tbl LEFT JOIN (SELECT ft1.* FROM ft1 INNER JOIN ft2 ON ((ft1.fields->>'C 1')::int = (ft2.fields->>'C 1')::int AND (ft1.fields->>'C 1')::int < 100 AND (ft1.fields->>'C 1')::int = influxdb_fdw_abs((ft2.fields->>'C 1')::int))) ss ON (local_tbl.fields->>'c3' = ss.tags->>'c3') ORDER BY local_tbl.fields->>'c1' FOR UPDATE OF local_tbl;
+-- ALTER SERVER loopback OPTIONS (DROP fdw_startup_cost);
+-- ALTER SERVER loopback OPTIONS (ADD extensions 'postgres_fdw');
+
 --Testcase 207:
 DELETE FROM local_tbl_nsc;
 --Testcase 795:
@@ -2018,6 +2042,14 @@ SELECT * FROM foreign_tbl;
 --UPDATE rw_view SET b = b + 15; -- ok
 --SELECT * FROM foreign_tbl;
 
+-- We don't allow batch insert when there are any WCO constraints
+ALTER SERVER influxdb_svr OPTIONS (ADD batch_size '10');
+EXPLAIN (VERBOSE, COSTS OFF)
+INSERT INTO rw_view VALUES (0, 15), (0, 5);
+INSERT INTO rw_view VALUES (0, 15), (0, 5); -- should fail
+SELECT * FROM foreign_tbl;
+ALTER SERVER influxdb_svr OPTIONS (DROP batch_size);
+
 --Testcase 506:
 DELETE FROM foreign_tbl;
 --Testcase 799:
@@ -2076,6 +2108,14 @@ SELECT * FROM foreign_tbl;
 --UPDATE rw_view SET b = b + 15;
 --UPDATE rw_view SET b = b + 15; -- ok
 --SELECT * FROM foreign_tbl;
+
+-- We don't allow batch insert when there are any WCO constraints
+ALTER SERVER influxdb_svr OPTIONS (ADD batch_size '10');
+EXPLAIN (VERBOSE, COSTS OFF)
+INSERT INTO rw_view VALUES (0, 15), (0, 5);
+INSERT INTO rw_view VALUES (0, 15), (0, 5); -- should fail
+SELECT * FROM foreign_tbl;
+ALTER SERVER influxdb_svr OPTIONS (DROP batch_size);
 
 --Testcase 521:
 DROP FOREIGN TABLE foreign_tbl CASCADE;

@@ -2100,8 +2100,9 @@ influxdbGetForeignModifyBatchSize(ResultRelInfo *resultRelInfo)
 		batch_size = influxdb_get_batch_size_option(resultRelInfo->ri_RelationDesc);
 
 	/*
-	 * Disable batching when we have to use RETURNING or there are any
-	 * BEFORE/AFTER ROW INSERT triggers on the foreign table.
+	 * Disable batching when we have to use RETURNING, there are any
+	 * BEFORE/AFTER ROW INSERT triggers on the foreign table, or there are any
+	 * WITH CHECK OPTION constraints from parent views.
 	 *
 	 * When there are any BEFORE ROW INSERT triggers on the table, we can't
 	 * support it, because such triggers might query the table we're inserting
@@ -2110,6 +2111,7 @@ influxdbGetForeignModifyBatchSize(ResultRelInfo *resultRelInfo)
 	 */
 
 	if (resultRelInfo->ri_projectReturning != NULL ||
+		resultRelInfo->ri_WithCheckOptions != NIL ||
 		(resultRelInfo->ri_TrigDesc &&
 #if (PG_VERSION_NUM >= 150000)
 		 (resultRelInfo->ri_TrigDesc->trig_insert_before_row ||
@@ -3693,6 +3695,14 @@ influxdb_set_transmission_modes(void)
 		(void) set_config_option("extra_float_digits", "3",
 								 PGC_USERSET, PGC_S_SESSION,
 								 GUC_ACTION_SAVE, true, 0, false);
+
+	/*
+	 * In addition force restrictive search_path, in case there are any
+	 * regproc or similar constants to be printed.
+	 */
+	(void) set_config_option("search_path", "pg_catalog",
+							 PGC_USERSET, PGC_S_SESSION,
+							 GUC_ACTION_SAVE, true, 0, false);
 
 	return nestlevel;
 }

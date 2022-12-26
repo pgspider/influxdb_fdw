@@ -733,7 +733,7 @@ EXPLAIN VERBOSE
 SELECT (fields->>'value1')::float value1, abs(1-(fields->>'value1')::float) FROM s3 order by abs(1-(fields->>'value1')::float);
                                                                      QUERY PLAN                                                                      
 -----------------------------------------------------------------------------------------------------------------------------------------------------
- Sort  (cost=1583.67..1587.32 rows=1462 width=16)
+ Sort  (cost=1568.10..1571.75 rows=1462 width=16)
    Output: (((fields ->> 'value1'::text))::double precision), (abs(('1'::double precision - ((fields ->> 'value1'::text))::double precision)))
    Sort Key: (abs(('1'::double precision - ((s3.fields ->> 'value1'::text))::double precision)))
    ->  Foreign Scan  (cost=10.00..1491.24 rows=1462 width=16)
@@ -1110,9 +1110,9 @@ EXPLAIN VERBOSE
 SELECT abs((fields->>'value1')::float), abs((fields->>'value3')::float), sqrt((fields->>'value2')::bigint) FROM s3 ORDER BY abs((fields->>'value3')::float) LIMIT 1;
                                                                                                QUERY PLAN                                                                                                
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit  (cost=1546.07..1546.07 rows=1 width=24)
+ Limit  (cost=1516.83..1516.83 rows=1 width=24)
    Output: (abs(((fields ->> 'value1'::text))::double precision)), (abs(((fields ->> 'value3'::text))::double precision)), (sqrt((((fields ->> 'value2'::text))::bigint)::double precision))
-   ->  Sort  (cost=1546.07..1549.72 rows=1462 width=24)
+   ->  Sort  (cost=1516.83..1520.48 rows=1462 width=24)
          Output: (abs(((fields ->> 'value1'::text))::double precision)), (abs(((fields ->> 'value3'::text))::double precision)), (sqrt((((fields ->> 'value2'::text))::bigint)::double precision))
          Sort Key: (abs(((s3.fields ->> 'value3'::text))::double precision))
          ->  Foreign Scan  (cost=10.00..1509.52 rows=1462 width=24)
@@ -1158,7 +1158,7 @@ EXPLAIN VERBOSE
 SELECT sqrt(abs((fields->>'value3')::float)),min((fields->>'value1')::float) FROM s3 GROUP BY fields->>'value3' HAVING sqrt(abs((fields->>'value3')::float)) > 0 ORDER BY 1,2;
                                                                             QUERY PLAN                                                                             
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Sort  (cost=512.42..512.90 rows=190 width=48)
+ Sort  (cost=506.25..506.72 rows=190 width=48)
    Output: (sqrt(abs((((fields ->> 'value3'::text)))::double precision))), (min(((fields ->> 'value1'::text))::double precision)), ((fields ->> 'value3'::text))
    Sort Key: (sqrt(abs((((s3.fields ->> 'value3'::text)))::double precision))), (min(((s3.fields ->> 'value1'::text))::double precision))
    ->  HashAggregate  (cost=494.30..499.05 rows=190 width=48)
@@ -6610,7 +6610,7 @@ EXPLAIN VERBOSE
 SELECT (fields->>'value1')::float value1, acos(1-(fields->>'value1')::float) FROM s3 WHERE (fields->>'value2')::bigint != 200 ORDER BY acos(1-(fields->>'value1')::float);
                                                                       QUERY PLAN                                                                      
 ------------------------------------------------------------------------------------------------------------------------------------------------------
- Sort  (cost=1576.08..1579.72 rows=1455 width=16)
+ Sort  (cost=1560.54..1564.17 rows=1455 width=16)
    Output: (((fields ->> 'value1'::text))::double precision), (acos(('1'::double precision - ((fields ->> 'value1'::text))::double precision)))
    Sort Key: (acos(('1'::double precision - ((s3.fields ->> 'value1'::text))::double precision)))
    ->  Foreign Scan  (cost=10.00..1484.10 rows=1455 width=16)
@@ -6866,7 +6866,7 @@ EXPLAIN VERBOSE
 SELECT (fields->>'value1')::float value1, asin(1-(fields->>'value1')::float) FROM s3 WHERE (fields->>'value2')::bigint != 200 ORDER BY asin(1-(fields->>'value1')::float);
                                                                       QUERY PLAN                                                                      
 ------------------------------------------------------------------------------------------------------------------------------------------------------
- Sort  (cost=1576.08..1579.72 rows=1455 width=16)
+ Sort  (cost=1560.54..1564.17 rows=1455 width=16)
    Output: (((fields ->> 'value1'::text))::double precision), (asin(('1'::double precision - ((fields ->> 'value1'::text))::double precision)))
    Sort Key: (asin(('1'::double precision - ((s3.fields ->> 'value1'::text))::double precision)))
    ->  Foreign Scan  (cost=10.00..1484.10 rows=1455 width=16)
@@ -7125,7 +7125,7 @@ EXPLAIN VERBOSE
 SELECT (fields->>'value1')::float value1, atan(1-(fields->>'value1')::float) FROM s3 order by atan(1-(fields->>'value1')::float);
                                                                       QUERY PLAN                                                                      
 ------------------------------------------------------------------------------------------------------------------------------------------------------
- Sort  (cost=1583.67..1587.32 rows=1462 width=16)
+ Sort  (cost=1568.10..1571.75 rows=1462 width=16)
    Output: (((fields ->> 'value1'::text))::double precision), (atan(('1'::double precision - ((fields ->> 'value1'::text))::double precision)))
    Sort Key: (atan(('1'::double precision - ((s3.fields ->> 'value1'::text))::double precision)))
    ->  Foreign Scan  (cost=10.00..1491.24 rows=1462 width=16)
@@ -7389,7 +7389,7 @@ EXPLAIN VERBOSE
 SELECT (fields->>'value1')::float value1, atan2(1-(fields->>'value1')::float, 1-(fields->>'value2')::bigint) FROM s3 order by atan2(1-(fields->>'value1')::float, 1-(fields->>'value2')::bigint);
                                                                                                        QUERY PLAN                                                                                                       
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Sort  (cost=1601.94..1605.60 rows=1462 width=16)
+ Sort  (cost=1586.37..1590.03 rows=1462 width=16)
    Output: (((fields ->> 'value1'::text))::double precision), (atan2(('1'::double precision - ((fields ->> 'value1'::text))::double precision), ((1 - ((fields ->> 'value2'::text))::bigint))::double precision))
    Sort Key: (atan2(('1'::double precision - ((s3.fields ->> 'value1'::text))::double precision), ((1 - ((s3.fields ->> 'value2'::text))::bigint))::double precision))
    ->  Foreign Scan  (cost=10.00..1509.52 rows=1462 width=16)
@@ -7613,7 +7613,7 @@ EXPLAIN VERBOSE
 SELECT (fields->>'value1')::float value1, ceil(1-(fields->>'value1')::float) FROM s3 order by ceil(1-(fields->>'value1')::float);
                                                                       QUERY PLAN                                                                      
 ------------------------------------------------------------------------------------------------------------------------------------------------------
- Sort  (cost=1583.67..1587.32 rows=1462 width=16)
+ Sort  (cost=1568.10..1571.75 rows=1462 width=16)
    Output: (((fields ->> 'value1'::text))::double precision), (ceil(('1'::double precision - ((fields ->> 'value1'::text))::double precision)))
    Sort Key: (ceil(('1'::double precision - ((s3.fields ->> 'value1'::text))::double precision)))
    ->  Foreign Scan  (cost=10.00..1491.24 rows=1462 width=16)
@@ -7884,7 +7884,7 @@ EXPLAIN VERBOSE
 SELECT (fields->>'value1')::float value1, cos(1-(fields->>'value1')::float) FROM s3 order by cos(1-(fields->>'value1')::float);
                                                                      QUERY PLAN                                                                      
 -----------------------------------------------------------------------------------------------------------------------------------------------------
- Sort  (cost=1583.67..1587.32 rows=1462 width=16)
+ Sort  (cost=1568.10..1571.75 rows=1462 width=16)
    Output: (((fields ->> 'value1'::text))::double precision), (cos(('1'::double precision - ((fields ->> 'value1'::text))::double precision)))
    Sort Key: (cos(('1'::double precision - ((s3.fields ->> 'value1'::text))::double precision)))
    ->  Foreign Scan  (cost=10.00..1491.24 rows=1462 width=16)
@@ -8131,7 +8131,7 @@ EXPLAIN VERBOSE
 SELECT (fields->>'value1')::float value1, exp(1-(fields->>'value1')::float) FROM s3 order by exp(1-(fields->>'value1')::float);
                                                                      QUERY PLAN                                                                      
 -----------------------------------------------------------------------------------------------------------------------------------------------------
- Sort  (cost=1583.67..1587.32 rows=1462 width=16)
+ Sort  (cost=1568.10..1571.75 rows=1462 width=16)
    Output: (((fields ->> 'value1'::text))::double precision), (exp(('1'::double precision - ((fields ->> 'value1'::text))::double precision)))
    Sort Key: (exp(('1'::double precision - ((s3.fields ->> 'value1'::text))::double precision)))
    ->  Foreign Scan  (cost=10.00..1491.24 rows=1462 width=16)
@@ -8384,7 +8384,7 @@ EXPLAIN VERBOSE
 SELECT (fields->>'value1')::float value1, floor(1-(fields->>'value1')::float) FROM s3 order by floor(1-(fields->>'value1')::float);
                                                                       QUERY PLAN                                                                       
 -------------------------------------------------------------------------------------------------------------------------------------------------------
- Sort  (cost=1583.67..1587.32 rows=1462 width=16)
+ Sort  (cost=1568.10..1571.75 rows=1462 width=16)
    Output: (((fields ->> 'value1'::text))::double precision), (floor(('1'::double precision - ((fields ->> 'value1'::text))::double precision)))
    Sort Key: (floor(('1'::double precision - ((s3.fields ->> 'value1'::text))::double precision)))
    ->  Foreign Scan  (cost=10.00..1491.24 rows=1462 width=16)
@@ -8655,7 +8655,7 @@ EXPLAIN VERBOSE
 SELECT (fields->>'value1')::float value1, ln(1-(fields->>'value1')::float) FROM s3 order by ln(1-(fields->>'value1')::float);
                                                                      QUERY PLAN                                                                     
 ----------------------------------------------------------------------------------------------------------------------------------------------------
- Sort  (cost=1583.67..1587.32 rows=1462 width=16)
+ Sort  (cost=1568.10..1571.75 rows=1462 width=16)
    Output: (((fields ->> 'value1'::text))::double precision), (ln(('1'::double precision - ((fields ->> 'value1'::text))::double precision)))
    Sort Key: (ln(('1'::double precision - ((s3.fields ->> 'value1'::text))::double precision)))
    ->  Foreign Scan  (cost=10.00..1491.24 rows=1462 width=16)
@@ -8908,7 +8908,7 @@ EXPLAIN VERBOSE
 SELECT (fields->>'value1')::float value1, pow(1-(fields->>'value1')::float, 2) FROM s3 order by pow(1-(fields->>'value1')::float, 2);
                                                                                  QUERY PLAN                                                                                 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Sort  (cost=1583.67..1587.32 rows=1462 width=16)
+ Sort  (cost=1568.10..1571.75 rows=1462 width=16)
    Output: (((fields ->> 'value1'::text))::double precision), (pow(('1'::double precision - ((fields ->> 'value1'::text))::double precision), '2'::double precision))
    Sort Key: (pow(('1'::double precision - ((s3.fields ->> 'value1'::text))::double precision), '2'::double precision))
    ->  Foreign Scan  (cost=10.00..1491.24 rows=1462 width=16)
@@ -9179,7 +9179,7 @@ EXPLAIN VERBOSE
 SELECT (fields->>'value1')::float value1, round(1-(fields->>'value1')::float) FROM s3 order by round(1-(fields->>'value1')::float);
                                                                       QUERY PLAN                                                                       
 -------------------------------------------------------------------------------------------------------------------------------------------------------
- Sort  (cost=1583.67..1587.32 rows=1462 width=16)
+ Sort  (cost=1568.10..1571.75 rows=1462 width=16)
    Output: (((fields ->> 'value1'::text))::double precision), (round(('1'::double precision - ((fields ->> 'value1'::text))::double precision)))
    Sort Key: (round(('1'::double precision - ((s3.fields ->> 'value1'::text))::double precision)))
    ->  Foreign Scan  (cost=10.00..1491.24 rows=1462 width=16)
@@ -9450,7 +9450,7 @@ EXPLAIN VERBOSE
 SELECT (fields->>'value1')::float value1, sin(1-(fields->>'value1')::float) FROM s3 order by sin(1-(fields->>'value1')::float);
                                                                      QUERY PLAN                                                                      
 -----------------------------------------------------------------------------------------------------------------------------------------------------
- Sort  (cost=1583.67..1587.32 rows=1462 width=16)
+ Sort  (cost=1568.10..1571.75 rows=1462 width=16)
    Output: (((fields ->> 'value1'::text))::double precision), (sin(('1'::double precision - ((fields ->> 'value1'::text))::double precision)))
    Sort Key: (sin(('1'::double precision - ((s3.fields ->> 'value1'::text))::double precision)))
    ->  Foreign Scan  (cost=10.00..1491.24 rows=1462 width=16)
@@ -9697,7 +9697,7 @@ EXPLAIN VERBOSE
 SELECT (fields->>'value1')::float value1, tan(1-(fields->>'value1')::float) FROM s3 order by tan(1-(fields->>'value1')::float);
                                                                      QUERY PLAN                                                                      
 -----------------------------------------------------------------------------------------------------------------------------------------------------
- Sort  (cost=1583.67..1587.32 rows=1462 width=16)
+ Sort  (cost=1568.10..1571.75 rows=1462 width=16)
    Output: (((fields ->> 'value1'::text))::double precision), (tan(('1'::double precision - ((fields ->> 'value1'::text))::double precision)))
    Sort Key: (tan(('1'::double precision - ((s3.fields ->> 'value1'::text))::double precision)))
    ->  Foreign Scan  (cost=10.00..1491.24 rows=1462 width=16)
@@ -10073,7 +10073,7 @@ EXPLAIN VERBOSE
 SELECT sqrt(abs((fields->>'value1')::float)) FROM b3 WHERE (fields->>'value3')::boolean != true ORDER BY 1;
                                   QUERY PLAN                                  
 ------------------------------------------------------------------------------
- Sort  (cost=786.32..788.15 rows=731 width=8)
+ Sort  (cost=774.91..776.74 rows=731 width=8)
    Output: (sqrt(abs(((fields ->> 'value1'::text))::double precision)))
    Sort Key: (sqrt(abs(((b3.fields ->> 'value1'::text))::double precision)))
    ->  Foreign Scan  (cost=10.00..740.14 rows=731 width=8)
