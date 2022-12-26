@@ -2519,6 +2519,39 @@ ERROR:  column t1.x does not exist
 LINE 1: select t1.x from (select (fields->>'a')::int a, (fields->>'b...
                ^
 HINT:  Perhaps you meant to reference the column "t3.x".
+-- Test matching of locking clause with wrong alias
+select t1.*, t2.*, unnamed_join.* from
+  (select (fields->>'a')::int a, (fields->>'b')::int b from t1) t1 join (select (fields->>'a')::int a, (fields->>'b')::int b from t2) t2 on (t1.a::int = t2.a::int), t3 as unnamed_join
+  for update of unnamed_join;
+ a | b | a | b | fields | time 
+---+---+---+---+--------+------
+(0 rows)
+
+select foo.*, unnamed_join.* from
+  (select (fields->>'a')::int a, (fields->>'b')::int b from t1) t1 join (select (fields->>'a')::int a, (fields->>'b')::int b from t2) t2 using (a) as foo, t3 as unnamed_join
+  for update of unnamed_join;
+ a | fields | time 
+---+--------+------
+(0 rows)
+
+select foo.*, unnamed_join.* from
+  (select (fields->>'a')::int a, (fields->>'b')::int b from t1) t1 join (select (fields->>'a')::int a, (fields->>'b')::int b from t2) t2 using (a) as foo, t3 as unnamed_join
+  for update of foo;
+ERROR:  FOR UPDATE cannot be applied to a join
+LINE 3:   for update of foo;
+                        ^
+select bar.*, unnamed_join.* from
+  ((select (fields->>'a')::int a, (fields->>'b')::int b from t1) t1 join (select (fields->>'a')::int a, (fields->>'b')::int b from t2) t2 using (a) as foo) as bar, t3 as unnamed_join
+  for update of foo;
+ERROR:  relation "foo" in FOR UPDATE clause not found in FROM clause
+LINE 3:   for update of foo;
+                        ^
+select bar.*, unnamed_join.* from
+  ((select (fields->>'a')::int a, (fields->>'b')::int b from t1) t1 join (select (fields->>'a')::int a, (fields->>'b')::int b from t2) t2 using (a) as foo) as bar, t3 as unnamed_join
+  for update of bar;
+ERROR:  FOR UPDATE cannot be applied to a join
+LINE 3:   for update of bar;
+                        ^
 --
 -- regression test for 8.1 merge right join bug
 --
@@ -5044,15 +5077,18 @@ select d.* from (select (fields->>'a')::int a, (fields->>'b')::int b from d) d l
   on (d.a)::int = (s.id)::int;
                                                  QUERY PLAN                                                  
 -------------------------------------------------------------------------------------------------------------
- Hash Left Join
-   Hash Cond: (((d.fields ->> 'a'::text))::integer = s.id)
-   ->  Foreign Scan on d
-   ->  Hash
+ Merge Right Join
+   Merge Cond: (s.id = (((d.fields ->> 'a'::text))::integer))
+   ->  Sort
+         Sort Key: s.id
          ->  Subquery Scan on s
                ->  HashAggregate
                      Group Key: ((b.fields ->> 'id'::text))::integer, ((b.fields ->> 'c_id'::text))::integer
                      ->  Foreign Scan on b
-(8 rows)
+   ->  Sort
+         Sort Key: (((d.fields ->> 'a'::text))::integer)
+         ->  Foreign Scan on d
+(11 rows)
 
 -- similarly, but keying off a DISTINCT clause
 --Testcase 382:
@@ -5061,15 +5097,18 @@ select d.* from (select (fields->>'a')::int a, (fields->>'b')::int b from d) d l
   on (d.a)::int = (s.id)::int;
                                                  QUERY PLAN                                                  
 -------------------------------------------------------------------------------------------------------------
- Hash Left Join
-   Hash Cond: (((d.fields ->> 'a'::text))::integer = s.id)
-   ->  Foreign Scan on d
-   ->  Hash
+ Merge Right Join
+   Merge Cond: (s.id = (((d.fields ->> 'a'::text))::integer))
+   ->  Sort
+         Sort Key: s.id
          ->  Subquery Scan on s
                ->  HashAggregate
                      Group Key: ((b.fields ->> 'id'::text))::integer, ((b.fields ->> 'c_id'::text))::integer
                      ->  Foreign Scan on b
-(8 rows)
+   ->  Sort
+         Sort Key: (((d.fields ->> 'a'::text))::integer)
+         ->  Foreign Scan on d
+(11 rows)
 
 -- check join removal works when uniqueness of the join condition is enforced
 -- by a UNION
@@ -7111,14 +7150,12 @@ select * from (select (fields->>'id')::int id from j1 j1) j1
 inner join (select (fields->>'id')::int id from j3 j3 group by fields->>'id') j3 on (j1.id)::int = (j3.id)::int;
                                               QUERY PLAN                                               
 -------------------------------------------------------------------------------------------------------
- Hash Join
-   Output: ((j1.fields ->> 'id'::text))::integer, j3.id
-   Hash Cond: (((j1.fields ->> 'id'::text))::integer = j3.id)
-   ->  Foreign Scan on public.j1
-         Output: j1.fields
-         InfluxDB query: SELECT * FROM "j1"
-   ->  Hash
+ Merge Join
+   Output: (((j1.fields ->> 'id'::text))::integer), j3.id
+   Merge Cond: (j3.id = (((j1.fields ->> 'id'::text))::integer))
+   ->  Sort
          Output: j3.id
+         Sort Key: j3.id
          ->  Subquery Scan on j3
                Output: j3.id
                ->  HashAggregate
@@ -7127,7 +7164,13 @@ inner join (select (fields->>'id')::int id from j3 j3 group by fields->>'id') j3
                      ->  Foreign Scan on public.j3 j3_1
                            Output: (j3_1.fields ->> 'id'::text), j3_1.fields
                            InfluxDB query: SELECT * FROM "j3"
-(16 rows)
+   ->  Sort
+         Output: j1.fields, (((j1.fields ->> 'id'::text))::integer)
+         Sort Key: (((j1.fields ->> 'id'::text))::integer)
+         ->  Foreign Scan on public.j1
+               Output: j1.fields, ((j1.fields ->> 'id'::text))::integer
+               InfluxDB query: SELECT * FROM "j1"
+(20 rows)
 
 --Testcase 525:
 delete from j1_nsc;

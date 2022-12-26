@@ -1359,6 +1359,27 @@ SELECT * FROM ft1 WHERE CASE c3 COLLATE "C" WHEN c6 THEN true ELSE c3 < 'bar' EN
    InfluxDB query: SELECT "C 1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
 (4 rows)
 
+-- check schema-qualification of regconfig constant
+CREATE TEXT SEARCH CONFIGURATION public.custom_search
+  (COPY = pg_catalog.english);
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT c1, to_tsvector('custom_search'::regconfig, c3) FROM ft1
+WHERE c1 = 642 AND length(to_tsvector('custom_search'::regconfig, c3)) > 0;
+                               QUERY PLAN                                
+-------------------------------------------------------------------------
+ Foreign Scan on public.ft1
+   Output: c1, to_tsvector('custom_search'::regconfig, c3)
+   Filter: (length(to_tsvector('custom_search'::regconfig, ft1.c3)) > 0)
+   InfluxDB query: SELECT "C 1", "c3" FROM "T1" WHERE (("C 1" = 642))
+(4 rows)
+
+SELECT c1, to_tsvector('custom_search'::regconfig, c3) FROM ft1
+WHERE c1 = 642 AND length(to_tsvector('custom_search'::regconfig, c3)) > 0;
+ c1  | to_tsvector 
+-----+-------------
+ 642 | '00642':1
+(1 row)
+
 -- ===================================================================
 -- JOIN queries
 -- ===================================================================
@@ -1910,8 +1931,8 @@ SELECT t1.c1, ss.a, ss.b FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t1
 --Testcase 141:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1.c1, ss.a, ss.b FROM (SELECT c1 FROM "S 1"."T 3" WHERE c1 = 50) t1 INNER JOIN (SELECT t2.c1, t3.c1 FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t2 FULL JOIN (SELECT c1 FROM ft5 WHERE c1 between 50 and 60) t3 ON (t2.c1 = t3.c1) WHERE t2.c1 IS NULL OR t2.c1 IS NOT NULL) ss(a, b) ON (TRUE) ORDER BY t1.c1, ss.a, ss.b FOR UPDATE OF t1;
-                                                        QUERY PLAN                                                         
----------------------------------------------------------------------------------------------------------------------------
+                                                           QUERY PLAN                                                            
+---------------------------------------------------------------------------------------------------------------------------------
  LockRows
    Output: "T 3".c1, ft4.c1, ft5.c1, "T 3".*, ft4.*, ft5.*
    ->  Sort
@@ -1922,19 +1943,25 @@ SELECT t1.c1, ss.a, ss.b FROM (SELECT c1 FROM "S 1"."T 3" WHERE c1 = 50) t1 INNE
                ->  Foreign Scan on "S 1"."T 3"
                      Output: "T 3".c1, "T 3".*
                      InfluxDB query: SELECT "c1", "c2", "c3" FROM "T3" WHERE (("c1" = 50))
-               ->  Hash Full Join
+               ->  Materialize
                      Output: ft4.c1, ft4.*, ft5.c1, ft5.*
-                     Hash Cond: (ft4.c1 = ft5.c1)
-                     Filter: ((ft4.c1 IS NULL) OR (ft4.c1 IS NOT NULL))
-                     ->  Foreign Scan on public.ft4
-                           Output: ft4.c1, ft4.*
-                           InfluxDB query: SELECT "c1", "c2", "c3" FROM "T3" WHERE (("c1" >= 50)) AND (("c1" <= 60))
-                     ->  Hash
-                           Output: ft5.c1, ft5.*
-                           ->  Foreign Scan on public.ft5
+                     ->  Merge Full Join
+                           Output: ft4.c1, ft4.*, ft5.c1, ft5.*
+                           Merge Cond: (ft4.c1 = ft5.c1)
+                           Filter: ((ft4.c1 IS NULL) OR (ft4.c1 IS NOT NULL))
+                           ->  Sort
+                                 Output: ft4.c1, ft4.*
+                                 Sort Key: ft4.c1
+                                 ->  Foreign Scan on public.ft4
+                                       Output: ft4.c1, ft4.*
+                                       InfluxDB query: SELECT "c1", "c2", "c3" FROM "T3" WHERE (("c1" >= 50)) AND (("c1" <= 60))
+                           ->  Sort
                                  Output: ft5.c1, ft5.*
-                                 InfluxDB query: SELECT "c1", "c2", "c3" FROM "T4" WHERE (("c1" >= 50)) AND (("c1" <= 60))
-(22 rows)
+                                 Sort Key: ft5.c1
+                                 ->  Foreign Scan on public.ft5
+                                       Output: ft5.c1, ft5.*
+                                       InfluxDB query: SELECT "c1", "c2", "c3" FROM "T4" WHERE (("c1" >= 50)) AND (("c1" <= 60))
+(28 rows)
 
 --Testcase 142:
 SELECT t1.c1, ss.a, ss.b FROM (SELECT c1 FROM "S 1"."T 3" WHERE c1 = 50) t1 INNER JOIN (SELECT t2.c1, t3.c1 FROM (SELECT c1 FROM ft4 WHERE c1 between 50 and 60) t2 FULL JOIN (SELECT c1 FROM ft5 WHERE c1 between 50 and 60) t3 ON (t2.c1 = t3.c1) WHERE t2.c1 IS NULL OR t2.c1 IS NOT NULL) ss(a, b) ON (TRUE) ORDER BY t1.c1, ss.a, ss.b FOR UPDATE OF t1;
@@ -2794,18 +2821,22 @@ SELECT t1.c1, t2.c1 FROM ft1 t1 LEFT JOIN ft2 t2 ON (t1.c8 = t2.c8) ORDER BY t1.
    ->  Sort
          Output: t1.c1, t2.c1
          Sort Key: t1.c1, t2.c1
-         ->  Hash Left Join
+         ->  Merge Left Join
                Output: t1.c1, t2.c1
-               Hash Cond: (t1.c8 = t2.c8)
-               ->  Foreign Scan on public.ft1 t1
+               Merge Cond: (t1.c8 = t2.c8)
+               ->  Sort
                      Output: t1.c1, t1.c8
-                     InfluxDB query: SELECT "C 1", "c8" FROM "T1"
-               ->  Hash
+                     Sort Key: t1.c8
+                     ->  Foreign Scan on public.ft1 t1
+                           Output: t1.c1, t1.c8
+                           InfluxDB query: SELECT "C 1", "c8" FROM "T1"
+               ->  Sort
                      Output: t2.c1, t2.c8
+                     Sort Key: t2.c8
                      ->  Foreign Scan on public.ft2 t2
                            Output: t2.c1, t2.c8
                            InfluxDB query: SELECT "C 1", "c8" FROM "T1"
-(16 rows)
+(20 rows)
 
 --Testcase 184:
 SELECT t1.c1, t2.c1 FROM ft1 t1 LEFT JOIN ft2 t2 ON (t1.c8 = t2.c8) ORDER BY t1.c1, t2.c1 OFFSET 100 LIMIT 10;
@@ -3218,6 +3249,77 @@ SELECT * FROM ft1, ft2, ft4, ft5, local_tbl WHERE ft1.c1 = ft2.c1 AND ft1.c2 = f
 RESET enable_nestloop;
 --Testcase 206:
 RESET enable_hashjoin;
+-- test that add_paths_with_pathkeys_for_rel() arranges for the epq_path to
+-- return columns needed by the parent ForeignScan node
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM local_tbl LEFT JOIN (SELECT ft1.*, COALESCE(ft1.c3 || ft2.c3, 'foobar') FROM ft1 INNER JOIN ft2 ON (ft1.c1 = ft2.c1 AND ft1.c1 < 100)) ss ON (local_tbl.c1 = ss.c1) ORDER BY local_tbl.c1 FOR UPDATE OF local_tbl;
+                                                                                           QUERY PLAN                                                                                            
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ LockRows
+   Output: local_tbl.c1, local_tbl.c2, local_tbl.c3, ft1.c1, ft1.c2, ft1.c3, ft1."time", ft1.c6, ft1.c7, ft1.c8, (COALESCE((ft1.c3 || ft2.c3), 'foobar'::text)), local_tbl.*, ft1.*, ft2.*
+   ->  Merge Left Join
+         Output: local_tbl.c1, local_tbl.c2, local_tbl.c3, ft1.c1, ft1.c2, ft1.c3, ft1."time", ft1.c6, ft1.c7, ft1.c8, (COALESCE((ft1.c3 || ft2.c3), 'foobar'::text)), local_tbl.*, ft1.*, ft2.*
+         Merge Cond: (local_tbl.c1 = ft1.c1)
+         ->  Sort
+               Output: local_tbl.c1, local_tbl.c2, local_tbl.c3, local_tbl.*
+               Sort Key: local_tbl.c1
+               ->  Foreign Scan on public.local_tbl
+                     Output: local_tbl.c1, local_tbl.c2, local_tbl.c3, local_tbl.*
+                     InfluxDB query: SELECT "c1", "c2", "c3" FROM "local_tbl"
+         ->  Sort
+               Output: ft1.c1, ft1.c2, ft1.c3, ft1."time", ft1.c6, ft1.c7, ft1.c8, ft1.*, ft2.*, (COALESCE((ft1.c3 || ft2.c3), 'foobar'::text))
+               Sort Key: ft1.c1
+               ->  Hash Join
+                     Output: ft1.c1, ft1.c2, ft1.c3, ft1."time", ft1.c6, ft1.c7, ft1.c8, ft1.*, ft2.*, COALESCE((ft1.c3 || ft2.c3), 'foobar'::text)
+                     Hash Cond: (ft2.c1 = ft1.c1)
+                     ->  Foreign Scan on public.ft2
+                           Output: ft2.*, ft2.c1, ft2.c3
+                           InfluxDB query: SELECT "C 1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
+                     ->  Hash
+                           Output: ft1.c1, ft1.c2, ft1.c3, ft1."time", ft1.c6, ft1.c7, ft1.c8, ft1.*
+                           ->  Foreign Scan on public.ft1
+                                 Output: ft1.c1, ft1.c2, ft1.c3, ft1."time", ft1.c6, ft1.c7, ft1.c8, ft1.*
+                                 InfluxDB query: SELECT "C 1", "c2", "c3", "c6", "c7", "c8" FROM "T1" WHERE (("C 1" < 100))
+(25 rows)
+
+-- ALTER SERVER loopback OPTIONS (DROP extensions);
+-- ALTER SERVER loopback OPTIONS (ADD fdw_startup_cost '10000.0');
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM local_tbl LEFT JOIN (SELECT ft1.* FROM ft1 INNER JOIN ft2 ON (ft1.c1 = ft2.c1 AND ft1.c1 < 100 AND ft1.c1 = influxdb_fdw_abs(ft2.c2))) ss ON (local_tbl.c3 = ss.c3) ORDER BY local_tbl.c1 FOR UPDATE OF local_tbl;
+                                                                      QUERY PLAN                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+ LockRows
+   Output: local_tbl.c1, local_tbl.c2, local_tbl.c3, ft1.c1, ft1.c2, ft1.c3, ft1."time", ft1.c6, ft1.c7, ft1.c8, local_tbl.*, ft1.*, ft2.*
+   ->  Sort
+         Output: local_tbl.c1, local_tbl.c2, local_tbl.c3, ft1.c1, ft1.c2, ft1.c3, ft1."time", ft1.c6, ft1.c7, ft1.c8, local_tbl.*, ft1.*, ft2.*
+         Sort Key: local_tbl.c1
+         ->  Nested Loop Left Join
+               Output: local_tbl.c1, local_tbl.c2, local_tbl.c3, ft1.c1, ft1.c2, ft1.c3, ft1."time", ft1.c6, ft1.c7, ft1.c8, local_tbl.*, ft1.*, ft2.*
+               Join Filter: (local_tbl.c3 = ft1.c3)
+               ->  Foreign Scan on public.local_tbl
+                     Output: local_tbl.c1, local_tbl.c2, local_tbl.c3, local_tbl.*
+                     InfluxDB query: SELECT "c1", "c2", "c3" FROM "local_tbl"
+               ->  Materialize
+                     Output: ft1.c1, ft1.c2, ft1.c3, ft1."time", ft1.c6, ft1.c7, ft1.c8, ft1.*, ft2.*
+                     ->  Merge Join
+                           Output: ft1.c1, ft1.c2, ft1.c3, ft1."time", ft1.c6, ft1.c7, ft1.c8, ft1.*, ft2.*
+                           Merge Cond: ((ft1.c1 = (influxdb_fdw_abs(ft2.c2))) AND (ft1.c1 = ft2.c1))
+                           ->  Sort
+                                 Output: ft1.c1, ft1.c2, ft1.c3, ft1."time", ft1.c6, ft1.c7, ft1.c8, ft1.*
+                                 Sort Key: ft1.c1
+                                 ->  Foreign Scan on public.ft1
+                                       Output: ft1.c1, ft1.c2, ft1.c3, ft1."time", ft1.c6, ft1.c7, ft1.c8, ft1.*
+                                       InfluxDB query: SELECT "C 1", "c2", "c3", "c6", "c7", "c8" FROM "T1" WHERE (("C 1" < 100))
+                           ->  Sort
+                                 Output: ft2.*, ft2.c1, ft2.c2, (influxdb_fdw_abs(ft2.c2))
+                                 Sort Key: (influxdb_fdw_abs(ft2.c2)), ft2.c1
+                                 ->  Foreign Scan on public.ft2
+                                       Output: ft2.*, ft2.c1, ft2.c2, influxdb_fdw_abs(ft2.c2)
+                                       InfluxDB query: SELECT "C 1", "c2", "c3", "c6", "c7", "c8" FROM "T1"
+(28 rows)
+
+-- ALTER SERVER loopback OPTIONS (DROP fdw_startup_cost);
+-- ALTER SERVER loopback OPTIONS (ADD extensions 'influxdb_fdw');
 --Testcase 207:
 DELETE FROM local_tbl;
 --Testcase 783:
@@ -7275,6 +7377,31 @@ SELECT * FROM foreign_tbl;
 --UPDATE rw_view SET b = b + 15;
 --UPDATE rw_view SET b = b + 15; -- ok
 --SELECT * FROM foreign_tbl;
+-- We don't allow batch insert when there are any WCO constraints
+ALTER SERVER influxdb_svr OPTIONS (ADD batch_size '10');
+EXPLAIN (VERBOSE, COSTS OFF)
+INSERT INTO rw_view VALUES (0, 15), (0, 5);
+                       QUERY PLAN                       
+--------------------------------------------------------
+ Insert on public.base_tbl
+   Batch Size: 1
+   ->  Values Scan on "*VALUES*"
+         Output: "*VALUES*".column1, "*VALUES*".column2
+(4 rows)
+
+INSERT INTO rw_view VALUES (0, 15), (0, 5); -- should fail
+ERROR:  new row violates check option for view "rw_view"
+DETAIL:  Failing row contains (10, 5).
+SELECT * FROM foreign_tbl;
+ a  | b  
+----+----
+ 10 |  5
+ 10 | 15
+ 10 | 15
+ 10 |  5
+(4 rows)
+
+ALTER SERVER influxdb_svr OPTIONS (DROP batch_size);
 --Testcase 506:
 DELETE FROM foreign_tbl;
 --Testcase 784:
@@ -7359,6 +7486,25 @@ SELECT * FROM foreign_tbl;
 --UPDATE rw_view SET b = b + 15;
 --UPDATE rw_view SET b = b + 15; -- ok
 --SELECT * FROM foreign_tbl;
+-- We don't allow batch insert when there are any WCO constraints
+ALTER SERVER influxdb_svr OPTIONS (ADD batch_size '10');
+EXPLAIN (VERBOSE, COSTS OFF)
+INSERT INTO rw_view VALUES (0, 15), (0, 5);
+                       QUERY PLAN                       
+--------------------------------------------------------
+ Insert on public.parent_tbl
+   ->  Values Scan on "*VALUES*"
+         Output: "*VALUES*".column1, "*VALUES*".column2
+(3 rows)
+
+INSERT INTO rw_view VALUES (0, 15), (0, 5); -- should fail
+ERROR:  Not support partition insert
+SELECT * FROM foreign_tbl;
+ a | b 
+---+---
+(0 rows)
+
+ALTER SERVER influxdb_svr OPTIONS (DROP batch_size);
 --Testcase 521:
 DROP FOREIGN TABLE foreign_tbl CASCADE;
 --Testcase 522:

@@ -764,6 +764,28 @@ select * from (select (fields->>'a')::int a, (fields->>'b')::int b from t1) t1 l
 --Testcase 168:
 select t1.x from (select (fields->>'a')::int a, (fields->>'b')::int b from t1) t1 join (select (fields->>'x')::int x, (fields->>'y')::int y from t3) t3 on (t1.a::int = t3.x::int);
 
+-- Test matching of locking clause with wrong alias
+
+select t1.*, t2.*, unnamed_join.* from
+  (select (fields->>'a')::int a, (fields->>'b')::int b from t1) t1 join (select (fields->>'a')::int a, (fields->>'b')::int b from t2) t2 on (t1.a::int = t2.a::int), t3 as unnamed_join
+  for update of unnamed_join;
+
+select foo.*, unnamed_join.* from
+  (select (fields->>'a')::int a, (fields->>'b')::int b from t1) t1 join (select (fields->>'a')::int a, (fields->>'b')::int b from t2) t2 using (a) as foo, t3 as unnamed_join
+  for update of unnamed_join;
+
+select foo.*, unnamed_join.* from
+  (select (fields->>'a')::int a, (fields->>'b')::int b from t1) t1 join (select (fields->>'a')::int a, (fields->>'b')::int b from t2) t2 using (a) as foo, t3 as unnamed_join
+  for update of foo;
+
+select bar.*, unnamed_join.* from
+  ((select (fields->>'a')::int a, (fields->>'b')::int b from t1) t1 join (select (fields->>'a')::int a, (fields->>'b')::int b from t2) t2 using (a) as foo) as bar, t3 as unnamed_join
+  for update of foo;
+
+select bar.*, unnamed_join.* from
+  ((select (fields->>'a')::int a, (fields->>'b')::int b from t1) t1 join (select (fields->>'a')::int a, (fields->>'b')::int b from t2) t2 using (a) as foo) as bar, t3 as unnamed_join
+  for update of bar;
+
 --
 -- regression test for 8.1 merge right join bug
 --
