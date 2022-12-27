@@ -2916,25 +2916,32 @@ create foreign table c (
 ) server influxdb_svr;
 --Testcase 247:
 insert into a (code) values ('p');
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 248:
 insert into a (code) values ('q');
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 249:
 insert into b (a, num) values ('p', 1);
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 250:
 insert into b (a, num) values ('p', 2);
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 251:
 insert into c (name, a) values ('A', 'p');
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 252:
 insert into c (name, a) values ('B', 'q');
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 253:
 insert into c (name, a) values ('C', null);
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 254:
 select c.name, ss.code, ss.b_cnt, ss.const
 from c left join
@@ -2954,13 +2961,16 @@ order by c.name;
 
 --Testcase 255:
 DELETE FROM a;
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 256:
 DELETE FROM b;
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 257:
 DELETE FROM c;
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 258:
 DROP FOREIGN TABLE a;
 --Testcase 259:
@@ -4830,16 +4840,20 @@ CREATE FOREIGN TABLE c (id int) SERVER influxdb_svr;
 CREATE FOREIGN TABLE d (a int, b int) SERVER influxdb_svr;
 --Testcase 371:
 INSERT INTO a VALUES (0, 0), (1, NULL);
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 372:
 INSERT INTO b VALUES (0, 0), (1, NULL);
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 373:
 INSERT INTO c VALUES (0), (1);
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 374:
 INSERT INTO d VALUES (1,3), (2,2), (3,1);
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 -- all three cases should be optimizable into a simple seqscan
 --Testcase 375:
 explain (costs off) SELECT a.* FROM a LEFT JOIN b ON a.b_id = b.id;
@@ -5017,16 +5031,20 @@ select 1 from (select a.id FROM a left join b on a.b_id = b.id) q,
 
 --Testcase 386:
 DELETE FROM a;
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 387:
 DELETE FROM b;
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 388:
 DELETE FROM c;
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 389:
 DELETE FROM d;
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 390:
 DROP FOREIGN TABLE a;
 --Testcase 391:
@@ -5145,10 +5163,12 @@ CREATE FOREIGN TABLE a (id int) SERVER influxdb_svr;
 CREATE FOREIGN TABLE b (id int, a_id int) SERVER influxdb_svr;
 --Testcase 408:
 INSERT INTO a VALUES (0), (1);
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 409:
 INSERT INTO b VALUES (0, 0), (1, NULL);
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 410:
 SELECT * FROM b LEFT JOIN a ON (b.a_id = a.id) WHERE (a.id IS NULL OR a.id > 0);
  id | a_id | id 
@@ -5165,10 +5185,12 @@ SELECT b.* FROM b LEFT JOIN a ON (b.a_id = a.id) WHERE (a.id IS NULL OR a.id > 0
 
 --Testcase 412:
 DELETE FROM a;
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 413:
 DELETE FROM b;
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 414:
 DROP FOREIGN TABLE a;
 --Testcase 415:
@@ -5180,7 +5202,8 @@ begin;
 create foreign table innertab (id int8, dat1 int8) server influxdb_svr;
 --Testcase 417:
 insert into innertab values(123, 42);
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 418:
 SELECT * FROM
     (SELECT 1 AS x) ss1
@@ -5200,7 +5223,8 @@ SELECT * FROM
 -- Clean up
 --Testcase 581:
 DELETE FROM innertab;
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 582:
 DROP FOREIGN TABLE innertab;
 rollback;
@@ -6712,10 +6736,12 @@ create foreign table fkest (a int, b int, c int) server influxdb_svr;
 create foreign table fkest1 (a int, b int) server influxdb_svr;
 --Testcase 506:
 insert into fkest select x/10, x%10, x from generate_series(1,1000) x;
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 507:
 insert into fkest1 select x/10, x%10 from generate_series(1,1000) x;
-WARNING:  Modification query is executing in non-autocommit mode. PGSpider might get inconsistent data.
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
 --Testcase 508:
 explain (costs off)
 select *
