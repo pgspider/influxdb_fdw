@@ -219,7 +219,8 @@ static void process_query_params(ExprContext *econtext,
 								 const char **param_values,
 								 Oid *param_types,
 								 InfluxDBType * param_influxdb_types,
-								 InfluxDBValue * param_influxdb_values);
+								 InfluxDBValue * param_influxdb_values,
+								 InfluxDBColumnInfo *param_column_info);
 
 static void create_cursor(ForeignScanState *node);
 static void execute_dml_stmt(ForeignScanState *node);
@@ -317,6 +318,7 @@ typedef struct InfluxDBFdwDirectModifyState
 	Oid		   *param_types;	/* type of query parameters */
 	InfluxDBType *param_influxdb_types; /* InfluxDB type of query parameters */
 	InfluxDBValue *param_influxdb_values;	/* values for InfluxDB */
+	InfluxDBColumnInfo *param_column_info;	/* information of columns */
 
 	influxdb_opt *influxdbFdwOptions;	/* InfluxDB FDW options */
 
@@ -2163,7 +2165,7 @@ bindJunkColumnValue(InfluxDBFdwExecState * fmstate,
 			fmstate->param_influxdb_values[bindnum].i = 0;
 		}
 		else
-			influxdb_bind_sql_var(type, bindnum, value, &is_null,
+			influxdb_bind_sql_var(type, bindnum, value, &is_null, fmstate->param_column_info,
 								  fmstate->param_influxdb_types, fmstate->param_influxdb_values);
 		bindnum++;
 	}
@@ -3779,7 +3781,8 @@ process_query_params(ExprContext *econtext,
 					 const char **param_values,
 					 Oid *param_types,
 					 InfluxDBType * param_influxdb_types,
-					 InfluxDBValue * param_influxdb_values)
+					 InfluxDBValue * param_influxdb_values,
+					 InfluxDBColumnInfo *param_column_info)
 {
 	int			nestlevel;
 	int			i;
@@ -3797,7 +3800,7 @@ process_query_params(ExprContext *econtext,
 		/* Evaluate the parameter expression */
 		expr_value = ExecEvalExpr(expr_state, econtext, &isNull);
 		/* Bind parameters */
-		influxdb_bind_sql_var(param_types[i], i, expr_value, &isNull,
+		influxdb_bind_sql_var(param_types[i], i, expr_value, &isNull, param_column_info,
 							  param_influxdb_types, param_influxdb_values);
 
 		/*
@@ -3841,7 +3844,8 @@ create_cursor(ForeignScanState *node)
 							 values,
 							 festate->param_types,
 							 festate->param_influxdb_types,
-							 festate->param_influxdb_values);
+							 festate->param_influxdb_values,
+							 festate->param_column_info);
 
 		MemoryContextSwitchTo(oldcontext);
 	}
@@ -3877,7 +3881,8 @@ execute_dml_stmt(ForeignScanState *node)
 							 values,
 							 dmstate->param_types,
 							 dmstate->param_influxdb_types,
-							 dmstate->param_influxdb_values);
+							 dmstate->param_influxdb_values,
+							 dmstate->param_column_info);
 
 		MemoryContextSwitchTo(oldcontext);
 	}
@@ -3984,7 +3989,7 @@ execute_foreign_insert_modify(EState *estate,
 						/* time column has no value */
 						if (!time_had_value)
 						{
-							influxdb_bind_sql_var(type, bindnum, value, &is_null,
+							influxdb_bind_sql_var(type, bindnum, value, &is_null, fmstate->param_column_info,
 												  fmstate->param_influxdb_types, fmstate->param_influxdb_values);
 							bind_num_time_column = bindnum;
 							time_had_value = true;
@@ -3999,7 +4004,7 @@ execute_foreign_insert_modify(EState *estate,
 							elog(WARNING, "Inserting value has both \'time_text\' and \'time\' columns specified. The \'time\' will be ignored.");
 							if (strcmp(col->column_name, INFLUXDB_TIME_TEXT_COLUMN) == 0)
 							{
-								influxdb_bind_sql_var(type, bind_num_time_column, value, &is_null,
+								influxdb_bind_sql_var(type, bind_num_time_column, value, &is_null, fmstate->param_column_info,
 													  fmstate->param_influxdb_types, fmstate->param_influxdb_values);
 							}
 							fmstate->param_influxdb_types[bindnum] = INFLUXDB_NULL;
@@ -4007,7 +4012,7 @@ execute_foreign_insert_modify(EState *estate,
 						}
 					}
 					else
-						influxdb_bind_sql_var(type, bindnum, value, &is_null,
+						influxdb_bind_sql_var(type, bindnum, value, &is_null, fmstate->param_column_info,
 											  fmstate->param_influxdb_types, fmstate->param_influxdb_values);
 				}
 				bindnum++;

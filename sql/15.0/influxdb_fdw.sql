@@ -584,6 +584,34 @@ DELETE FROM cpu WHERE time_text = '2021-02-02 00:00:00' OR time ='2029-02-02 05:
 --Testcase 200:
 SELECT * FROM cpu;
 
+-- InfluxDB_FDW will store time data for Field values as a strings
+--Testcase 204:
+CREATE FOREIGN TABLE tmp_time (
+time timestamp,
+c1 time,
+c2 timestamp,
+c3 timestamp with time zone
+) SERVER server1 OPTIONS (table 'tmp_time');
+--Testcase 205:
+SELECT * FROM tmp_time;
+--Testcase 206:
+INSERT INTO tmp_time (time, c1) VALUES ('1900-01-01 01:01:01', '01:02:03');
+--Testcase 207:
+INSERT INTO tmp_time (time, c1) VALUES ('2100-01-01 01:01:01', '04:05:06');
+--Testcase 208:
+INSERT INTO tmp_time (time, c1) VALUES ('1990-01-01 01:01:01', '07:08:09');
+--Testcase 209:
+INSERT INTO tmp_time (time, c2) VALUES ('2020-12-27 03:02:56.634467', '1950-02-02 02:02:02');
+--Testcase 210:
+INSERT INTO tmp_time (time, c3) VALUES ('2021-12-27 03:02:56.668301', '1800-02-02 02:02:02+9');
+--Testcase 210:
+INSERT INTO tmp_time (time, c1, c2, c3) VALUES ('2022-05-06 07:08:09', '07:08:09', '2022-05-06 07:08:09', '2022-05-06 07:08:09+9');
+--Testcase 211:
+-- 1800-02-02 02:02:02+9 is Daylight Saving Time (DST) changes in Japan.
+-- Timezone setting Japan so it will plus 18s:59
+-- https://www.timeanddate.com/time/zone/japan/tokyo?syear=1850
+SELECT * FROM tmp_time;
+
 -- Recover data
 :RECOVER_INIT_TXT_DROP_BUCKET;
 :RECOVER_INIT_TXT_CREATE_BUCKET;
