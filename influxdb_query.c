@@ -274,7 +274,7 @@ influxdb_convert_record_to_datum(Oid pgtyp, int pgtypmod, char **row, int attnum
  * Bind the values provided as DatumBind the values and nulls to modify the target table
  */
 void
-influxdb_bind_sql_var(Oid type, int idx, Datum value, bool *isnull,
+influxdb_bind_sql_var(Oid type, int idx, Datum value, bool *isnull, InfluxDBColumnInfo *param_column_info,
 					  InfluxDBType * param_influxdb_types, InfluxDBValue * param_influxdb_values)
 {
 
@@ -371,7 +371,6 @@ influxdb_bind_sql_var(Oid type, int idx, Datum value, bool *isnull,
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
 			{
-#ifdef GO_CLIENT
 				/* Bind as string, but types is time */
 				char	   *outputString = NULL;
 				Oid			outputFunctionId = InvalidOid;
@@ -380,15 +379,28 @@ influxdb_bind_sql_var(Oid type, int idx, Datum value, bool *isnull,
 				getTypeOutputInfo(type, &outputFunctionId, &typeVarLength);
 				outputString = OidOutputFunctionCall(outputFunctionId, value);
 				param_influxdb_values[idx].s = outputString;
-#endif
 #ifdef CXX_CLIENT
-				const int64 postgres_to_unux_epoch_usecs = (POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * USECS_PER_DAY;
-				Timestamp	valueTimestamp = DatumGetTimestamp(value);
-				int64		valueNanoSecs = (valueTimestamp + postgres_to_unux_epoch_usecs) * 1000;
+				if (param_column_info[idx].column_type == INFLUXDB_TIME_KEY)
+				{
+					const int64 postgres_to_unix_epoch_usecs = (POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * USECS_PER_DAY;
+					Timestamp	valueTimestamp = DatumGetTimestamp(value);
+					int64		valueNanoSecs = (valueTimestamp + postgres_to_unix_epoch_usecs) * 1000;
 
-				param_influxdb_values[idx].i = valueNanoSecs;
+					param_influxdb_values[idx].i = valueNanoSecs;
+				}	
 #endif
-				param_influxdb_types[idx] = INFLUXDB_TIME;
+				/*
+				 * In InfluxDB, Measurements,tag keys,tag values and field
+				 * keys are always strings type. And Field values only can be
+				 * floats, integers, strings, or Booleans. So if column isn't
+				 * 'time' column in InfluxdDB, data will be store like strings
+				 * in InfluxDB.
+				 */
+				if (param_column_info[idx].column_type != INFLUXDB_TIME_KEY)
+					param_influxdb_types[idx] = INFLUXDB_STRING;
+				else
+					param_influxdb_types[idx] = INFLUXDB_TIME;
+
 				break;
 			}
 		default:
