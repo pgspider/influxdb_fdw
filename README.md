@@ -2,8 +2,9 @@ InfluxDB Foreign Data Wrapper for PostgreSQL
 ============================================
 
 This is a foreign data wrapper (FDW) to connect [PostgreSQL](https://www.postgresql.org/)
-to [InfluxDB](https://www.influxdata.com) (version 1.x series).
+to [InfluxDB](https://www.influxdata.com) database file. This FDW works with PostgreSQL 11, 12, 13, 14, 15 and confirmed with InfluxDB 1.x series.
 
+<img src="https://upload.wikimedia.org/wikipedia/commons/2/29/Postgresql_elephant.svg" align="center" height="100" alt="PostgreSQL"/>	+	<img src="https://assets.zabbix.com/img/brands/influxdb.svg" align="center" height="100" alt="InfluxDB"/>
 
 Contents
 --------
@@ -383,57 +384,90 @@ Character set handling
 Examples
 --------
 
-Install the extension:
+### Install the extension:
 
-    CREATE EXTENSION influxdb_fdw;
+Once for a database you need, as PostgreSQL superuser.
 
-Create a foreign server with appropriate configuration:
+```sql
+	CREATE EXTENSION influxdb_fdw;
+```
 
-	CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw
-		OPTIONS (
-			dbname 'mydb',
-			host 'http://localhost',
-			port '8086'
-			);
-			
+### Create a foreign server with appropriate configuration:
+
+Once for a foreign datasource you need, as PostgreSQL superuser. Please specify SQLite database path using `database` option.
+
+```sql
+	CREATE SERVER influxdb_svr
+	FOREIGN DATA WRAPPER influxdb_fdw
+	OPTIONS (
+          dbname 'mydb',
+	  host 'http://localhost',
+	  port '8086'
+	);
+```
+
+### Grant usage on foreign server to normal user in PostgreSQL:
+
+Once for a normal user (non-superuser) in PostgreSQL, as PostgreSQL superuser. It is a good idea to use a superuser only where really necessary, so let's allow a normal user to use the foreign server (this is not required for the example to work, but it's secirity recomedation).
+
+```sql
+	GRANT USAGE ON FOREIGN SERVER sqlite_server TO pguser;
+```
+Where `pguser` is a sample user for works with foreign server (and foreign tables).
+
+### User mapping
+
 Create an appropriate user mapping:
+```sql
+    	CREATE USER MAPPING
+	FOR pguser
+	SERVER influxdb_svr
+    	OPTIONS (
+	  user 'username',
+	  password 'password'
+	);
+```
+Where `pguser` is a sample user for works with foreign server (and foreign tables).
 
-    CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr 
-    	OPTIONS(user 'username', password 'password');
+### Create foreign table
+All `CREATE FOREIGN TABLE` SQL commands can be executed as a normal PostgreSQL user if there were correct `GRANT USAGE ON FOREIGN SERVER`. No need PostgreSQL supersuer for security reasons but also works with PostgreSQL supersuer.
 
 Create a foreign table referencing the InfluxDB table:
 You need to declare a column named "time" to access InfluxDB time column.
-
+```sql
 	CREATE FOREIGN TABLE t1(
-		time timestamp with time zone,
-		tag1 text,
-		field1 integer
-		) SERVER influxdb_svr
-		OPTIONS (
-			table 'measurement1'
-			);
-
+	  time timestamp with time zone,
+	  tag1 text,
+	  field1 integer
+	)
+	SERVER influxdb_svr
+	OPTIONS (
+	  table 'measurement1'
+	);
+```
 You can use "tags" option to specify tag keys of a foreign table.
-
+```sql
 	CREATE FOREIGN TABLE t2(
-		tag1 text,
-		field1 integer,
-		tag2 text,
-		field2 integer) SERVER influxdb_svr
-		OPTIONS (
-			tags 'tag1, tag2'
-			);
-
+	  tag1 text,
+	  field1 integer,
+	  tag2 text,
+	  field2 integer
+	)
+	SERVER influxdb_svr
+	OPTIONS (
+	  tags 'tag1, tag2'
+	);
+```
 You can import foreign schema
-
+```sql
 	IMPORT FOREIGN SCHEMA public
-	  FROM SERVER influxdb_svr
-	  INTO public;
-
+	FROM SERVER influxdb_svr
+	 INTO public;
+```
 Access foreign table
-
+```sql
 	SELECT * FROM t1;
-
+```
 Limitations
 -----------
 
