@@ -33,7 +33,7 @@ Features
   - `time_text` column can express timestamp with precision down to nanoseconds.
 - InfluxDB FDW supports bulk `INSERT` by using `batch_size` option from PostgreSQL version 14 or later.
 
-### `GROUP BY` time intervals and fill()
+### `GROUP BY` time intervals and `fill()`
 
 Support `GROUP BY` `times()` `fill()` syntax for InfluxDB.
 The `fill()` is supported by two stub function:
@@ -52,14 +52,8 @@ The `influx_fill_numeric()` and `influx_fill_option()` is embeded as last parame
 |influx_time(time, interval '2h', interval '1h', influx_fill_option('linear'))|time(2h,1h) fill(linear)|
 
 ### Schemaless feature
-- The feature enables user to utilize schema-less feature of InfluxDB.
+- The feature enables user to utilize schema-less feature of InfluxDB, enabled by setting special options.
 - For example, without schemaless feature if a tag-key or field-key is added to InfluxDB measurement, user have to create corresponding foreign table in PostgreSQL. This feature eliminates this re-creation of foreign table.
-- `schemaless` foreign table option in `influxdb_fdw`:
-  - schemaless `true` enable schemaless mode.
-  - schemaless `false` disable schemaless mode.
-- `schemaless` option is supported in `IMPORT FOREIGN SCHEMA`.
-- If `schemaless` option is not configured, default value is `false`.
-- If `schemaless` is `false` or not configured, `influxdb_fdw` works as non-schemaless mode.
 
 Columns of foreign table in schemaless mode
 - The columns are fixed with names and types as below:
@@ -320,6 +314,7 @@ Usage
 
 - **port** as *integer*, optional
 
+
 ## CREATE USER MAPPING options
 
 `influxdb_fdw` accepts the following options via the `CREATE USER MAPPING`
@@ -342,12 +337,17 @@ command:
 - **tags** as *string*, optional
     
 - **table** as *string*, optional
+
+- **schemaless** as *boolean*, optional
   
+  `True` enable schemaless mode, default value is `false`.
 
 ## IMPORT FOREIGN SCHEMA options
 
 `influxdb_fdw` supports [IMPORT FOREIGN SCHEMA](https://www.postgresql.org/docs/current/sql-importforeignschema.html) and 
  accepts no custom options.
+ 
+ - `schemaless` option is supported in `IMPORT FOREIGN SCHEMA`.
 
 ## TRUNCATE support
 
