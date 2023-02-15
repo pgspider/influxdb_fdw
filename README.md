@@ -320,11 +320,11 @@ Usage
 `influxdb_fdw` accepts the following options via the `CREATE USER MAPPING`
 command:
 
-- **user** as *string*
+- **user** as *string*, no default
 
   The user credential to connect to InfluxDB.
 
-- **password** as *string*
+- **password** as *string*, no default
 
   The password credential to connect to InfluxDB.
 
@@ -334,13 +334,13 @@ command:
 `influxdb_fdw` accepts the following table-level options via the
 `CREATE FOREIGN TABLE` command.
 
-- **tags** as *string*, optional
+- **tags** as *string*, optional, no default
     
-- **table** as *string*, optional
+- **table** as *string*, optional, no default
 
-- **schemaless** as *boolean*, optional
+- **schemaless** as *boolean*, optional, default `false`
   
-  `True` enable schemaless mode, default value is `false`.
+  Enable schemaless mode.
 
 ## IMPORT FOREIGN SCHEMA options
 
@@ -357,6 +357,8 @@ from PostgreSQL 14.
 Functions
 ---------
 
+As well as the standard `influxdb_fdw_handler()` and `influxdb_fdw_validator()`
+functions, `influxdb_fdw` provides the following user-callable utility functions:
 Functions from this FDW in PostgreSQL catalog are **yet not described**.
 
 Identifier case handling
@@ -433,7 +435,7 @@ Where `pguser` is a sample user for works with foreign server (and foreign table
 All `CREATE FOREIGN TABLE` SQL commands can be executed as a normal PostgreSQL user if there were correct `GRANT USAGE ON FOREIGN SERVER`. No need PostgreSQL supersuer for security reasons but also works with PostgreSQL supersuer.
 
 Create a foreign table referencing the InfluxDB table:
-You need to declare a column named "time" to access InfluxDB time column.
+You need to declare a column named `time` to access InfluxDB time column.
 ```sql
 	CREATE FOREIGN TABLE t1(
 	  time timestamp with time zone,
@@ -445,7 +447,7 @@ You need to declare a column named "time" to access InfluxDB time column.
 	  table 'measurement1'
 	);
 ```
-You can use "tags" option to specify tag keys of a foreign table.
+You can use `tags` option to specify tag keys of a foreign table.
 ```sql
 	CREATE FOREIGN TABLE t2(
 	  tag1 text,
@@ -515,4 +517,4 @@ Portions Copyright (c) 2011-2016, EnterpriseDB Corporation
 
 Permission to use, copy, modify, and distribute this software and its documentation for any purpose, without fee, and without a written agreement is hereby granted, provided that the above copyright notice and this paragraph and the following two paragraphs appear in all copies.
 
-See the [`LICENSE`](LICENSE.md) file for full details.
+See the [`LICENSE`](LICENSE) file for full details.
