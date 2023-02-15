@@ -345,9 +345,12 @@ command:
 ## IMPORT FOREIGN SCHEMA options
 
 `influxdb_fdw` supports [IMPORT FOREIGN SCHEMA](https://www.postgresql.org/docs/current/sql-importforeignschema.html) and 
- accepts no custom options.
+ accepts the following options via the
+`IMPORT FOREIGN SCHEMA` command.
  
- - `schemaless` option is supported in `IMPORT FOREIGN SCHEMA`.
+- **schemaless** as *boolean*, optional, default `false`
+  
+  Enable schemaless mode.
 
 ## TRUNCATE support
 
