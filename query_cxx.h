@@ -15,6 +15,9 @@
 #ifndef QUERY_CXX_H
 #define QUERY_CXX_H
 
+#include "postgres.h"
+#include "influxdb_fdw.h"
+
 /* Represents information of data type */
 typedef enum InfluxDBType{
 	INFLUXDB_INT64,
@@ -79,31 +82,10 @@ struct InfluxDBSchemaInfo_return {
 	char* r2; /* errret */
 };
 
-#define INFLUXDB_VERSION_1    1
-#define INFLUXDB_VERSION_2    2
-
-/* InfluxDBSchemaInfo returns information of table if success */
-extern struct InfluxDBSchemaInfo_return InfluxDBSchemaInfo(char* addr, int port, char* user, char* pass, char* db, int version, char* auth_token, char* retention_policy);
-
-/* InfluxDBFreeSchemaInfo returns nothing */
-extern void InfluxDBFreeSchemaInfo(struct TableInfo* tableInfo, long long length);
-
 /* Return type for InfluxDBQuery */
 struct InfluxDBQuery_return {
-	InfluxDBResult r0;
+	InfluxDBResult *r0;
 	char* r1;
 };
-
-/* InfluxDBQuery returns result set */
-extern struct InfluxDBQuery_return InfluxDBQuery(char* cquery, char* addr, int port, char* username, char* password, char* db, int version, char* auth_token, char* retention_policy, InfluxDBType* ctypes, InfluxDBValue* cvalues, int cparamNum);
-
-/* InfluxDBFreeResult returns nothing */
-extern void InfluxDBFreeResult(InfluxDBResult* result);
-
-/* InfluxDBInsert returns nil if success */
-extern char* InfluxDBInsert(char* addr, int port, char* user, char* pass, char* db, char* tablename, int version, char* auth_token, char* retention_policy, struct InfluxDBColumnInfo* ccolumns, InfluxDBType* ctypes, InfluxDBValue* cvalues, int cparamNum, int cnumSlots);
-
-/* If version not set, check to which version can be connected  */
-extern int check_connected_influxdb_version(char* addr, int port, char* user, char* pass, char* db, char* auth_token, char* retention_policy);
 
 #endif  /* QUERY_CXX_H */

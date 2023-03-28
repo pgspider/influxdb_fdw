@@ -36,7 +36,6 @@
 #endif
 
 #include "utils/rel.h"
-#include "funcapi.h"
 
 #define WAIT_TIMEOUT		0
 #define INTERACTIVE_TIMEOUT 0
@@ -78,6 +77,11 @@
 
 #define CODE_VERSION 10101
 
+#ifdef CXX_CLIENT
+#define INFLUXDB_VERSION_1    1
+#define INFLUXDB_VERSION_2    2
+#endif
+
 /*
  * Options structure to store the InfluxDB
  * server information
@@ -117,6 +121,7 @@ typedef struct InfluxDBFdwExecState
 	char	   *query;			/* Query string */
 	Relation	rel;			/* relcache entry for the foreign table */
 	Oid			relid;			/* relation oid */
+	UserMapping *user;			/* User mapping of foreign server */
 	List	   *retrieved_attrs;	/* list of target attribute numbers */
 
 	char	  **params;
@@ -330,4 +335,21 @@ extern bool influxdb_is_select_all(RangeTblEntry *rte, List *tlist, schemaless_i
 extern bool influxdb_is_slvar(Oid oid, int attnum, schemaless_info * pslinfo, bool *is_tags, bool *is_fields);
 extern bool influxdb_is_slvar_fetch(Node *node, schemaless_info * pslinfo);
 extern bool influxdb_is_param_fetch(Node *node, schemaless_info * pslinfo);
+
+#ifdef CXX_CLIENT
+/* InfluxDBSchemaInfo returns information of table if success */
+extern struct InfluxDBSchemaInfo_return InfluxDBSchemaInfo(UserMapping *user, influxdb_opt *opts);
+/* InfluxDBFreeSchemaInfo returns nothing */
+extern void InfluxDBFreeSchemaInfo(struct TableInfo* tableInfo, long long length);
+/* InfluxDBQuery returns result set */
+extern struct InfluxDBQuery_return InfluxDBQuery(char *query, UserMapping *user, influxdb_opt *opts, InfluxDBType* ctypes, InfluxDBValue* cvalues, int cparamNum);
+/* InfluxDBFreeResult returns nothing */
+extern void InfluxDBFreeResult(InfluxDBResult* result);
+/* InfluxDBInsert returns nil if success */
+extern char* InfluxDBInsert(char *table_name, UserMapping *user, influxdb_opt *opts, struct InfluxDBColumnInfo* ccolumns, InfluxDBType* ctypes, InfluxDBValue* cvalues, int cparamNum, int cnumSlots);
+/* If version not set, check to which version can be connected  */
+extern int check_connected_influxdb_version(char* addr, int port, char* user, char* pass, char* db, char* auth_token, char* retention_policy);
+/* clean up all cache connections of influx cxx client */
+extern void cleanup_cxx_client_connection(void);
+#endif		/* CXX_CLIENT */
 #endif							/* InfluxDB_FDW_H */

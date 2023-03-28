@@ -26,12 +26,12 @@ $(shell rm -f ./query.h)
 # HowardHinnant date library source dir
 DATE_LIB = -I./deps/date/include
 
-OBJS += query.o tz.o
+OBJS += query.o tz.o connection.o
 PG_CPPFLAGS += -DCXX_CLIENT $(DATE_LIB)
 SHLIB_LINK = -lm -lstdc++ -lInfluxDB
 
 # query.cpp requires C++ 17.
-override PG_CXXFLAGS += -std=c++17 -O0
+override PG_CXXFLAGS += -std=c++17
 
 # override PG_CXXFLAGS and PG_CFLAGS
 ifdef CCFLAGS

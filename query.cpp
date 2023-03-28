@@ -21,10 +21,10 @@
 #include <memory>
 #include "date/date.h"
 #include "date/tz.h"
+#include "connection.hpp"
 
 extern "C"
 {
-#include "postgres.h"
 #include "query_cxx.h"
 }
 
@@ -40,8 +40,7 @@ std::vector<std::string> timestampFormats =
     "%m.%d.%Y %T"    /* German: 17.12.1997 07:37:16.00 */
 };
 
-static size_t InfluxDBSeries_get_total_row(std::vector<influxdb::InfluxDBSeries> series);
-static std::unique_ptr<influxdb::InfluxDB> create_influxDB_client(char* addr, int port, char* user, char* pass, char* db, int version, char* auth_token, char* retention_policy);
+static size_t InfluxDBSeries_get_total_row(std::vector<influxdb::InfluxDBSeries> &series);
 
 std::chrono::system_clock::time_point parseTimeStamp(const std::string& value);
 
@@ -50,17 +49,18 @@ std::chrono::system_clock::time_point parseTimeStamp(const std::string& value);
  *      Returns information of table if success
  */
 extern "C" struct InfluxDBSchemaInfo_return
-InfluxDBSchemaInfo(char* addr, int port, char* user, char* pass, char* db, int version, char* auth_token, char* retention_policy)
+InfluxDBSchemaInfo(UserMapping *user, influxdb_opt *opts)
 {
     struct InfluxDBSchemaInfo_return res;
     std::string     query;
     TableInfo      *tables_info;
     int             table_idx;
     size_t          table_count;
+    char           *db = opts->svr_database;
 
     try
     {
-        auto influx = create_influxDB_client(addr, port, user, pass, db, version, auth_token, retention_policy);
+        auto influx = influxdb_get_connection(user, opts);
 
         query = "SHOW MEASUREMENTS ON " + std::string(db);
 
@@ -77,9 +77,9 @@ InfluxDBSchemaInfo(char* addr, int port, char* user, char* pass, char* db, int v
         tables_info = (TableInfo *) palloc0(sizeof(TableInfo) * table_count);
 
         table_idx = 0;
-        for (auto measurements_series_iter: measurements.series)
+        for (auto &measurements_series_iter: measurements.series)
         {
-            for (auto mesurements_row: measurements_series_iter.rows)
+            for (auto &mesurements_row: measurements_series_iter.rows)
             {
                 size_t tags_idx, field_idx;
 
@@ -98,9 +98,9 @@ InfluxDBSchemaInfo(char* addr, int port, char* user, char* pass, char* db, int v
                 {
                     tables_info[table_idx].tag = (char **) palloc0(sizeof(char *) * tables_info[table_idx].tag_len);
                     tags_idx = 0;
-                    for (auto tagkeys_series_iter: tagkeys.series)
+                    for (auto &tagkeys_series_iter: tagkeys.series)
                     {
-                        for (auto tagkeys_row: tagkeys_series_iter.rows)
+                        for (auto &tagkeys_row: tagkeys_series_iter.rows)
                         {
                             tables_info[table_idx].tag[tags_idx] = pstrdup(tagkeys_row.tuple.at(0).c_str());
                             tags_idx++;
@@ -120,9 +120,9 @@ InfluxDBSchemaInfo(char* addr, int port, char* user, char* pass, char* db, int v
                 tables_info[table_idx].field = (char **) palloc0(sizeof(char *) * tables_info[table_idx].field_len);
                 tables_info[table_idx].field_type = (char **) palloc0(sizeof(char *) * tables_info[table_idx].field_len);
                 field_idx = 0;
-                for (auto fieldkeys_series_iter: fieldkeys.series)
+                for (auto &fieldkeys_series_iter: fieldkeys.series)
                 {
-                    for (auto fieldkeys_row: fieldkeys_series_iter.rows)
+                    for (auto &fieldkeys_row: fieldkeys_series_iter.rows)
                     {
                         tables_info[table_idx].field[field_idx] = pstrdup(fieldkeys_row.tuple.at(0).c_str());
                         tables_info[table_idx].field_type[field_idx] = pstrdup(fieldkeys_row.tuple.at(1).c_str());
@@ -204,11 +204,11 @@ bindParameter(InfluxDBType *param_type, InfluxDBValue *param_val, int param_num)
  *      Get total number of row in a series
  */
 static size_t
-InfluxDBSeries_get_total_row(std::vector<influxdb::InfluxDBSeries> series)
+InfluxDBSeries_get_total_row(std::vector<influxdb::InfluxDBSeries> &series)
 {
     size_t res = 0;
 
-    for (auto serie: series)
+    for (auto &serie: series)
     {
         res += serie.rows.size();
     }
@@ -221,7 +221,7 @@ InfluxDBSeries_get_total_row(std::vector<influxdb::InfluxDBSeries> series)
  *      Convert result from series to table format
  */
 static struct InfluxDBResult *
-InfluxDBSeries_to_InfluxDBResult(std::vector<influxdb::InfluxDBSeries> series)
+InfluxDBSeries_to_InfluxDBResult(std::vector<influxdb::InfluxDBSeries> &series)
 {
     size_t total_row = InfluxDBSeries_get_total_row(series);
     size_t current_row_idx = 0;
@@ -249,9 +249,9 @@ InfluxDBSeries_to_InfluxDBResult(std::vector<influxdb::InfluxDBSeries> series)
     res->nrow = total_row;
     res->rows = (InfluxDBRow *)palloc0(sizeof(InfluxDBRow) * res->nrow);
 
-    for (auto serie: series)
+    for (auto &serie: series)
     {
-        for (auto influx_row: serie.rows)
+        for (auto &influx_row: serie.rows)
         {
             InfluxDBRow row;
             size_t    tuple_len = res->ncol;
@@ -287,12 +287,10 @@ InfluxDBSeries_to_InfluxDBResult(std::vector<influxdb::InfluxDBSeries> series)
  *      execute single InfluxQL query
  */
 extern "C" struct InfluxDBQuery_return
-InfluxDBQuery(char* cquery, char* addr, int port, char* username, char* password, char* db, int version, char* auth_token, char* retention_policy, InfluxDBType* ctypes, InfluxDBValue* cvalues, int cparamNum)
+InfluxDBQuery(char* cquery, UserMapping *user, influxdb_opt *opts, InfluxDBType* ctypes, InfluxDBValue* cvalues, int cparamNum)
 {
     InfluxDBQuery_return *res = (InfluxDBQuery_return *) palloc0(sizeof(InfluxDBQuery_return));
-
-    auto influx = create_influxDB_client(addr, port, username, password, db, version, auth_token, retention_policy);
-
+    auto influx = influxdb_get_connection(user, opts);
     auto params = bindParameter(ctypes, cvalues, cparamNum);
 
     try
@@ -309,7 +307,7 @@ InfluxDBQuery(char* cquery, char* addr, int port, char* username, char* password
                 strcpy(res->r1, query_result.error.c_str());
             }
             else
-                res->r0 = *InfluxDBSeries_to_InfluxDBResult(query_result.series);
+                res->r0 = InfluxDBSeries_to_InfluxDBResult(query_result.series);
         }
     }
     catch (const std::exception& e)
@@ -335,12 +333,13 @@ InfluxDBFreeResult(InfluxDBResult* result)
  * getCurrentMicroSecond
  *      Get current timestamp with micro second precision
  */
-static std::chrono::time_point<std::chrono::system_clock>
+static long long
 getCurrentMicroSecond()
 {
-    auto now = std::chrono::system_clock::now();
+    auto now = std::chrono::high_resolution_clock::now();
     auto tp = std::chrono::time_point_cast<std::chrono::microseconds>(now);
-    return tp;
+    auto epoch = tp.time_since_epoch();
+    return std::chrono::duration_cast<std::chrono::microseconds>(epoch).count();
 }
 
 /*
@@ -395,13 +394,12 @@ makeRecord(influxdb::Point& record, struct InfluxDBColumnInfo* pColInfo, InfluxD
  *      Insert record to influxdb
  */
 extern "C" char *
-InfluxDBInsert(char* addr, int port, char* user, char* pass, char* db, char* tablename, int version, char* auth_token, char* retention_policy, struct InfluxDBColumnInfo* ccolumns, InfluxDBType* ctypes, InfluxDBValue* cvalues, int cparamNum, int cnumSlots)
+InfluxDBInsert(char *tablename, UserMapping *user, influxdb_opt *opts, struct InfluxDBColumnInfo* ccolumns, InfluxDBType* ctypes, InfluxDBValue* cvalues, int cparamNum, int cnumSlots)
 {
     char* retMsg = NULL;
 
     /* Create a new HTTPClient */
-    auto influxdb = create_influxDB_client(addr, port, user, pass, db, version, auth_token, retention_policy);
-
+    auto influxdb = influxdb_get_connection(user, opts);
     try
     {
         influxdb->batchOf(cnumSlots);
@@ -417,10 +415,9 @@ InfluxDBInsert(char* addr, int port, char* user, char* pass, char* db, char* tab
             pg_usleep(1);
 
             /* set current time in micro second as default */
-            record.setTimestamp(getCurrentMicroSecond());
+            record.setTimestamp(getCurrentMicroSecond() * 1000);
             for (size_t pos = 0; pos < (size_t)cparamNum; pos++)
                 makeRecord(record, ccolumns + pos, ctypes[idx * cparamNum + pos], cvalues[idx * cparamNum + pos]);
-
             influxdb->write(std::move(record));
         }
     }
@@ -430,9 +427,7 @@ InfluxDBInsert(char* addr, int port, char* user, char* pass, char* db, char* tab
         strcpy(retMsg, e.what());
         return retMsg;
     }
-    /* Flush batches, all points are written */
     influxdb->flushBatch();
-
     return retMsg;
 }
 
@@ -446,7 +441,7 @@ std::chrono::system_clock::time_point parseTimeStamp(const std::string& value)
     date::local_time<std::chrono::nanoseconds> local_tp;
     std::chrono::system_clock::time_point tp;
 
-    for (auto format: timestampFormats)
+    for (auto &format: timestampFormats)
     {
         std::istringstream timeString{value};
         timeString >> date::parse(format, local_tp, tzname);
@@ -471,24 +466,6 @@ std::chrono::system_clock::time_point parseTimeStamp(const std::string& value)
     }
 
     throw std::runtime_error("Unsupported timestamp format: " + value);
-}
-
-/* Provides InfluxDB client which can connect to InfluxDB server */
-static std::unique_ptr<influxdb::InfluxDB>
-create_influxDB_client(char* addr, int port, char* user, char* pass, char* db, int version, char* auth_token, char* retention_policy)
-{
-    auto influx = [&]() -> std::unique_ptr<influxdb::InfluxDB>
-        {
-            if (version == INFLUXDB_VERSION_2)
-                return influxdb::InfluxDBFactory::GetV2(std::string(addr), port, std::string(db), std::string(auth_token), std::string(retention_policy));
-            else
-                return influxdb::InfluxDBFactory::GetV1(std::string(addr), port, std::string(db), std::string(user), std::string(pass));
-        }();
-
-    if (!influx)
-            elog(ERROR, "Fail to create influxDB client");
-
-    return influx;
 }
 
 /* If version not set, check to which version can be connected  */
@@ -525,4 +502,14 @@ check_connected_influxdb_version(char* addr, int port, char* user, char* pass, c
     }
 
     elog(ERROR, "Could not connect to InfluxDB.");
+}
+
+/*
+ * Clean up all open cxx client connection.
+ * C interface wrapper function for influx_cleanup_connection in connection.cpp
+ */
+extern "C" void
+cleanup_cxx_client_connection(void)
+{
+    influx_cleanup_connection();
 }
