@@ -1,0 +1,22 @@
+# DDL
+# DROP DATABASE schemalessdb
+# CREATE DATABASE schemalessdb
+
+# DML
+# CONTEXT-DATABASE: schemalessdb
+
+sctbl3 c2="^%(@#%^(@#%&@#)%^)!^%)!)%",c3=-36854775808i,c4=1.79E+68,c5=t -9223372036854775806
+sctbl3 c2="敷ヘカウ告政ヨハツヤ消70者32精楽ざ",c3=36854775807i,c4=-1.79E+68,c5=F 9223372036854775806
+sctbl3 c2="べ員葉コ番告7次ノヌ従援かやじり図安ヨ",c3=-36854775807i,c4=1.78E+68,c5=FALSE -9223372036854775805
+sctbl3 c2="ăâđêôơưdêđêdờenờíìờẹ",c3=36854775806i,c4=-1.78E+68,c5=false 9223372036854775805
+sctbl3 c2="いろはにほへど　ちりぬるをわがよたれぞ　つねならむうゐのおくやま　けふこえてあさ",c3=-5i,c4=-50.232,c5=TRUE 1578013200000000000
+sctbl3 c2="色は匂へど 散りぬるを我が世誰ぞ 常ならむ有為の奥山 今日越えて浅き夢見",c3=-4i,c4=-40.652,c5=true 1578099600000000000
+sctbl3 c2="กขฃคฅฆงจฉชซฌญฎฏฐฑฒณดตถทธนบปผภฮ",c3=-3i,c4=-30.756,c5=true 1578186000000000000
+sctbl3 c2="`~!@#$%^&*()_+=-{}[]|:;<>?/.",c3=-2i,c4=-20.56,c5=F 1578272400000000000
+sctbl3 c2="0123456789",c3=-1i,c4=-10.746,c5=f 1578358800000000000
+sctbl3 c2="In Bulgarian it is desirable",c3=0i,c4=0.774,c5=false 1578445200000000000
+sctbl3 c2="Which started out as a kind",c3=1i,c4=10.746,c5=T 1578531600000000000
+sctbl3 c2="Canada Denmark Turkey Yemen Tokyo",c3=2i,c4=20.312,c5=true 1578618000000000000
+sctbl3 c2="Change our locale from $ to ¥ in",c3=3i,c4=30.631,c5=false 1578704400000000000
+sctbl3 c2="Chúc mừng năm mới 2021",c3=4i,c4=40.772,c5=false 1578790800000000000
+sctbl3 c2="$",c3=5i,c4=50.188,c5=false 1578877200000000000

@@ -1,0 +1,6 @@
+# DDL
+DROP DATABASE performance_test
+CREATE DATABASE performance_test
+
+# DML
+# CONTEXT-DATABASE: performance_test
