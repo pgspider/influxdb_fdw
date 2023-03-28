@@ -1,0 +1,12 @@
+# DDL
+# DROP DATABASE optiondb
+# CREATE DATABASE optiondb
+
+# DML
+# CONTEXT-DATABASE: optiondb
+
+optiontbl,tag1=a version="version 2",value2=100 0
+optiontbl,tag1=a version="version 2",value2=200 1
+optiontbl,tag1=a version="version 2",value2=300 2
+optiontbl,tag1=b version="version 2",value2=400 3
+optiontbl,tag1=b version="version 2",value2=500 4

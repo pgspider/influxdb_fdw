@@ -1,26 +1,60 @@
 # InfluxDB Foreign Data Wrapper for PostgreSQL
-This PostgreSQL extension is a Foreign Data Wrapper (FDW) for InfluxDB (version 1.x series).
+This PostgreSQL extension is a Foreign Data Wrapper (FDW) for InfluxDB.
 
-The current version can work with PostgreSQL 10, 11, 12, 13 and 14.
+The current version can work with PostgreSQL 11, 12, 13, 14, 15 and confirmed with:   
+  - InfluxDB 1.8: with either [influxdb1-go](#install-influxdb-go-client-library) client or [influxdb-cxx](#install-influxdb_cxx-client-library) client.
+  - InfluxDB 2.2: with [influxdb-cxx](#install-influxdb_cxx-client-library) client via InfluxDB v1 compatibility API.
 
-Go version should be 1.10.4 or later.
 ## Installation
-Install InfluxDB Go client library
+Influxdb_fdw supports 2 different client: Go client and Influxdb_cxx client. The installation for each kind of client is described as below.
+### Install InfluxDB Go client library
+Go version should be 1.10.4 or later.
 <pre>
 go get github.com/influxdata/influxdb1-client/v2
 </pre>
+To use Go client, use GO_CLIENT=1 flag when compile the source code
 
+### Install Influxdb_cxx client library
+Get source code from [`influxdb-cxx github repository`](https://github.com/pgspider/influxdb-cxx) and install as manual:
+```
+git clone https://github.com/pgspider/influxdb-cxx
+cd influxdb-cxx
+cmake .. -DINFLUXCXX_WITH_BOOST=OFF -DINFLUXCXX_TESTING=OFF
+sudo make install
+```
+
+Update LD_LIBRARY_PATH follow the installation folder of Influxdb_cxx client
+
+To use Influxdb_cxx, use CXX_CLIENT=1 flag when compile the source code. It is required to use gcc version 7 to build influxdb_fdw with influxdb_cxx client.
+
+### Compile source code and install
 Add a directory of pg_config to PATH and build and install influxdb_fdw.
+
+Using Go client
 <pre>
-make USE_PGXS=1 with_llvm=no
-make install USE_PGXS=1 with_llvm=no
+make USE_PGXS=1 with_llvm=no GO_CLIENT=1
+make install USE_PGXS=1 with_llvm=no GO_CLIENT=1
+</pre>
+
+Using Influxdb_cxx client
+<pre>
+make USE_PGXS=1 with_llvm=no CXX_CLIENT=1
+make install USE_PGXS=1 with_llvm=no CXX_CLIENT=1
 </pre>
 with_llvm=no is necessary to disable llvm bit code generation when PostgreSQL is configured with --with-llvm because influxdb_fdw use go code and cannot be compiled to llvm bit code.
 
 If you want to build influxdb_fdw in a source tree of PostgreSQL instead, use
+
+Using Go client
 <pre>
-make with_llvm=no
-make install  with_llvm=no
+make with_llvm=no GO_CLIENT=1
+make install  with_llvm=no GO_CLIENT=1
+</pre>
+
+Using Influxdb_cxx client
+<pre>
+make with_llvm=no CXX_CLIENT=1
+make install  with_llvm=no CXX_CLIENT=1
 </pre>
 
 ## Usage
@@ -30,15 +64,37 @@ CREATE EXTENSION influxdb_fdw;
 </pre>
 
 ### Create server
+#### Go Client connect to InfluxDB ver 1.x
 <pre>
 CREATE SERVER influxdb_server FOREIGN DATA WRAPPER influxdb_fdw OPTIONS
 (dbname 'mydb', host 'http://localhost', port '8086') ;
 </pre>
+#### Influxdb_cxx Client connect to InfluxDB ver 1.x
+<pre>
+CREATE SERVER influxdb_server FOREIGN DATA WRAPPER influxdb_fdw OPTIONS
+(dbname 'mydb', host 'http://localhost', port '8086', version '1') ;
+</pre>
+#### Influxdb_cxx Client connect to InfluxDB ver 2.x
+<pre>
+CREATE SERVER influxdb_server FOREIGN DATA WRAPPER influxdb_fdw OPTIONS
+(dbname 'mydb', host 'http://localhost', port '8086', version '2', retention_policy '') ;
+</pre>
+
 
 ### Create user mapping
+#### Go Client connect to InfluxDB ver 1.x
 <pre>
 CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_server OPTIONS(user 'user', password 'pass');
 </pre>
+#### Influxdb_cxx Client connect to InfluxDB ver 1.x
+<pre>
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_server OPTIONS(user 'user', password 'pass');
+</pre>
+#### Influxdb_cxx Client connect to InfluxDB ver 2.x
+<pre>
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_server OPTIONS(auth_token 'token');
+</pre>
+
 
 ### Create foreign table
 You need to declare a column named "time" to access InfluxDB time column.
@@ -54,6 +110,16 @@ CREATE FOREIGN TABLE t2(tag1 text, field1 integer, tag2 text, field2 integer) SE
 <pre>
 IMPORT FOREIGN SCHEMA public FROM SERVER influxdb_server INTO public;
 </pre>
+
+Following options are supported:
+* **host** - the address used to connect to InfluxDB server.
+* **port** - the port used to connect to InfluxDB server.
+* **dbname** - target database name
+* **retention_policy** - retention policy of target database (default empty ``).
+* **user** - username for V1 basic authentication.
+* **password** - password for V1 basic authentication.
+* **auth_token** - token for V2 Token authentication.
+* **version** - InfluxDB server version which to connect to (Only `1` or `2`). If not, InfluxDB FDW will try to connect to InfluxDB V2 first. If unsuccessful, it will try to connect to InfluxDB V1. If it is still unsuccessful, error will be raised.
 
 ### Access foreign table
 <pre>
@@ -241,6 +307,8 @@ For examples:
 - InfluxDB FDW supports bulk INSERT by using batch_size option from PostgreSQL version 14 or later.
 - WHERE clauses including timestamp, interval and `now()` functions are pushed down.
 - LIMIT...OFFSET clauses are pushed down when there is LIMIT clause only or both LIMIT and OFFSET.<br>
+- Support pushdown DISTINCT argument for only count clause.
+- Support pushdown ANY ARRAY.
 
 ## Limitations
 - UPDATE is not supported.
@@ -316,12 +384,16 @@ For example:
   - `fields, sqrt((fields->>'c1')::int)`: function `sqrt()` is not pushed down.
   - `fields->>'c2', sqrt((fields->>'c1')::int)`: there is no fields jsonb column, so function `sqrt()` is pushed down.
 
+## Notes
+- InfluxDB FDW does not return an error even if it is overflow.
+- EXP function of InfluxDB may return different precision number in different PC.
+
 ## Contributing
 Opening issues and pull requests on GitHub are welcome.
 
 ## License
-Portions Copyright (c) 2018-2021, TOSHIBA CORPORATION
-Portions Copyright (c) 2011-2016, EnterpriseDB Corporation
+Copyright (c) 2018, TOSHIBA CORPORATION
+Copyright (c) 2011-2016, EnterpriseDB Corporation
 
 Permission to use, copy, modify, and distribute this software and its documentation for any purpose, without fee, and without a written agreement is hereby granted, provided that the above copyright notice and this paragraph and the following two paragraphs appear in all copies.
 

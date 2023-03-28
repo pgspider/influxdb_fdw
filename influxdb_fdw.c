@@ -2,7 +2,7 @@
  *
  * InfluxDB Foreign Data Wrapper for PostgreSQL
  *
- * Portions Copyright (c) 2018-2021, TOSHIBA CORPORATION
+ * Portions Copyright (c) 2018, TOSHIBA CORPORATION
  *
  * IDENTIFICATION
  *        influxdb_fdw.c
@@ -63,6 +63,10 @@
 #include "utils/typcache.h"
 #include "utils/selfuncs.h"
 #include "utils/syscache.h"
+
+#ifdef CXX_CLIENT
+#include "query_cxx.h"
+#endif
 
 extern PGDLLEXPORT void _PG_init(void);
 
@@ -219,7 +223,8 @@ static void process_query_params(ExprContext *econtext,
 								 const char **param_values,
 								 Oid *param_types,
 								 InfluxDBType * param_influxdb_types,
-								 InfluxDBValue * param_influxdb_values);
+								 InfluxDBValue * param_influxdb_values,
+								 InfluxDBColumnInfo *param_column_info);
 
 static void create_cursor(ForeignScanState *node);
 static void execute_dml_stmt(ForeignScanState *node);
@@ -239,6 +244,10 @@ static int	influxdb_get_batch_size_option(Relation rel);
 #endif
 static void influxdb_extract_slcols(InfluxDBFdwRelationInfo *fpinfo, PlannerInfo *root, RelOptInfo *baserel, List *tlist);
 
+#ifdef CXX_CLIENT
+#define free(x) pfree(x)
+#endif
+
 /*
  * This enum describes what's kept in the fdw_private list for a ForeignPath.
  * We store:
@@ -248,9 +257,9 @@ static void influxdb_extract_slcols(InfluxDBFdwRelationInfo *fpinfo, PlannerInfo
  */
 enum FdwPathPrivateIndex
 {
-	/* has-final-sort flag (as an integer Value node) */
+	/* has-final-sort flag (as a Boolean node) */
 	FdwPathPrivateHasFinalSort,
-	/* has-limit flag (as an integer Value node) */
+	/* has-limit flag (as a Boolean node) */
 	FdwPathPrivateHasLimit
 };
 
@@ -282,11 +291,11 @@ enum FdwDirectModifyPrivateIndex
 {
 	/* SQL statement to execute remotely (as a String node) */
 	FdwDirectModifyPrivateUpdateSql,
-	/* has-returning flag (as an integer Value node) */
+	/* has-returning flag (as an Boolean node) */
 	FdwDirectModifyPrivateHasReturning,
 	/* Integer list of attribute numbers retrieved by RETURNING */
 	FdwDirectModifyPrivateRetrievedAttrs,
-	/* set-processed flag (as an integer Value node) */
+	/* set-processed flag (as an Boolean node) */
 	FdwDirectModifyPrivateSetProcessed
 };
 
@@ -296,6 +305,7 @@ enum FdwDirectModifyPrivateIndex
 typedef struct InfluxDBFdwDirectModifyState
 {
 	Relation	rel;			/* relcache entry for the foreign table */
+	UserMapping	*user;			/* user mapping of foreign server */
 	AttInMetadata *attinmeta;	/* attribute datatype conversion metadata */
 
 	/* extracted fdw_private data */
@@ -313,6 +323,7 @@ typedef struct InfluxDBFdwDirectModifyState
 	Oid		   *param_types;	/* type of query parameters */
 	InfluxDBType *param_influxdb_types; /* InfluxDB type of query parameters */
 	InfluxDBValue *param_influxdb_values;	/* values for InfluxDB */
+	InfluxDBColumnInfo *param_column_info;	/* information of columns */
 
 	influxdb_opt *influxdbFdwOptions;	/* InfluxDB FDW options */
 
@@ -345,6 +356,9 @@ _PG_init(void)
 static void
 influxdb_fdw_exit(int code, Datum arg)
 {
+#ifdef CXX_CLIENT
+	cleanup_cxx_client_connection();
+#endif
 }
 
 Datum
@@ -781,7 +795,11 @@ influxdbGetForeignPlan(PlannerInfo *root,
 	 */
 	if (best_path->fdw_private)
 	{
+#if (PG_VERSION_NUM >= 150000)
+		has_limit = boolVal(list_nth(best_path->fdw_private, FdwPathPrivateHasLimit));
+#else
 		has_limit = intVal(list_nth(best_path->fdw_private, FdwPathPrivateHasLimit));
+#endif
 	}
 
 	/*
@@ -1026,6 +1044,9 @@ influxdbBeginForeignScan(ForeignScanState *node, int eflags)
 	int			numParams;
 	int			rtindex;
 	bool		schemaless;
+#ifdef CXX_CLIENT
+	ForeignTable *ftable;
+#endif
 
 	elog(DEBUG1, "influxdb_fdw : %s", __func__);
 
@@ -1057,6 +1078,16 @@ influxdbBeginForeignScan(ForeignScanState *node, int eflags)
 	else
 		rtindex = bms_next_member(fsplan->fs_relids, -1);
 	rte = exec_rt_fetch(rtindex, estate);
+
+	/* Fetch options */
+	festate->influxdbFdwOptions = influxdb_get_options(rte->relid);
+#ifdef CXX_CLIENT
+	if (!festate->influxdbFdwOptions->svr_version)
+		festate->influxdbFdwOptions->svr_version = influxdb_get_version_option(festate->influxdbFdwOptions);
+	/* get user mapping */
+	ftable = GetForeignTable(rte->relid);
+	festate->user = GetUserMapping(GetUserId(), ftable->serverid);
+#endif
 
 	influxdb_get_schemaless_info(&(festate->slinfo), schemaless, rte->relid);
 
@@ -1446,6 +1477,7 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 	}
 }
 
+#ifndef CXX_CLIENT
 static void
 copyInfluxDBResult(InfluxDBFdwExecState *festate, struct InfluxDBResult volatile *result)
 {
@@ -1494,6 +1526,7 @@ copyInfluxDBResult(InfluxDBFdwExecState *festate, struct InfluxDBResult volatile
 
 	festate->temp_result = r;
 }
+#endif
 
 static void
 freeInfluxDBResultRow(InfluxDBFdwExecState *festate, int index)
@@ -1593,7 +1626,7 @@ influxdbIterateForeignScan(ForeignScanState *node)
 	rte = rt_fetch(rtindex, estate->es_range_table);
 
 	/* Fetch the options */
-	options = influxdb_get_options(rte->relid);
+	options = festate->influxdbFdwOptions;
 
 	/*
 	 * If this is the first call after Begin or ReScan, we need to create the
@@ -1612,9 +1645,15 @@ influxdbIterateForeignScan(ForeignScanState *node)
 
 		PG_TRY();
 		{
+			/* festate->rows need longer context than per tuple */
+			oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
+#ifdef CXX_CLIENT
+			ret = InfluxDBQuery(festate->query, festate->user, options,
+#else
 			ret = InfluxDBQuery(festate->query, options->svr_address, options->svr_port,
 								options->svr_username, options->svr_password,
 								options->svr_database,
+#endif
 								festate->param_influxdb_types,
 								festate->param_influxdb_values,
 								festate->numParams);
@@ -1626,14 +1665,16 @@ influxdbIterateForeignScan(ForeignScanState *node)
 				ret.r1 = err;
 				elog(ERROR, "influxdb_fdw : %s", err);
 			}
+#ifdef CXX_CLIENT
+			/* With cxx client, ret.r0 is pointer to result set */
+			result = ret.r0;
+			festate->temp_result = (void *) result;
+#else
 			result = &ret.r0;
-			elog(DEBUG1, "influxdb_fdw : query: %s", festate->query);
-			/* festate->rows need longer context than per tuple */
-			oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
-
-			festate->row_nums = result->nrow;
-
 			copyInfluxDBResult(festate, result);
+#endif
+			festate->row_nums = result->nrow;
+			elog(DEBUG1, "influxdb_fdw : query: %s", festate->query);
 
 			MemoryContextSwitchTo(oldcontext);
 			InfluxDBFreeResult((InfluxDBResult *) result);
@@ -1873,6 +1914,9 @@ influxdbBeginForeignModify(ModifyTableState *mtstate,
 	Oid			foreignTableId = InvalidOid;
 	Plan	   *subplan;
 	int			i;
+#ifdef CXX_CLIENT
+	ForeignTable *ftable;
+#endif
 
 	elog(DEBUG1, "influxdb_fdw : %s", __func__);
 
@@ -1895,6 +1939,13 @@ influxdbBeginForeignModify(ModifyTableState *mtstate,
 
 	/* Stash away the state info we have already */
 	fmstate->influxdbFdwOptions = influxdb_get_options(foreignTableId);
+#ifdef CXX_CLIENT
+	if (!fmstate->influxdbFdwOptions->svr_version)
+		fmstate->influxdbFdwOptions->svr_version = influxdb_get_version_option(fmstate->influxdbFdwOptions);
+	/* get user mapping */
+	ftable = GetForeignTable(foreignTableId);
+	fmstate->user = GetUserMapping(GetUserId(), ftable->serverid);
+#endif
 	fmstate->rel = rel;
 	fmstate->query = strVal(list_nth(fdw_private, FdwModifyPrivateUpdateSql));
 	fmstate->retrieved_attrs = (List *) list_nth(fdw_private, FdwModifyPrivateTargetAttnums);
@@ -2044,8 +2095,8 @@ influxdbExecForeignBatchInsert(EState *estate,
  *		Determine the maximum number of tuples that can be inserted in bulk
  *
  * Returns the batch size specified for server or table. When batching is not
- * allowed (e.g. for tables with AFTER ROW triggers or with RETURNING clause),
- * returns 1.
+ * allowed (e.g. for tables with BEFORE/AFTER ROW triggers or with RETURNING
+ * clause), returns 1.
  */
 static int
 influxdbGetForeignModifyBatchSize(ResultRelInfo *resultRelInfo)
@@ -2076,10 +2127,26 @@ influxdbGetForeignModifyBatchSize(ResultRelInfo *resultRelInfo)
 	else
 		batch_size = influxdb_get_batch_size_option(resultRelInfo->ri_RelationDesc);
 
-	/* Disable batching when we have to use RETURNING. */
+	/*
+	 * Disable batching when we have to use RETURNING, there are any
+	 * BEFORE/AFTER ROW INSERT triggers on the foreign table, or there are any
+	 * WITH CHECK OPTION constraints from parent views.
+	 *
+	 * When there are any BEFORE ROW INSERT triggers on the table, we can't
+	 * support it, because such triggers might query the table we're inserting
+	 * into and act differently if the tuples that have already been processed
+	 * and prepared for insertion are not there.
+	 */
+
 	if (resultRelInfo->ri_projectReturning != NULL ||
+		resultRelInfo->ri_WithCheckOptions != NIL ||
 		(resultRelInfo->ri_TrigDesc &&
+#if (PG_VERSION_NUM >= 150000)
+		 (resultRelInfo->ri_TrigDesc->trig_insert_before_row ||
+		  resultRelInfo->ri_TrigDesc->trig_insert_after_row)))
+#else
 		 resultRelInfo->ri_TrigDesc->trig_insert_after_row))
+#endif
 		return 1;
 
 	/*
@@ -2124,7 +2191,7 @@ bindJunkColumnValue(InfluxDBFdwExecState * fmstate,
 			fmstate->param_influxdb_values[bindnum].i = 0;
 		}
 		else
-			influxdb_bind_sql_var(type, bindnum, value, &is_null,
+			influxdb_bind_sql_var(type, bindnum, value, &is_null, fmstate->param_column_info,
 								  fmstate->param_influxdb_types, fmstate->param_influxdb_values);
 		bindnum++;
 	}
@@ -2149,9 +2216,13 @@ influxdbExecForeignDelete(EState *estate,
 
 	bindJunkColumnValue(fmstate, slot, planSlot, foreignTableId, 0);
 	/* Execute the query */
+#ifdef CXX_CLIENT
+	ret = InfluxDBQuery(fmstate->query, fmstate->user, fmstate->influxdbFdwOptions,
+#else
 	ret = InfluxDBQuery(fmstate->query, fmstate->influxdbFdwOptions->svr_address,
 						fmstate->influxdbFdwOptions->svr_port, fmstate->influxdbFdwOptions->svr_username,
 						fmstate->influxdbFdwOptions->svr_password, fmstate->influxdbFdwOptions->svr_database,
+#endif
 						fmstate->param_influxdb_types, fmstate->param_influxdb_values, fmstate->p_nums);
 	if (ret.r1 != NULL)
 	{
@@ -2400,11 +2471,17 @@ influxdbPlanDirectModify(PlannerInfo *root,
 	 * Update the fdw_private list that will be available to the executor.
 	 * Items in the list must match enum FdwDirectModifyPrivateIndex, above.
 	 */
+#if (PG_VERSION_NUM >= 150000)
+	fscan->fdw_private = list_make4(makeString(sql.data),
+									makeBoolean(retrieved_attrs != NIL),
+									retrieved_attrs,
+									makeBoolean(plan->canSetTag));
+#else
 	fscan->fdw_private = list_make4(makeString(sql.data),
 									makeInteger(0),
 									retrieved_attrs,
 									makeInteger(plan->canSetTag));
-
+#endif
 	/*
 	 * Update the foreign-join-related fields.
 	 */
@@ -2430,6 +2507,9 @@ influxdbBeginDirectModify(ForeignScanState *node, int eflags)
 	Index		rtindex;
 	RangeTblEntry *rte;
 	int			numParams;
+#ifdef CXX_CLIENT
+	ForeignTable *ftable;
+#endif
 
 	elog(DEBUG1, "influxdb_fdw : %s", __func__);
 
@@ -2465,6 +2545,13 @@ influxdbBeginDirectModify(ForeignScanState *node, int eflags)
 
 	/* Fetch options */
 	dmstate->influxdbFdwOptions = influxdb_get_options(rte->relid);
+#ifdef CXX_CLIENT
+	if (!dmstate->influxdbFdwOptions->svr_version)
+		dmstate->influxdbFdwOptions->svr_version = influxdb_get_version_option(dmstate->influxdbFdwOptions);
+	/* get user mapping */
+	ftable = GetForeignTable(RelationGetRelid(dmstate->rel));
+	dmstate->user = GetUserMapping(GetUserId(), ftable->serverid);
+#endif
 
 	/* Update the foreign-join-related fields. */
 	if (fsplan->scan.scanrelid == 0)
@@ -2487,12 +2574,22 @@ influxdbBeginDirectModify(ForeignScanState *node, int eflags)
 	/* Get private info created by planner functions. */
 	dmstate->query = strVal(list_nth(fsplan->fdw_private,
 									 FdwDirectModifyPrivateUpdateSql));
+#if (PG_VERSION_NUM >= 150000)
+	dmstate->has_returning = boolVal(list_nth(fsplan->fdw_private,
+											 FdwDirectModifyPrivateHasReturning));
+#else
 	dmstate->has_returning = intVal(list_nth(fsplan->fdw_private,
 											 FdwDirectModifyPrivateHasReturning));
+#endif
 	dmstate->retrieved_attrs = (List *) list_nth(fsplan->fdw_private,
 												 FdwDirectModifyPrivateRetrievedAttrs);
+#if (PG_VERSION_NUM >= 150000)
+	dmstate->set_processed = boolVal(list_nth(fsplan->fdw_private,
+											 FdwDirectModifyPrivateSetProcessed));
+#else
 	dmstate->set_processed = intVal(list_nth(fsplan->fdw_private,
 											 FdwDirectModifyPrivateSetProcessed));
+#endif
 
 	/*
 	 * Prepare for processing of parameters used in remote query, if any.
@@ -2659,6 +2756,10 @@ influxdbImportForeignSchema(ImportForeignSchemaStmt *stmt,
 	bool		import_time_text = false;
 	bool		schemaless = false;
 	struct InfluxDBSchemaInfo_return ret;
+#ifdef CXX_CLIENT
+	ForeignServer *server;
+	UserMapping *mapping;
+#endif
 
 	elog(DEBUG1, "influxdb_fdw : %s", __func__);
 	/* Parse statement options */
@@ -2677,9 +2778,15 @@ influxdbImportForeignSchema(ImportForeignSchemaStmt *stmt,
 	}
 
 	options = influxdb_get_options(serverOid);
+#ifndef CXX_CLIENT
 	ret = InfluxDBSchemaInfo(options->svr_address, options->svr_port,
 							 options->svr_username, options->svr_password,
 							 options->svr_database);
+#else
+	server = GetForeignServer(serverOid);
+	mapping = GetUserMapping(GetUserId(), server->serverid);
+	ret = InfluxDBSchemaInfo(mapping, options);
+#endif
 	if (ret.r2 != NULL)
 	{
 		char	   *err = pstrdup(ret.r2);
@@ -2925,7 +3032,11 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel)
 	 * different from those in the plan's targetlist. Use a copy of path
 	 * target to record the new sortgrouprefs.
 	 */
+#if (PG_VERSION_NUM <= 110000)
 	grouping_target = copy_pathtarget(root->upper_targets[UPPERREL_GROUP_AGG]);
+#else
+	grouping_target = copy_pathtarget(grouped_rel->reltarget);
+#endif
 
 	/*
 	 * Evaluate grouping targets and check whether they are safe to push down
@@ -3382,13 +3493,17 @@ add_foreign_final_paths(PlannerInfo *root, RelOptInfo *input_rel,
 	 * Build the fdw_private list that will be used by influxdbGetForeignPlan.
 	 * Items in the list must match order in enum FdwPathPrivateIndex.
 	 */
+#if (PG_VERSION_NUM >= 150000)
+	fdw_private = list_make2(makeBoolean(has_final_sort),
+							 makeBoolean(extra->limit_needed));
+#else
 	fdw_private = list_make2(makeInteger(has_final_sort)
 #if (PG_VERSION_NUM >= 120000)
 							 ,makeInteger(extra->limit_needed));
 #else
 							 ,makeInteger(false));
 #endif
-
+#endif
 	/*
 	 * Create foreign final path; this gets rid of a no-longer-needed outer
 	 * plan (if any), which makes the EXPLAIN output look cleaner
@@ -3457,6 +3572,7 @@ influxdbGetForeignUpperPaths(PlannerInfo *root, UpperRelationKind stage,
 
 	fpinfo = (InfluxDBFdwRelationInfo *) palloc0(sizeof(InfluxDBFdwRelationInfo));
 	fpinfo->pushdown_safe = false;
+	fpinfo->stage = stage;
 	output_rel->fdw_private = fpinfo;
 
 	switch (stage)
@@ -3619,6 +3735,14 @@ influxdb_set_transmission_modes(void)
 								 PGC_USERSET, PGC_S_SESSION,
 								 GUC_ACTION_SAVE, true, 0, false);
 
+	/*
+	 * In addition force restrictive search_path, in case there are any
+	 * regproc or similar constants to be printed.
+	 */
+	(void) set_config_option("search_path", "pg_catalog",
+							 PGC_USERSET, PGC_S_SESSION,
+							 GUC_ACTION_SAVE, true, 0, false);
+
 	return nestlevel;
 }
 
@@ -3694,7 +3818,8 @@ process_query_params(ExprContext *econtext,
 					 const char **param_values,
 					 Oid *param_types,
 					 InfluxDBType * param_influxdb_types,
-					 InfluxDBValue * param_influxdb_values)
+					 InfluxDBValue * param_influxdb_values,
+					 InfluxDBColumnInfo *param_column_info)
 {
 	int			nestlevel;
 	int			i;
@@ -3712,7 +3837,7 @@ process_query_params(ExprContext *econtext,
 		/* Evaluate the parameter expression */
 		expr_value = ExecEvalExpr(expr_state, econtext, &isNull);
 		/* Bind parameters */
-		influxdb_bind_sql_var(param_types[i], i, expr_value, &isNull,
+		influxdb_bind_sql_var(param_types[i], i, expr_value, &isNull, param_column_info,
 							  param_influxdb_types, param_influxdb_values);
 
 		/*
@@ -3756,7 +3881,8 @@ create_cursor(ForeignScanState *node)
 							 values,
 							 festate->param_types,
 							 festate->param_influxdb_types,
-							 festate->param_influxdb_values);
+							 festate->param_influxdb_values,
+							 festate->param_column_info);
 
 		MemoryContextSwitchTo(oldcontext);
 	}
@@ -3792,7 +3918,8 @@ execute_dml_stmt(ForeignScanState *node)
 							 values,
 							 dmstate->param_types,
 							 dmstate->param_influxdb_types,
-							 dmstate->param_influxdb_values);
+							 dmstate->param_influxdb_values,
+							 dmstate->param_column_info);
 
 		MemoryContextSwitchTo(oldcontext);
 	}
@@ -3804,9 +3931,13 @@ execute_dml_stmt(ForeignScanState *node)
 	 * the desired result.  This allows us to avoid assuming that the remote
 	 * server has the same OIDs we do for the parameters' types.
 	 */
+#ifdef CXX_CLIENT
+	ret = InfluxDBQuery(dmstate->query, dmstate->user, dmstate->influxdbFdwOptions,
+#else
 	ret = InfluxDBQuery(dmstate->query, dmstate->influxdbFdwOptions->svr_address,
 						dmstate->influxdbFdwOptions->svr_port, dmstate->influxdbFdwOptions->svr_username,
 						dmstate->influxdbFdwOptions->svr_password, dmstate->influxdbFdwOptions->svr_database,
+#endif
 						dmstate->param_influxdb_types, dmstate->param_influxdb_values, dmstate->numParams);
 	if (ret.r1 != NULL)
 	{
@@ -3895,7 +4026,7 @@ execute_foreign_insert_modify(EState *estate,
 						/* time column has no value */
 						if (!time_had_value)
 						{
-							influxdb_bind_sql_var(type, bindnum, value, &is_null,
+							influxdb_bind_sql_var(type, bindnum, value, &is_null, fmstate->param_column_info,
 												  fmstate->param_influxdb_types, fmstate->param_influxdb_values);
 							bind_num_time_column = bindnum;
 							time_had_value = true;
@@ -3910,7 +4041,7 @@ execute_foreign_insert_modify(EState *estate,
 							elog(WARNING, "Inserting value has both \'time_text\' and \'time\' columns specified. The \'time\' will be ignored.");
 							if (strcmp(col->column_name, INFLUXDB_TIME_TEXT_COLUMN) == 0)
 							{
-								influxdb_bind_sql_var(type, bind_num_time_column, value, &is_null,
+								influxdb_bind_sql_var(type, bind_num_time_column, value, &is_null, fmstate->param_column_info,
 													  fmstate->param_influxdb_types, fmstate->param_influxdb_values);
 							}
 							fmstate->param_influxdb_types[bindnum] = INFLUXDB_NULL;
@@ -3918,7 +4049,7 @@ execute_foreign_insert_modify(EState *estate,
 						}
 					}
 					else
-						influxdb_bind_sql_var(type, bindnum, value, &is_null,
+						influxdb_bind_sql_var(type, bindnum, value, &is_null, fmstate->param_column_info,
 											  fmstate->param_influxdb_types, fmstate->param_influxdb_values);
 				}
 				bindnum++;
@@ -3929,10 +4060,14 @@ execute_foreign_insert_modify(EState *estate,
 
 	Assert(bindnum == fmstate->p_nums * numSlots);
 	/* Insert the record */
+#ifndef CXX_CLIENT
 	ret = InfluxDBInsert(fmstate->influxdbFdwOptions->svr_address, fmstate->influxdbFdwOptions->svr_port,
 						 fmstate->influxdbFdwOptions->svr_username, fmstate->influxdbFdwOptions->svr_password,
-						 fmstate->influxdbFdwOptions->svr_database, tablename, fmstate->param_column_info,
-						 fmstate->param_influxdb_types, fmstate->param_influxdb_values, fmstate->p_nums, numSlots);
+						 fmstate->influxdbFdwOptions->svr_database, tablename,
+#else
+	ret = InfluxDBInsert(tablename, fmstate->user, fmstate->influxdbFdwOptions,
+#endif
+						fmstate->param_column_info, fmstate->param_influxdb_types, fmstate->param_influxdb_values, fmstate->p_nums, numSlots);
 	if (ret != NULL)
 		elog(ERROR, "influxdb_fdw : %s", ret);
 

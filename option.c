@@ -2,7 +2,7 @@
  *
  * InfluxDB Foreign Data Wrapper for PostgreSQL
  *
- * Portions Copyright (c) 2018-2021, TOSHIBA CORPORATION
+ * Portions Copyright (c) 2018, TOSHIBA CORPORATION
  *
  * IDENTIFICATION
  *        option.c
@@ -42,6 +42,10 @@
 #include "optimizer/planmain.h"
 #include "utils/varlena.h"
 
+#ifdef CXX_CLIENT
+#include "query_cxx.h"
+#endif
+
 /*
  * Describes the valid options for objects that use this wrapper.
  */
@@ -60,6 +64,11 @@ static struct InfluxDBFdwOption valid_options[] =
 	{"host", ForeignServerRelationId},
 	{"port", ForeignServerRelationId},
 	{"dbname", ForeignServerRelationId},
+#ifdef CXX_CLIENT
+	{"version", ForeignServerRelationId},
+	{"retention_policy", ForeignServerRelationId},
+	{"auth_token", UserMappingRelationId},
+#endif
 	{"user", UserMappingRelationId},
 	{"password", UserMappingRelationId},
 
@@ -90,7 +99,7 @@ bool		influxdb_is_valid_option(const char *option, Oid context);
 
 /*
  * Validate the generic options given to a FOREIGN DATA WRAPPER, SERVER,
- * USER MAPPING or FOREIGN TABLE that uses file_fdw.
+ * USER MAPPING or FOREIGN TABLE that uses influxdb_fdw.
  *
  * Raise an ERROR if the option or its value is considered invalid.
  */
@@ -129,8 +138,10 @@ influxdb_fdw_validator(PG_FUNCTION_ARGS)
 			ereport(ERROR,
 					(errcode(ERRCODE_FDW_INVALID_OPTION_NAME),
 					 errmsg("invalid option \"%s\"", def->defname),
-					 errhint("Valid options in this context are: %s", buf.len ? buf.data : "<none>")
-					 ));
+					 buf.len > 0
+					 ? errhint("Valid options in this context are: %s",
+							   buf.data)
+					 : errhint("There are no valid options in this context.")));
 		}
 
 		/*
@@ -157,6 +168,20 @@ influxdb_fdw_validator(PG_FUNCTION_ARGS)
 						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 						 errmsg("\"%s\" must be an integer value greater than zero",
 								def->defname)));
+		}
+#endif
+
+#ifdef CXX_CLIENT
+		if(strcmp(def->defname, "version") == 0)
+		{
+			int int_val;
+
+			int_val = atoi(defGetString(def));
+
+			if(int_val != INFLUXDB_VERSION_1 && int_val !=INFLUXDB_VERSION_2)
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("InfluxDB only support versions from v1.x to 2.x. \"%s\" must be 1 or 2.",  def->defname)));
 		}
 #endif
 	}
@@ -186,12 +211,12 @@ influxdb_is_valid_option(const char *option, Oid context)
 influxdb_opt *
 influxdb_get_options(Oid foreignoid)
 {
-	ForeignTable *f_table = NULL;
-	ForeignServer *f_server = NULL;
-	UserMapping *f_mapping;
-	List	   *options;
-	ListCell   *lc;
-	influxdb_opt *opt;
+	ForeignTable   *f_table = NULL;
+	ForeignServer  *f_server = NULL;
+	UserMapping    *f_mapping;
+	List	   	   *options;
+	ListCell   	   *lc;
+	influxdb_opt   *opt;
 
 	opt = (influxdb_opt *) palloc(sizeof(influxdb_opt));
 	memset(opt, 0, sizeof(influxdb_opt));
@@ -250,13 +275,58 @@ influxdb_get_options(Oid foreignoid)
 
 		if (strcmp(def->defname, "schemaless") == 0)
 			opt->schemaless = defGetBoolean(def);
+
+#ifdef CXX_CLIENT
+		if (strcmp(def->defname, "auth_token") == 0)
+			opt->svr_token = defGetString(def);
+
+		if (strcmp(def->defname, "version") == 0)
+			opt->svr_version = atoi(defGetString(def));
+
+		if (strcmp(def->defname, "retention_policy") == 0)
+			opt->svr_retention_policy = defGetString(def);
+#endif
 	}
 
 	if (!opt->svr_table && f_table)
 		opt->svr_table = get_rel_name(foreignoid);
 
+#ifdef CXX_CLIENT
+	/* When using the influxdb-cxx API client, c++ not allow std::string(NULL). */
+	if (opt->svr_address == NULL || strcmp(opt->svr_address, "") == 0)
+		elog(ERROR, "influxdb_fdw: Server Host not specified");
+
+	if (opt->svr_database == NULL || strcmp(opt->svr_database, "") == 0)
+		elog(ERROR, "influxdb_fdw: Database not specified");
+
+	if (opt->svr_username == NULL)
+		opt->svr_username = "";
+
+	if (opt->svr_password == NULL)
+		opt->svr_password = "";
+
+	if (opt->svr_token == NULL)
+		opt->svr_token = "";
+
+	if (opt->svr_retention_policy == NULL)
+		opt->svr_retention_policy = "";
+#endif
+
 	return opt;
 }
+
+#ifdef CXX_CLIENT
+/*
+ * Fetch the version options for a influxdb_fdw foreign table.
+ */
+int
+influxdb_get_version_option(influxdb_opt *opt)
+{
+	/* determine which version is connected to */
+	return check_connected_influxdb_version(opt->svr_address, opt->svr_port, opt->svr_username, opt->svr_password, opt->svr_database,
+														opt->svr_token, opt->svr_retention_policy);
+}
+#endif
 
 /*
  * Parse a comma-separated string and return a list of tag keys of a foreign table.

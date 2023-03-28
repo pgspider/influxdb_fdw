@@ -1,0 +1,245 @@
+-- Regression tests for prepareable statements. We query the content
+-- of the pg_prepared_statements view as prepared statements are
+-- created and removed.
+\set ECHO none
+--Testcase 27:
+CREATE EXTENSION influxdb_fdw;
+--Testcase 28:
+CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw
+  OPTIONS (dbname 'coredb', :SERVER);
+--Testcase 29:
+CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (:AUTHENTICATION);
+--Testcase 30:
+CREATE FOREIGN TABLE tenk1 (
+	fields jsonb OPTIONS (fields 'true')
+) SERVER influxdb_svr OPTIONS (table 'tenk', schemaless 'true');
+-- Does not support this command
+-- ALTER TABLE tenk1 SET WITH OIDS;
+--Testcase 31:
+CREATE FOREIGN TABLE road (
+	fields jsonb OPTIONS (fields 'true')
+) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 32:
+CREATE FOREIGN TABLE road_tmp (fields jsonb OPTIONS (fields 'true')) SERVER influxdb_svr OPTIONS (schemaless 'true');
+--Testcase 1:
+SELECT name, statement, parameter_types FROM pg_prepared_statements;
+ name | statement | parameter_types 
+------+-----------+-----------------
+(0 rows)
+
+--Testcase 2:
+PREPARE q1 AS SELECT (fields->>'a')::int AS a FROM road_tmp;
+--Testcase 3:
+EXECUTE q1;
+ a 
+---
+ 1
+(1 row)
+
+--Testcase 4:
+SELECT name, statement, parameter_types FROM pg_prepared_statements;
+ name |                          statement                           | parameter_types 
+------+--------------------------------------------------------------+-----------------
+ q1   | PREPARE q1 AS SELECT (fields->>'a')::int AS a FROM road_tmp; | {}
+(1 row)
+
+-- should fail
+--Testcase 5:
+PREPARE q1 AS SELECT (fields->>'b')::int b FROM road_tmp;
+ERROR:  prepared statement "q1" already exists
+-- should succeed
+DEALLOCATE q1;
+--Testcase 6:
+PREPARE q1 AS SELECT (fields->>'b')::int b FROM road_tmp;
+--Testcase 7:
+EXECUTE q1;
+ b 
+---
+ 2
+(1 row)
+
+--Testcase 8:
+PREPARE q2 AS SELECT (fields->>'b')::int AS b FROM road_tmp;
+--Testcase 9:
+SELECT name, statement, parameter_types FROM pg_prepared_statements;
+ name |                          statement                           | parameter_types 
+------+--------------------------------------------------------------+-----------------
+ q1   | PREPARE q1 AS SELECT (fields->>'b')::int b FROM road_tmp;    | {}
+ q2   | PREPARE q2 AS SELECT (fields->>'b')::int AS b FROM road_tmp; | {}
+(2 rows)
+
+-- sql92 syntax
+DEALLOCATE PREPARE q1;
+--Testcase 10:
+SELECT name, statement, parameter_types FROM pg_prepared_statements;
+ name |                          statement                           | parameter_types 
+------+--------------------------------------------------------------+-----------------
+ q2   | PREPARE q2 AS SELECT (fields->>'b')::int AS b FROM road_tmp; | {}
+(1 row)
+
+DEALLOCATE PREPARE q2;
+-- the view should return the empty set again
+--Testcase 11:
+SELECT name, statement, parameter_types FROM pg_prepared_statements;
+ name | statement | parameter_types 
+------+-----------+-----------------
+(0 rows)
+
+-- parameterized queries
+--Testcase 12:
+PREPARE q2(text) AS
+	SELECT datname, datistemplate, datallowconn
+	FROM pg_database WHERE datname = $1;
+--Testcase 13:
+EXECUTE q2('postgres');
+ datname  | datistemplate | datallowconn 
+----------+---------------+--------------
+ postgres | f             | t
+(1 row)
+
+--Testcase 14:
+PREPARE q3(text, int, float, boolean, smallint) AS
+	SELECT * FROM tenk1 WHERE fields->>'string4' = $1 AND ((fields->>'four')::int = $2 OR
+	(fields->>'ten')::int = $3::bigint OR true = $4 OR (fields->>'odd')::int = $5::int)
+	ORDER BY (fields->>'unique1')::int;
+--Testcase 15:
+EXECUTE q3('AAAAxx', 5::smallint, 10.5::float, false, 4::bigint);
+                                                                                                                                         fields                                                                                                                                          
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "2", "unique2": "2716", "stringu1": "CAAAAA", "stringu2": "MAEAAA", "tenthous": "2", "thousand": "2", "fivethous": "2", "twothousand": "2"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "102", "unique2": "612", "stringu1": "YDAAAA", "stringu2": "OXAAAA", "tenthous": "102", "thousand": "102", "fivethous": "102", "twothousand": "102"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "802", "unique2": "2908", "stringu1": "WEAAAA", "stringu2": "WHEAAA", "tenthous": "802", "thousand": "802", "fivethous": "802", "twothousand": "802"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "902", "unique2": "1104", "stringu1": "SIAAAA", "stringu2": "MQBAAA", "tenthous": "902", "thousand": "902", "fivethous": "902", "twothousand": "902"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "1002", "unique2": "2580", "stringu1": "OMAAAA", "stringu2": "GVDAAA", "tenthous": "1002", "thousand": "2", "fivethous": "1002", "twothousand": "1002"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "1602", "unique2": "8148", "stringu1": "QJAAAA", "stringu2": "KBMAAA", "tenthous": "1602", "thousand": "602", "fivethous": "1602", "twothousand": "1602"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "1702", "unique2": "7940", "stringu1": "MNAAAA", "stringu2": "KTLAAA", "tenthous": "1702", "thousand": "702", "fivethous": "1702", "twothousand": "1702"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "2102", "unique2": "6184", "stringu1": "WCAAAA", "stringu2": "WDJAAA", "tenthous": "2102", "thousand": "102", "fivethous": "2102", "twothousand": "102"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "2202", "unique2": "8028", "stringu1": "SGAAAA", "stringu2": "UWLAAA", "tenthous": "2202", "thousand": "202", "fivethous": "2202", "twothousand": "202"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "2302", "unique2": "7112", "stringu1": "OKAAAA", "stringu2": "ONKAAA", "tenthous": "2302", "thousand": "302", "fivethous": "2302", "twothousand": "302"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "2902", "unique2": "6816", "stringu1": "QHAAAA", "stringu2": "ECKAAA", "tenthous": "2902", "thousand": "902", "fivethous": "2902", "twothousand": "902"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "3202", "unique2": "7128", "stringu1": "ETAAAA", "stringu2": "EOKAAA", "tenthous": "3202", "thousand": "202", "fivethous": "3202", "twothousand": "1202"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "3902", "unique2": "9224", "stringu1": "CUAAAA", "stringu2": "UQNAAA", "tenthous": "3902", "thousand": "902", "fivethous": "3902", "twothousand": "1902"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "4102", "unique2": "7676", "stringu1": "UBAAAA", "stringu2": "GJLAAA", "tenthous": "4102", "thousand": "102", "fivethous": "4102", "twothousand": "102"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "4202", "unique2": "6628", "stringu1": "QFAAAA", "stringu2": "YUJAAA", "tenthous": "4202", "thousand": "202", "fivethous": "4202", "twothousand": "202"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "4502", "unique2": "412", "stringu1": "ERAAAA", "stringu2": "WPAAAA", "tenthous": "4502", "thousand": "502", "fivethous": "4502", "twothousand": "502"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "4702", "unique2": "2520", "stringu1": "WYAAAA", "stringu2": "YSDAAA", "tenthous": "4702", "thousand": "702", "fivethous": "4702", "twothousand": "702"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "4902", "unique2": "1600", "stringu1": "OGAAAA", "stringu2": "OJCAAA", "tenthous": "4902", "thousand": "902", "fivethous": "4902", "twothousand": "902"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "5602", "unique2": "8796", "stringu1": "MHAAAA", "stringu2": "IANAAA", "tenthous": "5602", "thousand": "602", "fivethous": "602", "twothousand": "1602"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "6002", "unique2": "8932", "stringu1": "WWAAAA", "stringu2": "OFNAAA", "tenthous": "6002", "thousand": "2", "fivethous": "1002", "twothousand": "2"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "6402", "unique2": "3808", "stringu1": "GMAAAA", "stringu2": "MQFAAA", "tenthous": "6402", "thousand": "402", "fivethous": "1402", "twothousand": "402"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "7602", "unique2": "1040", "stringu1": "KGAAAA", "stringu2": "AOBAAA", "tenthous": "7602", "thousand": "602", "fivethous": "2602", "twothousand": "1602"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "7802", "unique2": "7508", "stringu1": "COAAAA", "stringu2": "UCLAAA", "tenthous": "7802", "thousand": "802", "fivethous": "2802", "twothousand": "1802"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "8002", "unique2": "9980", "stringu1": "UVAAAA", "stringu2": "WTOAAA", "tenthous": "8002", "thousand": "2", "fivethous": "3002", "twothousand": "2"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "8302", "unique2": "7800", "stringu1": "IHAAAA", "stringu2": "AOLAAA", "tenthous": "8302", "thousand": "302", "fivethous": "3302", "twothousand": "302"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "8402", "unique2": "5708", "stringu1": "ELAAAA", "stringu2": "OLIAAA", "tenthous": "8402", "thousand": "402", "fivethous": "3402", "twothousand": "402"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "8602", "unique2": "5440", "stringu1": "WSAAAA", "stringu2": "GBIAAA", "tenthous": "8602", "thousand": "602", "fivethous": "3602", "twothousand": "602"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "9502", "unique2": "1812", "stringu1": "MBAAAA", "stringu2": "SRCAAA", "tenthous": "9502", "thousand": "502", "fivethous": "4502", "twothousand": "1502"}
+ {"odd": "4", "ten": "2", "two": "0", "even": "5", "four": "2", "twenty": "2", "hundred": "2", "string4": "AAAAxx", "unique1": "9602", "unique2": "9972", "stringu1": "IFAAAA", "stringu2": "OTOAAA", "tenthous": "9602", "thousand": "602", "fivethous": "4602", "twothousand": "1602"}
+(29 rows)
+
+-- too few params
+--Testcase 16:
+EXECUTE q3('bool');
+ERROR:  wrong number of parameters for prepared statement "q3"
+DETAIL:  Expected 5 parameters but got 1.
+-- too many params
+--Testcase 17:
+EXECUTE q3('bytea', 5::smallint, 10.5::float, false, 4::bigint, true);
+ERROR:  wrong number of parameters for prepared statement "q3"
+DETAIL:  Expected 5 parameters but got 6.
+-- wrong param types
+--Testcase 18:
+EXECUTE q3(5::smallint, 10.5::float, false, 4::bigint, 'bytea');
+ERROR:  parameter $3 of type boolean cannot be coerced to the expected type double precision
+HINT:  You will need to rewrite or cast the expression.
+-- invalid type
+--Testcase 19:
+PREPARE q4(nonexistenttype) AS SELECT $1;
+ERROR:  type "nonexistenttype" does not exist
+LINE 1: PREPARE q4(nonexistenttype) AS SELECT $1;
+                   ^
+-- create table as execute
+--Testcase 20:
+PREPARE q5(int, text) AS
+	SELECT * FROM tenk1 WHERE (fields->>'unique1')::int = $1 OR fields->>'stringu1' = $2
+	ORDER BY (fields->>'unique1')::int;
+--Testcase 33:
+CREATE TEMPORARY TABLE q5_prep_results AS EXECUTE q5(200, 'DTAAAA');
+--Testcase 21:
+SELECT * FROM q5_prep_results;
+                                                                                                                                            fields                                                                                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"odd": "0", "ten": "0", "two": "0", "even": "1", "four": "0", "twenty": "0", "hundred": "0", "string4": "HHHHxx", "unique1": "200", "unique2": "9441", "stringu1": "SHAAAA", "stringu2": "DZNAAA", "tenthous": "200", "thousand": "200", "fivethous": "200", "twothousand": "200"}
+ {"odd": "194", "ten": "7", "two": "1", "even": "195", "four": "1", "twenty": "17", "hundred": "97", "string4": "AAAAxx", "unique1": "497", "unique2": "9092", "stringu1": "DTAAAA", "stringu2": "SLNAAA", "tenthous": "497", "thousand": "497", "fivethous": "497", "twothousand": "497"}
+ {"odd": "146", "ten": "3", "two": "1", "even": "147", "four": "1", "twenty": "13", "hundred": "73", "string4": "VVVVxx", "unique1": "1173", "unique2": "6699", "stringu1": "DTAAAA", "stringu2": "RXJAAA", "tenthous": "1173", "thousand": "173", "fivethous": "1173", "twothousand": "1173"}
+ {"odd": "98", "ten": "9", "two": "1", "even": "99", "four": "1", "twenty": "9", "hundred": "49", "string4": "VVVVxx", "unique1": "1849", "unique2": "8143", "stringu1": "DTAAAA", "stringu2": "FBMAAA", "tenthous": "1849", "thousand": "849", "fivethous": "1849", "twothousand": "1849"}
+ {"odd": "50", "ten": "5", "two": "1", "even": "51", "four": "1", "twenty": "5", "hundred": "25", "string4": "AAAAxx", "unique1": "2525", "unique2": "64", "stringu1": "DTAAAA", "stringu2": "MCAAAA", "tenthous": "2525", "thousand": "525", "fivethous": "2525", "twothousand": "525"}
+ {"odd": "2", "ten": "1", "two": "1", "even": "3", "four": "1", "twenty": "1", "hundred": "1", "string4": "HHHHxx", "unique1": "3201", "unique2": "7309", "stringu1": "DTAAAA", "stringu2": "DVKAAA", "tenthous": "3201", "thousand": "201", "fivethous": "3201", "twothousand": "1201"}
+ {"odd": "154", "ten": "7", "two": "1", "even": "155", "four": "1", "twenty": "17", "hundred": "77", "string4": "AAAAxx", "unique1": "3877", "unique2": "4060", "stringu1": "DTAAAA", "stringu2": "EAGAAA", "tenthous": "3877", "thousand": "877", "fivethous": "3877", "twothousand": "1877"}
+ {"odd": "106", "ten": "3", "two": "1", "even": "107", "four": "1", "twenty": "13", "hundred": "53", "string4": "HHHHxx", "unique1": "4553", "unique2": "4113", "stringu1": "DTAAAA", "stringu2": "FCGAAA", "tenthous": "4553", "thousand": "553", "fivethous": "4553", "twothousand": "553"}
+ {"odd": "58", "ten": "9", "two": "1", "even": "59", "four": "1", "twenty": "9", "hundred": "29", "string4": "VVVVxx", "unique1": "5229", "unique2": "6407", "stringu1": "DTAAAA", "stringu2": "LMJAAA", "tenthous": "5229", "thousand": "229", "fivethous": "229", "twothousand": "1229"}
+ {"odd": "10", "ten": "5", "two": "1", "even": "11", "four": "1", "twenty": "5", "hundred": "5", "string4": "HHHHxx", "unique1": "5905", "unique2": "9537", "stringu1": "DTAAAA", "stringu2": "VCOAAA", "tenthous": "5905", "thousand": "905", "fivethous": "905", "twothousand": "1905"}
+ {"odd": "162", "ten": "1", "two": "1", "even": "163", "four": "1", "twenty": "1", "hundred": "81", "string4": "OOOOxx", "unique1": "6581", "unique2": "4686", "stringu1": "DTAAAA", "stringu2": "GYGAAA", "tenthous": "6581", "thousand": "581", "fivethous": "1581", "twothousand": "581"}
+ {"odd": "114", "ten": "7", "two": "1", "even": "115", "four": "1", "twenty": "17", "hundred": "57", "string4": "VVVVxx", "unique1": "7257", "unique2": "1895", "stringu1": "DTAAAA", "stringu2": "XUCAAA", "tenthous": "7257", "thousand": "257", "fivethous": "2257", "twothousand": "1257"}
+ {"odd": "66", "ten": "3", "two": "1", "even": "67", "four": "1", "twenty": "13", "hundred": "33", "string4": "OOOOxx", "unique1": "7933", "unique2": "4514", "stringu1": "DTAAAA", "stringu2": "QRGAAA", "tenthous": "7933", "thousand": "933", "fivethous": "2933", "twothousand": "1933"}
+ {"odd": "18", "ten": "9", "two": "1", "even": "19", "four": "1", "twenty": "9", "hundred": "9", "string4": "OOOOxx", "unique1": "8609", "unique2": "5918", "stringu1": "DTAAAA", "stringu2": "QTIAAA", "tenthous": "8609", "thousand": "609", "fivethous": "3609", "twothousand": "609"}
+ {"odd": "170", "ten": "5", "two": "1", "even": "171", "four": "1", "twenty": "5", "hundred": "85", "string4": "HHHHxx", "unique1": "9285", "unique2": "8469", "stringu1": "DTAAAA", "stringu2": "TNMAAA", "tenthous": "9285", "thousand": "285", "fivethous": "4285", "twothousand": "1285"}
+ {"odd": "122", "ten": "1", "two": "1", "even": "123", "four": "1", "twenty": "1", "hundred": "61", "string4": "OOOOxx", "unique1": "9961", "unique2": "2058", "stringu1": "DTAAAA", "stringu2": "EBDAAA", "tenthous": "9961", "thousand": "961", "fivethous": "4961", "twothousand": "1961"}
+(16 rows)
+
+--Testcase 34:
+CREATE TEMPORARY TABLE q5_prep_nodata AS EXECUTE q5(200, 'DTAAAA')
+    WITH NO DATA;
+--Testcase 22:
+SELECT * FROM q5_prep_nodata;
+ fields 
+--------
+(0 rows)
+
+-- unknown or unspecified parameter types: should succeed
+--Testcase 23:
+PREPARE q6 AS
+    SELECT * FROM tenk1 WHERE (fields->>'unique1')::int = $1 AND fields->>'stringu1' = $2;
+--Testcase 24:
+PREPARE q7(unknown) AS
+    SELECT * FROM road WHERE fields->>'thepath' = $1;
+--Testcase 25:
+SELECT name, statement, parameter_types FROM pg_prepared_statements
+    ORDER BY name;
+ name |                                           statement                                           |                  parameter_types                   
+------+-----------------------------------------------------------------------------------------------+----------------------------------------------------
+ q2   | PREPARE q2(text) AS                                                                          +| {text}
+      |         SELECT datname, datistemplate, datallowconn                                          +| 
+      |         FROM pg_database WHERE datname = $1;                                                  | 
+ q3   | PREPARE q3(text, int, float, boolean, smallint) AS                                           +| {text,integer,"double precision",boolean,smallint}
+      |         SELECT * FROM tenk1 WHERE fields->>'string4' = $1 AND ((fields->>'four')::int = $2 OR+| 
+      |         (fields->>'ten')::int = $3::bigint OR true = $4 OR (fields->>'odd')::int = $5::int)  +| 
+      |         ORDER BY (fields->>'unique1')::int;                                                   | 
+ q5   | PREPARE q5(int, text) AS                                                                     +| {integer,text}
+      |         SELECT * FROM tenk1 WHERE (fields->>'unique1')::int = $1 OR fields->>'stringu1' = $2 +| 
+      |         ORDER BY (fields->>'unique1')::int;                                                   | 
+ q6   | PREPARE q6 AS                                                                                +| {integer,text}
+      |     SELECT * FROM tenk1 WHERE (fields->>'unique1')::int = $1 AND fields->>'stringu1' = $2;    | 
+ q7   | PREPARE q7(unknown) AS                                                                       +| {text}
+      |     SELECT * FROM road WHERE fields->>'thepath' = $1;                                         | 
+(5 rows)
+
+-- test DEALLOCATE ALL;
+DEALLOCATE ALL;
+--Testcase 26:
+SELECT name, statement, parameter_types FROM pg_prepared_statements
+    ORDER BY name;
+ name | statement | parameter_types 
+------+-----------+-----------------
+(0 rows)
+
+--Testcase 35:
+DROP USER MAPPING FOR CURRENT_USER SERVER influxdb_svr;
+--Testcase 36:
+DROP SERVER influxdb_svr CASCADE;
+NOTICE:  drop cascades to 3 other objects
+DETAIL:  drop cascades to foreign table tenk1
+drop cascades to foreign table road
+drop cascades to foreign table road_tmp
+--Testcase 37:
+DROP EXTENSION influxdb_fdw;
