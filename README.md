@@ -266,6 +266,8 @@ For example:
   - `fields, fields->>'c2', sqrt((fields->>'c1')::int)`: function `sqrt()` is not pushed down.
   - `fields, sqrt((fields->>'c1')::int)`: function `sqrt()` is not pushed down.
   - `fields->>'c2', sqrt((fields->>'c1')::int)`: there is no fields jsonb column, so function `sqrt()` is pushed down.
+  
+Also see [Limitations](#limitations).  
 
 Supported platforms
 -------------------
@@ -399,7 +401,7 @@ Once for a database you need, as PostgreSQL superuser.
 
 ### Create a foreign server with appropriate configuration:
 
-Once for a foreign datasource you need, as PostgreSQL superuser. Please specify SQLite database path using `database` option.
+Once for a foreign datasource you need, as PostgreSQL superuser. Please specify database name using `dbname` option.
 
 ```sql
 	CREATE SERVER influxdb_svr
@@ -416,7 +418,7 @@ Once for a foreign datasource you need, as PostgreSQL superuser. Please specify 
 Once for a normal user (non-superuser) in PostgreSQL, as PostgreSQL superuser. It is a good idea to use a superuser only where really necessary, so let's allow a normal user to use the foreign server (this is not required for the example to work, but it's secirity recomedation).
 
 ```sql
-	GRANT USAGE ON FOREIGN SERVER sqlite_server TO pguser;
+	GRANT USAGE ON FOREIGN SERVER influxdb_svr TO pguser;
 ```
 Where `pguser` is a sample user for works with foreign server (and foreign tables).
 
