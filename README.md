@@ -6,7 +6,6 @@ to [InfluxDB](https://www.influxdata.com) database file. This FDW works with Pos
 - InfluxDB 1.8: with either [influxdb1-go](https://github.com/pgspider/influxdb_fdw/pull/35#install-influxdb-go-client-library) client or [influxdb-cxx](https://github.com/pgspider/influxdb_fdw/pull/35#install-influxdb_cxx-client-library) client.
 - InfluxDB 2.2: with [influxdb-cxx](https://github.com/pgspider/influxdb_fdw/pull/35#install-influxdb_cxx-client-library) client via InfluxDB v1 compatibility API.
 
-
 <img src="https://upload.wikimedia.org/wikipedia/commons/2/29/Postgresql_elephant.svg" align="center" height="100" alt="PostgreSQL"/>	+	<img src="https://assets.zabbix.com/img/brands/influxdb.svg" align="center" height="100" alt="InfluxDB"/>
 
 Contents
@@ -203,10 +202,10 @@ For examples:
 ## Pushdowning
 
 - `WHERE` clauses including `timestamp`, `interval` and `now()` functions are pushed down.
-- InfluxDB FDW supports pushed down some aggregate functions: `count`, `stddev`, `sum`, `max`, `min`.
+- Some of aggregate functions: `count`, `stddev`, `sum`, `max`, `min`.
 - `LIMIT...OFFSET` clauses are pushed down when there is `LIMIT` clause only or both `LIMIT` and `OFFSET`.
-- Support pushdown `DISTINCT` argument for only `count` clause.
-- Support pushdown `ANY ARRAY`.
+- `DISTINCT` argument for only `count` clause.
+- `ANY ARRAY`.
 
 ## Notes about features
 
@@ -282,13 +281,11 @@ reasonably POSIX-compliant system.
 
 `influxdb_fdw` is designed to be compatible with PostgreSQL 10 ~ 15.
 
-Go version should be 1.10.4 or later.
-
 Installation
 ------------
 ### Prerequisites
 
-Influxdb_fdw supports 2 different client:
+`Influxdb_fdw` supports 2 different client:
 - Go client
 - `Influxdb_cxx` client.
 
