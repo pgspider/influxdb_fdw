@@ -279,7 +279,7 @@ Supported platforms
 `influxdb_fdw` was developed on Linux, and should run on any
 reasonably POSIX-compliant system.
 
-`influxdb_fdw` is designed to be compatible with PostgreSQL 10 ~ 15.
+`influxdb_fdw` is designed to be compatible with PostgreSQL 11 ~ 15.
 
 Installation
 ------------
