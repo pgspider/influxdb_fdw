@@ -350,11 +350,12 @@ The address used to connect to InfluxDB server.
 The port used to connect to InfluxDB server.
 
 - **version** as *integer*, optional, no default
-If there is this option, `influxdb_fdw` use `Influxdb_cxx` client connect to InfluxDB.
+
 InfluxDB server version which to connect to. If not, InfluxDB FDW will try to connect to InfluxDB V2 first. If unsuccessful, it will try to connect to InfluxDB V1. If it is still unsuccessful, error will be raised.
 Availlable values: `1` for InfluxDB ver 1.x and `2` for InfluxDB ver 2.x.
 
 - **retention_policy** as *string*, optional, default emplty.
+
 Retention policy of target database. See in InfluxDB ver 2.x documentation.
 
 ## CREATE USER MAPPING options
@@ -588,7 +589,7 @@ When a query to foreign tables fails, you can find why it fails by seeing a quer
     
 Contributing
 ------------
-Opening issues and pull requests on GitHub are welcome.
+Opening issues and pull requests on GitHub are welcome. Test scripts is multiversional for PostgreSQL, works in POSIX context and based on comparing output of SQL commands in psql with expected output text files.
 
 Useful links
 ------------
