@@ -342,16 +342,23 @@ Usage
 
 - **dbname** as *string*, optional
 
+Target database name.
+
 - **host** as *string*, optional
+
+The address used to connect to InfluxDB server.
 
 - **port** as *integer*, optional
 
+The port used to connect to InfluxDB server.
+
 - **version** as *integer*, optional, no default
-If there is this option, `influxdb_fdw` use `Influxdb_cxx` Client connect to InfluxDB.
+If there is this option, `influxdb_fdw` use `Influxdb_cxx` client connect to InfluxDB.
+InfluxDB server version which to connect to. If not, InfluxDB FDW will try to connect to InfluxDB V2 first. If unsuccessful, it will try to connect to InfluxDB V1. If it is still unsuccessful, error will be raised.
 Availlable values: `1` for InfluxDB ver 1.x and `2` for InfluxDB ver 2.x.
 
-- **retention_policy** as *string*, optional, no default
-See in InfluxDB ver 2.x documentation.
+- **retention_policy** as *string*, optional, default emplty.
+Retention policy of target database. See in InfluxDB ver 2.x documentation.
 
 ## CREATE USER MAPPING options
 
@@ -360,15 +367,15 @@ command:
 
 - **user** as *string*, no default
 
-  The user credential to connect to InfluxDB ver. 1.x.
-
+  Username for V1 basic authentication (InfluxDB ver. 1.x).
+      
 - **password** as *string*, no default
 
-  The password credential to connect to InfluxDB ver. 1.x.
+  Password for V1 basic authentication (InfluxDB ver. 1.x).
 
 - **auth_token** as *string*, no default
 
-  The auth_token credential to connect to InfluxDB ver. 2.x.
+  Token for V2 Token authentication (InfluxDB ver. 2.x).
 
 ## CREATE FOREIGN TABLE options
 
