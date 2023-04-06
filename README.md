@@ -67,7 +67,7 @@ Columns of foreign table in schemaless mode
   - tags `true` indicates this column as containing values of tags in InfluxDB measurement.
   - fields `true` indicates this column as containing values of fields in InfluxDB measurement.
 - Creation of foreign table in schemaless mode, for example:
-  ```sql
+```sql
   -- Create foreign table
 	CREATE FOREIGN TABLE sc1(
 	  time timestamp with time zone,
@@ -80,7 +80,6 @@ Columns of foreign table in schemaless mode
           tags 'device_id',
           schemaless 'true'
 	);
-
 -- import foreign schema
   IMPORT FOREIGN SCHEMA public 
     FROM SERVER influxdb_svr
@@ -88,7 +87,7 @@ Columns of foreign table in schemaless mode
  OPTIONS (
        schemaless 'true'
     );
-  ```
+```
 
 Querying foreign tables:
 - Initialize data in InfluxDB.
