@@ -1,140 +1,48 @@
-# InfluxDB Foreign Data Wrapper for PostgreSQL
-This PostgreSQL extension is a Foreign Data Wrapper (FDW) for InfluxDB.
+InfluxDB Foreign Data Wrapper for PostgreSQL
+============================================
 
-The current version can work with PostgreSQL 11, 12, 13, 14, 15 and confirmed with:   
-  - InfluxDB 1.8: with either [influxdb1-go](#install-influxdb-go-client-library) client or [influxdb-cxx](#install-influxdb_cxx-client-library) client.
-  - InfluxDB 2.2: with [influxdb-cxx](#install-influxdb_cxx-client-library) client via InfluxDB v1 compatibility API.
+This is a foreign data wrapper (FDW) to connect [PostgreSQL](https://www.postgresql.org/)
+to [InfluxDB](https://www.influxdata.com) database file. This FDW works with PostgreSQL 11, 12, 13, 14, 15 and confirmed with
+- InfluxDB 1.8: with either [influxdb1-go](https://github.com/pgspider/influxdb_fdw/pull/35#install-influxdb-go-client-library) client or [influxdb-cxx](https://github.com/pgspider/influxdb_fdw/pull/35#install-influxdb_cxx-client-library) client.
+- InfluxDB 2.2: with [influxdb-cxx](https://github.com/pgspider/influxdb_fdw/pull/35#install-influxdb_cxx-client-library) client via InfluxDB v1 compatibility API.
 
-## Installation
-Influxdb_fdw supports 2 different client: Go client and Influxdb_cxx client. The installation for each kind of client is described as below.
-### Install InfluxDB Go client library
-Go version should be 1.10.4 or later.
-<pre>
-go get github.com/influxdata/influxdb1-client/v2
-</pre>
-To use Go client, use GO_CLIENT=1 flag when compile the source code
+<img src="https://upload.wikimedia.org/wikipedia/commons/2/29/Postgresql_elephant.svg" align="center" height="100" alt="PostgreSQL"/>	+	<img src="https://assets.zabbix.com/img/brands/influxdb.svg" align="center" height="100" alt="InfluxDB"/>
 
-### Install Influxdb_cxx client library
-Get source code from [`influxdb-cxx github repository`](https://github.com/pgspider/influxdb-cxx) and install as manual:
-```
-git clone https://github.com/pgspider/influxdb-cxx
-cd influxdb-cxx
-cmake .. -DINFLUXCXX_WITH_BOOST=OFF -DINFLUXCXX_TESTING=OFF
-sudo make install
-```
+Contents
+--------
 
-Update LD_LIBRARY_PATH follow the installation folder of Influxdb_cxx client
+1. [Features](#features)
+2. [Supported platforms](#supported-platforms)
+3. [Installation](#installation)
+4. [Usage](#usage)
+5. [Functions](#functions)
+6. [Identifier case handling](#identifier-case-handling)
+7. [Generated columns](#generated-columns)
+8. [Character set handling](#character-set-handling)
+9. [Examples](#examples)
+10. [Limitations](#limitations)
+11. [Contributing](#contributing)
+12. [Useful links](#useful-links)
+13. [License](#license)
 
-To use Influxdb_cxx, use CXX_CLIENT=1 flag when compile the source code. It is required to use gcc version 7 to build influxdb_fdw with influxdb_cxx client.
+Features
+--------
+## Common features
 
-### Compile source code and install
-Add a directory of pg_config to PATH and build and install influxdb_fdw.
+- InfluxDB FDW supports `INSERT`, `DELETE` statements.
+  - `time` and `time_text` column can used for `INSERT`, `DELETE` statements.
+  - `time` column can express timestamp with precision down to microseconds.
+  - `time_text` column can express timestamp with precision down to nanoseconds.
+- InfluxDB FDW supports bulk `INSERT` by using `batch_size` option from PostgreSQL version 14 or later.
 
-Using Go client
-<pre>
-make USE_PGXS=1 with_llvm=no GO_CLIENT=1
-make install USE_PGXS=1 with_llvm=no GO_CLIENT=1
-</pre>
+### `GROUP BY` time intervals and `fill()`
 
-Using Influxdb_cxx client
-<pre>
-make USE_PGXS=1 with_llvm=no CXX_CLIENT=1
-make install USE_PGXS=1 with_llvm=no CXX_CLIENT=1
-</pre>
-with_llvm=no is necessary to disable llvm bit code generation when PostgreSQL is configured with --with-llvm because influxdb_fdw use go code and cannot be compiled to llvm bit code.
+Support `GROUP BY` `times()` `fill()` syntax for InfluxDB.
+The `fill()` is supported by two stub function:
+- `influx_fill_numeric()`: use with numeric parameter for example: 100, 100.1111
+- `influx_fill_option()`: use with specified option such as: none, null, linear, previous.
 
-If you want to build influxdb_fdw in a source tree of PostgreSQL instead, use
-
-Using Go client
-<pre>
-make with_llvm=no GO_CLIENT=1
-make install  with_llvm=no GO_CLIENT=1
-</pre>
-
-Using Influxdb_cxx client
-<pre>
-make with_llvm=no CXX_CLIENT=1
-make install  with_llvm=no CXX_CLIENT=1
-</pre>
-
-## Usage
-### Load extension
-<pre>
-CREATE EXTENSION influxdb_fdw;
-</pre>
-
-### Create server
-#### Go Client connect to InfluxDB ver 1.x
-<pre>
-CREATE SERVER influxdb_server FOREIGN DATA WRAPPER influxdb_fdw OPTIONS
-(dbname 'mydb', host 'http://localhost', port '8086') ;
-</pre>
-#### Influxdb_cxx Client connect to InfluxDB ver 1.x
-<pre>
-CREATE SERVER influxdb_server FOREIGN DATA WRAPPER influxdb_fdw OPTIONS
-(dbname 'mydb', host 'http://localhost', port '8086', version '1') ;
-</pre>
-#### Influxdb_cxx Client connect to InfluxDB ver 2.x
-<pre>
-CREATE SERVER influxdb_server FOREIGN DATA WRAPPER influxdb_fdw OPTIONS
-(dbname 'mydb', host 'http://localhost', port '8086', version '2', retention_policy '') ;
-</pre>
-
-
-### Create user mapping
-#### Go Client connect to InfluxDB ver 1.x
-<pre>
-CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_server OPTIONS(user 'user', password 'pass');
-</pre>
-#### Influxdb_cxx Client connect to InfluxDB ver 1.x
-<pre>
-CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_server OPTIONS(user 'user', password 'pass');
-</pre>
-#### Influxdb_cxx Client connect to InfluxDB ver 2.x
-<pre>
-CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_server OPTIONS(auth_token 'token');
-</pre>
-
-
-### Create foreign table
-You need to declare a column named "time" to access InfluxDB time column.
-<pre>
-CREATE FOREIGN TABLE t1(time timestamp with time zone , tag1 text, field1 integer) SERVER influxdb_server OPTIONS (table 'measurement1');
-</pre>
-You can use "tags" option to specify tag keys of a foreign table.
-<pre>
-CREATE FOREIGN TABLE t2(tag1 text, field1 integer, tag2 text, field2 integer) SERVER influxdb_server OPTIONS (tags 'tag1, tag2');
-</pre>
-
-### Import foreign schema
-<pre>
-IMPORT FOREIGN SCHEMA public FROM SERVER influxdb_server INTO public;
-</pre>
-
-Following options are supported:
-* **host** - the address used to connect to InfluxDB server.
-* **port** - the port used to connect to InfluxDB server.
-* **dbname** - target database name
-* **retention_policy** - retention policy of target database (default empty ``).
-* **user** - username for V1 basic authentication.
-* **password** - password for V1 basic authentication.
-* **auth_token** - token for V2 Token authentication.
-* **version** - InfluxDB server version which to connect to (Only `1` or `2`). If not, InfluxDB FDW will try to connect to InfluxDB V2 first. If unsuccessful, it will try to connect to InfluxDB V1. If it is still unsuccessful, error will be raised.
-
-### Access foreign table
-<pre>
-SELECT * FROM t1;
-</pre>
-
-## Features
-### GROUP BY time intervals and fill()
-
-Support GROUP BY times() fill() syntax for influxdb.
-The fill() is supported by two stub function:
-- influx_fill_numeric(): use with numeric parameter for example: 100, 100.1111
-- influx_fill_option(): use with specified option such as: none, null, linear, previous.
-
-The influx_fill_numeric() and influx_fill_option() is embeded as last parameter of time() function. The table below illustrates the usage:
+The `influx_fill_numeric()` and `influx_fill_option()` is embeded as last parameter of `time()` function. The table below illustrates the usage:
 
 | PostgreSQL syntax | Influxdb Syntax |
 |-------------------|-----------------|
@@ -146,15 +54,8 @@ The influx_fill_numeric() and influx_fill_option() is embeded as last parameter 
 |influx_time(time, interval '2h', interval '1h', influx_fill_option('linear'))|time(2h,1h) fill(linear)|
 
 ### Schemaless feature
-- The feature enables user to utilize schema-less feature of InfluxDB.
-- For example, without schemaless feature if a tag-key or field-key is added to InfluxDB measurement, user have to create corresponding foreign
-table in PostgreSQL. This feature eliminates this re-creation of foreign table.
-- `schemaless` foreign table option in influxdb_fdw:
-  - schemaless `true` enable schemaless mode.
-  - schemaless `false` disable schemaless mode.
-- `schemaless` option is supported in `IMPORT FOREIGN SCHEMA`.
-- If schemaless option is not configured, default value is `false`.
-- If schemaless is `false` or not configured, influxdb_fdw works as non-schemaless mode.
+- The feature enables user to utilize schema-less feature of InfluxDB, enabled by setting special options.
+- For example, without schemaless feature if a tag-key or field-key is added to InfluxDB measurement, user have to create corresponding foreign table in PostgreSQL. This feature eliminates this re-creation of foreign table.
 
 Columns of foreign table in schemaless mode
 - The columns are fixed with names and types as below:
@@ -220,10 +121,10 @@ Querying foreign tables:
   </pre>
 
 Fetch values in jsonb expression:
-- Using `->>` jsonb arrow operator to fetch actual remote InfluxDB tag or fields keys from foreign schemaless columns.
+- Using `->>` `jsonb` arrow operator to fetch actual remote InfluxDB tag or fields keys from foreign schemaless columns.
   User may cast type of the jsonb expression to get corresponding data representation.
 - For example, `fields->>'sig1'` expression of fetch value `sig1` is actual field key `sig1` in remote data source InfluxDB.
-- The jsonb expression can be pushed down in WHERE, GROUP BY, ORDER BY and aggregation.
+- The `jsonb` expression can be pushed down in `WHERE`, `GROUP BY`, `ORDER BY` and aggregation.
 
 For examples:
 - Fetch all column based on all actual columns:
@@ -253,7 +154,7 @@ For examples:
   (9 rows)
   </pre>
 
-- jsonb expression is pushed down in WHERE.
+- `jsonb` expression is pushed down in `WHERE`.
   <pre>
   
   EXPLAIN VERBOSE
@@ -277,7 +178,7 @@ For examples:
   (6 rows)
   </pre>
 
-- jsonb expression is pushed down in aggregate sum (remote) + tag + group by
+- `jsonb` expression is pushed down in aggregate `sum` (remote) + tag + `group by`
   <pre>
   
   EXPLAIN VERBOSE
@@ -298,31 +199,17 @@ For examples:
   (3 rows)
   </pre>
 
-### Others
-- InfluxDB FDW supports pushed down some aggregate functions: count, stddev, sum, max, min.
-- InfluxDB FDW supports INSERT, DELETE statements.
-  - `time` and `time_text` column can used for INSERT, DELETE statements.
-  - `time` column can express timestamp with precision down to microseconds.
-  - `time_text` column can express timestamp with precision down to nanoseconds.
-- InfluxDB FDW supports bulk INSERT by using batch_size option from PostgreSQL version 14 or later.
-- WHERE clauses including timestamp, interval and `now()` functions are pushed down.
-- LIMIT...OFFSET clauses are pushed down when there is LIMIT clause only or both LIMIT and OFFSET.<br>
-- Support pushdown DISTINCT argument for only count clause.
-- Support pushdown ANY ARRAY.
+## Pushdowning
 
-## Limitations
-- UPDATE is not supported.
-- WITH CHECK OPTION constraints is not supported.
-Following limitations originate from data model and query language of InfluxDB.
-- Result sets have different number of rows depending on specified target list.
-For example, `SELECT field1 FROM t1` and `SELECT field2 FROM t1` returns different number of rows if
-the number of points with field1 and field2 are different in InfluxDB database.
-- Timestamp precision may be lost because timestamp resolution of PostgreSQL is microseconds while that of InfluxDB is nanoseconds.
-- Conditions like `WHERE time + interval '1 day' < now()` do not work. Please use `WHERE time < now() - interval '1 day'`.
+- `WHERE` clauses including `timestamp`, `interval` and `now()` functions are pushed down.
+- Some of aggregate functions: `count`, `stddev`, `sum`, `max`, `min`.
+- `LIMIT...OFFSET` clauses are pushed down when there is `LIMIT` clause only or both `LIMIT` and `OFFSET`.
+- `DISTINCT` argument for only `count` clause.
+- `ANY ARRAY`.
 
-When a query to foreign tables fails, you can find why it fails by seeing a query executed in InfluxDB with `EXPLAIN VERBOSE`.
+## Notes about features
 
-### The existence of null values depends on the target list in remote query in InfluxDB
+### The existence of `NULL` values depends on the target list in remote query in InfluxDB
 - If specific field keys are selected, InfluxDB does not return null values for any row that has null value.
 - In InfluxDB, `SELECT tag_keys` - selecting only tag keys does not return values, so some field keys are required to be selected.
 Current implementation of non-schemaless need arbitrary on field key added to remote select query. And this is a limitation of current influxdb_fdw, e.g. remote query: `SELECT tag_keys, field_key`. 
@@ -383,20 +270,356 @@ For example:
   - `fields, fields->>'c2', sqrt((fields->>'c1')::int)`: function `sqrt()` is not pushed down.
   - `fields, sqrt((fields->>'c1')::int)`: function `sqrt()` is not pushed down.
   - `fields->>'c2', sqrt((fields->>'c1')::int)`: there is no fields jsonb column, so function `sqrt()` is pushed down.
+  
+Also see [Limitations](#limitations).  
 
-## Notes
+Supported platforms
+-------------------
+
+`influxdb_fdw` was developed on Linux, and should run on any
+reasonably POSIX-compliant system.
+
+`influxdb_fdw` is designed to be compatible with PostgreSQL 11 ~ 15.
+
+Installation
+------------
+### Prerequisites
+
+`Influxdb_fdw` supports 2 different client:
+- Go client
+- `Influxdb_cxx` client.
+
+The installation for each kind of client is described as below.
+
+#### Install InfluxDB Go client library
+
+Go version should be 1.10.4 or later.
+```
+go get github.com/influxdata/influxdb1-client/v2
+```
+To use Go client, use GO_CLIENT=1 flag when compile the source code
+
+#### Install `Influxdb_cxx` client library
+
+Get source code from [`influxdb-cxx`](https://github.com/pgspider/influxdb-cxx) github repository and install as manual:
+```
+git clone https://github.com/pgspider/influxdb-cxx
+cd influxdb-cxx
+cmake .. -DINFLUXCXX_WITH_BOOST=OFF -DINFLUXCXX_TESTING=OFF
+sudo make install
+```
+Update `LD_LIBRARY_PATH` follow the installation folder of `Influxdb_cxx` client
+
+To use `Influxdb_cxx`, use `CXX_CLIENT=1` flag when compile the source code. It is required to use `gcc` version 7 to build `influxdb_fdw` with `influxdb_cxx` client.
+
+### Source installation
+Add a directory of `pg_config` to PATH and build and install `influxdb_fdw`.
+If you want to build `influxdb_fdw` in a source tree of PostgreSQL instead, don't use `USE_PGXS=1`.
+
+#### Using Go client
+```sh
+make USE_PGXS=1 with_llvm=no GO_CLIENT=1
+make install USE_PGXS=1 with_llvm=no GO_CLIENT=1
+```
+
+`with_llvm=no` is necessary to disable llvm bit code generation when PostgreSQL is configured with `--with-llvm` because `influxdb_fdw` use go code and cannot be compiled to llvm bit code.
+
+#### Using `Influxdb_cxx` client
+```sh
+make USE_PGXS=1 with_llvm=no CXX_CLIENT=1
+make install USE_PGXS=1 with_llvm=no CXX_CLIENT=1
+```
+
+Usage
+-----
+
+## CREATE SERVER options
+
+`influxdb_fdw` accepts the following options via the `CREATE SERVER` command:
+
+- **dbname** as *string*, optional
+
+Target database name.
+
+- **host** as *string*, optional
+
+The address used to connect to InfluxDB server.
+
+- **port** as *integer*, optional
+
+The port used to connect to InfluxDB server.
+
+- **version** as *integer*, optional, no default
+
+InfluxDB server version which to connect to. If not, InfluxDB FDW will try to connect to InfluxDB V2 first. If unsuccessful, it will try to connect to InfluxDB V1. If it is still unsuccessful, error will be raised.
+Availlable values: `1` for InfluxDB ver 1.x and `2` for InfluxDB ver 2.x.
+
+- **retention_policy** as *string*, optional, default empty.
+
+Retention policy of target database. See in InfluxDB ver 2.x documentation.
+
+## CREATE USER MAPPING options
+
+`influxdb_fdw` accepts the following options via the `CREATE USER MAPPING`
+command:
+
+- **user** as *string*, no default
+
+  Username for V1 basic authentication (InfluxDB ver. 1.x).
+      
+- **password** as *string*, no default
+
+  Password for V1 basic authentication (InfluxDB ver. 1.x).
+
+- **auth_token** as *string*, no default
+
+  Token for V2 Token authentication (InfluxDB ver. 2.x).
+
+## CREATE FOREIGN TABLE options
+
+`influxdb_fdw` accepts the following table-level options via the
+`CREATE FOREIGN TABLE` command.
+
+- **tags** as *string*, optional, no default
+    
+- **table** as *string*, optional, no default
+
+- **schemaless** as *boolean*, optional, default `false`
+  
+  Enable schemaless mode.
+
+## IMPORT FOREIGN SCHEMA options
+
+`influxdb_fdw` supports [IMPORT FOREIGN SCHEMA](https://www.postgresql.org/docs/current/sql-importforeignschema.html) and 
+ accepts the following options via the
+`IMPORT FOREIGN SCHEMA` command.
+ 
+- **schemaless** as *boolean*, optional, default `false`
+  
+  Enable schemaless mode.
+
+## TRUNCATE support
+
+`influxdb_fdw` **don't support** the foreign data wrapper `TRUNCATE` API, available
+from PostgreSQL 14.
+
+Functions
+---------
+
+As well as the standard `influxdb_fdw_handler()` and `influxdb_fdw_validator()`
+functions, `influxdb_fdw` provides the following user-callable utility functions:
+Functions from this FDW in PostgreSQL catalog are **yet not described**.
+
+Identifier case handling
+------------------------
+
+PostgreSQL folds identifiers to lower case by default.
+Rules and problems with InfluxDB identifiers **yet not tested and described**.
+
+Generated columns
+-----------------
+
+Behavoiur within generated columns **yet not tested and described**. 
+
+For more details on generated columns see:
+
+- [Generated Columns](https://www.postgresql.org/docs/current/ddl-generated-columns.html)
+- [CREATE FOREIGN TABLE](https://www.postgresql.org/docs/current/sql-createforeigntable.html)
+
+
+Character set handling
+----------------------
+
+**Yet not described**.
+
+Examples
+--------
+
+### Install the extension:
+
+Once for a database you need, as PostgreSQL superuser.
+
+```sql
+	CREATE EXTENSION influxdb_fdw;
+```
+
+### Create a foreign server with appropriate configuration:
+
+Once for a foreign datasource you need, as PostgreSQL superuser. Please specify database name using `dbname` option.
+
+#### Go Client connect to InfluxDB ver 1.x
+```sql
+	CREATE SERVER influxdb_svr
+	FOREIGN DATA WRAPPER influxdb_fdw
+	OPTIONS (
+          dbname 'mydb',
+	  host 'http://localhost',
+	  port '8086'
+	);
+```
+#### `Influxdb_cxx` Client connect to InfluxDB ver 1.x
+```sql
+	CREATE SERVER influxdb_svr
+	FOREIGN DATA WRAPPER influxdb_fdw
+	OPTIONS (
+          dbname 'mydb',
+	  host 'http://localhost',
+	  port '8086',
+	  version '1'
+	);
+```
+#### `Influxdb_cxx` Client connect to InfluxDB ver 2.x
+```sql
+	CREATE SERVER influxdb_svr
+	FOREIGN DATA WRAPPER influxdb_fdw
+	OPTIONS (
+          dbname 'mydb',
+	  host 'http://localhost',
+	  port '8086',
+	  version '2',
+	  retention_policy ''
+	);
+```
+
+### Grant usage on foreign server to normal user in PostgreSQL:
+
+Once for a normal user (non-superuser) in PostgreSQL, as PostgreSQL superuser. It is a good idea to use a superuser only where really necessary, so let's allow a normal user to use the foreign server (this is not required for the example to work, but it's secirity recomedation).
+
+```sql
+	GRANT USAGE ON FOREIGN SERVER influxdb_svr TO pguser;
+```
+Where `pguser` is a sample user for works with foreign server (and foreign tables).
+
+### User mapping
+
+Create an appropriate user mapping:
+
+#### Go Client connect to InfluxDB ver 1.x
+
+```sql
+    	CREATE USER MAPPING
+	FOR pguser
+	SERVER influxdb_svr
+    	OPTIONS (
+	  user 'username',
+	  password 'password'
+	);
+```
+Where `pguser` is a sample user for works with foreign server (and foreign tables).
+
+#### `Influxdb_cxx` Client connect to InfluxDB ver 1.x
+
+```sql
+    	CREATE USER MAPPING
+	FOR pguser
+	SERVER influxdb_svr
+    	OPTIONS (
+	  user 'username',
+	  password 'password'
+	);
+```
+Where `pguser` is a sample user for works with foreign server (and foreign tables).
+
+#### `Influxdb_cxx` Client connect to InfluxDB ver 2.x
+
+```sql
+    	CREATE USER MAPPING
+	FOR pguser
+	SERVER influxdb_svr
+    	OPTIONS (
+	  auth_token 'token'
+	);
+```
+Where `pguser` is a sample user for works with foreign server (and foreign tables).
+
+### Create foreign table
+All `CREATE FOREIGN TABLE` SQL commands can be executed as a normal PostgreSQL user if there were correct `GRANT USAGE ON FOREIGN SERVER`. No need PostgreSQL supersuer for security reasons but also works with PostgreSQL supersuer.
+
+Create a foreign table referencing the InfluxDB table:
+You need to declare a column named `time` to access InfluxDB time column.
+```sql
+	CREATE FOREIGN TABLE t1(
+	  time timestamp with time zone,
+	  tag1 text,
+	  field1 integer
+	)
+	SERVER influxdb_svr
+	OPTIONS (
+	  table 'measurement1'
+	);
+```
+You can use `tags` option to specify tag keys of a foreign table.
+```sql
+	CREATE FOREIGN TABLE t2(
+	  tag1 text,
+	  field1 integer,
+	  tag2 text,
+	  field2 integer
+	)
+	SERVER influxdb_svr
+	OPTIONS (
+	  tags 'tag1, tag2'
+	);
+```
+You can import foreign schema
+```sql
+	IMPORT FOREIGN SCHEMA public
+	FROM SERVER influxdb_svr
+	 INTO public;
+```
+Access foreign table
+```sql
+	SELECT * FROM t1;
+```
+Limitations
+-----------
+
+- `UPDATE` is not supported.
+- `WITH CHECK OPTION` constraints is not supported.
+Following limitations originate from data model and query language of *InfluxDB*.
+- Result sets have different number of rows depending on specified target list.
+For example, `SELECT field1 FROM t1` and `SELECT field2 FROM t1` returns different number of rows if
+the number of points with field1 and field2 are different in *InfluxDB* database.
+- Timestamp precision may be lost because timestamp resolution of PostgreSQL is microseconds while that of *InfluxDB* is nanoseconds.
+- Conditions like `WHERE time + interval '1 day' < now()` do not work. Please use `WHERE time < now() - interval '1 day'`.
 - InfluxDB FDW does not return an error even if it is overflow.
-- EXP function of InfluxDB may return different precision number in different PC.
+- `EXP` function of *InfluxDB* may return different precision number for different PC.
 
-## Contributing
-Opening issues and pull requests on GitHub are welcome.
+When a query to foreign tables fails, you can find why it fails by seeing a query executed in *InfluxDB* with `EXPLAIN VERBOSE`.
+    
+Contributing
+------------
+Opening issues and pull requests on GitHub are welcome. Test scripts is multiversional for PostgreSQL, works in POSIX context and based on comparing output of SQL commands in psql with expected output text files.
 
-## License
-Copyright (c) 2018, TOSHIBA CORPORATION
+Useful links
+------------
+
+### Source code
+
+Reference FDW realisation, `postgres_fdw`
+ - https://git.postgresql.org/gitweb/?p=postgresql.git;a=tree;f=contrib/postgres_fdw;hb=HEAD
+
+### General FDW Documentation
+
+ - https://www.postgresql.org/docs/current/ddl-foreign-data.html
+ - https://www.postgresql.org/docs/current/sql-createforeigndatawrapper.html
+ - https://www.postgresql.org/docs/current/sql-createforeigntable.html
+ - https://www.postgresql.org/docs/current/sql-importforeignschema.html
+ - https://www.postgresql.org/docs/current/fdwhandler.html
+ - https://www.postgresql.org/docs/current/postgres-fdw.html
+
+### Other FDWs
+
+ - https://wiki.postgresql.org/wiki/Fdw
+ - https://pgxn.org/tag/fdw/
+ 
+License
+-------
+
+Copyright (c) 2018-2023, TOSHIBA CORPORATION
+
 Copyright (c) 2011-2016, EnterpriseDB Corporation
 
 Permission to use, copy, modify, and distribute this software and its documentation for any purpose, without fee, and without a written agreement is hereby granted, provided that the above copyright notice and this paragraph and the following two paragraphs appear in all copies.
 
-See the [`LICENSE`][4] file for full details.
-
-[4]: LICENSE
+See the [`LICENSE`](LICENSE) file for full details.
