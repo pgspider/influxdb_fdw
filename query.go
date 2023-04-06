@@ -609,6 +609,34 @@ func InfluxDBInsert(addr *C.char, port C.int, user *C.char, pass *C.char, db *C.
 	return nil
 }
 
+//InfluxDBExecDDLCommand drop a measurement
+// Return nil if success, otherwise return error message
+//export InfluxDBExecDDLCommand
+func InfluxDBExecDDLCommand(addr *C.char, port C.int, user *C.char, pass *C.char,
+	db *C.char, cquery *C.char) (errret *C.char) {
+
+	//Create a new HTTPClient
+	c, err := client.NewHTTPClient(client.HTTPConfig{
+		Addr:     C.GoString(addr) + ":" + strconv.Itoa(int(port)),
+		Username: C.GoString(user),
+		Password: C.GoString(pass),
+	})
+	if err != nil {
+		return C.CString(err.Error())
+	}
+
+	query := client.Query{
+		Command:  C.GoString(cquery),
+		Database: C.GoString(db),
+	}
+	_, err = queryDB(c, query)
+	if err != nil {
+		return C.CString(err.Error())
+	}
+
+	return nil
+}
+
 func main() {
 
 }

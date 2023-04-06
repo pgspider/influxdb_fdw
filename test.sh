@@ -1,6 +1,21 @@
 #! /bin/bash
 
-sed -i 's/REGRESS =.*/REGRESS = aggregate influxdb_fdw selectfunc extra\/join extra\/limit extra\/aggregates extra\/insert extra\/prepare extra\/select_having extra\/select extra\/influxdb_fdw_post schemaless\/aggregate schemaless\/influxdb_fdw schemaless\/selectfunc schemaless\/schemaless schemaless\/extra\/join schemaless\/extra\/limit schemaless\/extra\/aggregates schemaless\/extra\/prepare schemaless\/extra\/select_having schemaless\/extra\/insert schemaless\/extra\/select schemaless\/extra\/influxdb_fdw_post schemaless\/add_fields schemaless\/add_tags schemaless\/add_multi_key /' Makefile
+# Usage:
+# ./test.sh                                     -- using GO CLIENT + Postgres versions
+# ./test.sh REGRESS_PREFIX=PGSpider             -- using GO CLIENT + PGSpider
+# ./test.sh --CXX_V1                            -- using CXX V1    + Postgres versions
+# ./test.sh --CXX_V2                            -- using CXX V2    + Postgres versions
+# ./test.sh --CXX_V1 REGRESS_PREFIX=PGSpider    -- using CXX V1    + PGSpider
+# ./test.sh --CXX_V2 REGRESS_PREFIX=PGSpider    -- using CXX V2    + PGSpider
+#
+# *Note: If using CXX, we need to use gcc 7 (source /opt/rh/devtoolset-7/enable)
+
+if [[ "REGRESS_PREFIX=PGSpider" == $1 || "REGRESS_PREFIX=PGSpider" == $2 ]];
+then
+    sed -i 's/REGRESS =.*/REGRESS = aggregate influxdb_fdw selectfunc ddlcommand extra\/join extra\/limit extra\/aggregates extra\/insert extra\/prepare extra\/select_having extra\/select extra\/influxdb_fdw_post schemaless\/aggregate schemaless\/influxdb_fdw schemaless\/selectfunc schemaless\/schemaless schemaless\/extra\/join schemaless\/extra\/limit schemaless\/extra\/aggregates schemaless\/extra\/prepare schemaless\/extra\/select_having schemaless\/extra\/insert schemaless\/extra\/select schemaless\/extra\/influxdb_fdw_post schemaless\/add_fields schemaless\/add_tags schemaless\/add_multi_key /' Makefile
+else
+    sed -i 's/REGRESS =.*/REGRESS = aggregate influxdb_fdw selectfunc extra\/join extra\/limit extra\/aggregates extra\/insert extra\/prepare extra\/select_having extra\/select extra\/influxdb_fdw_post schemaless\/aggregate schemaless\/influxdb_fdw schemaless\/selectfunc schemaless\/schemaless schemaless\/extra\/join schemaless\/extra\/limit schemaless\/extra\/aggregates schemaless\/extra\/prepare schemaless\/extra\/select_having schemaless\/extra\/insert schemaless\/extra\/select schemaless\/extra\/influxdb_fdw_post schemaless\/add_fields schemaless\/add_tags schemaless\/add_multi_key /' Makefile
+fi
 
 if [[ "--CXX_V1" == $1 ]]; then
     ./init.sh --CXX_V1

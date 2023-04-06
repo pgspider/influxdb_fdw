@@ -87,6 +87,9 @@ PG_MODULE_MAGIC;
 #define IS_KEY_COLUMN(A) ((strcmp(A->defname, "key") == 0) && \
 						  (strcmp(((Value *)(A->arg))->val.str, "true") == 0))
 
+#define SPD_CMD_CREATE 0
+#define SPD_CMD_DROP 1
+
 extern Datum influxdb_fdw_handler(PG_FUNCTION_ARGS);
 extern Datum influxdb_fdw_validator(PG_FUNCTION_ARGS);
 
@@ -243,6 +246,7 @@ static bool influxdb_contain_regex_star_functions(Node *clause);
 static int	influxdb_get_batch_size_option(Relation rel);
 #endif
 static void influxdb_extract_slcols(InfluxDBFdwRelationInfo *fpinfo, PlannerInfo *root, RelOptInfo *baserel, List *tlist);
+static bool influxdb_is_existed_measurement(Oid serverOid, char* tbl_name, influxdb_opt *options);
 
 #ifdef CXX_CLIENT
 #define free(x) pfree(x)
@@ -4119,3 +4123,121 @@ influxdb_get_batch_size_option(Relation rel)
 	return batch_size;
 }
 #endif
+
+/*
+ * ExecForeignDDL is a public function that is called by core code.
+ * It executes DDL command on remote server.
+ *
+ * serverOid: remote server to get connected
+ * rel: relation to be created
+ * operation:
+ * 		0: CREATE command
+ * 		1: DROP command
+ * exists_flag:
+ *		in CREATE DDL: true if `IF NOT EXIST` is specified
+ *		in DROP DDL: true if `IF EXIST` is specified
+ */
+int
+ExecForeignDDL(Oid serverOid,
+			   Relation rel,
+			   int operation,
+			   bool exists_flag)
+{
+	char	   *ret_err;
+	StringInfoData sql;
+	influxdb_opt *options = NULL;
+	bool		isExisted = false;
+
+	elog(DEBUG1, "influxdb_fdw: %s", __func__);
+
+	if (operation != SPD_CMD_CREATE && operation != SPD_CMD_DROP)
+		elog(ERROR, "Only support CREATE/DROP DATASOURCE");
+
+	options = influxdb_get_options(RelationGetRelid(rel));
+
+	/* Check if new datasource measurement is already existed or not */
+	isExisted = influxdb_is_existed_measurement(serverOid, options->svr_table, options);
+
+	/* CREATE new datasource */
+	if (operation == SPD_CMD_CREATE)
+	{
+		if (!exists_flag && isExisted)
+			/* if CREATE without IF NOT EXIST and mesurement is existed, raise error. */
+			elog(ERROR, "influxdb_fdw: table \"%s\" has already existed", options->svr_table);
+		else
+			/* New measurement will be created by INSERT operation, so it just return success */
+			return 0;
+	}
+
+	/* DROP datasource */
+	if (!exists_flag && !isExisted)
+		/* if DROP without IF EXIST and mesurement is not existed, raise error. */
+		elog(ERROR, "influxdb_fdw: table \"%s\" does not exist", options->svr_table);
+
+	/* init sql query to drop InfluxDB measurement */
+	initStringInfo(&sql);
+
+	/* create DROP query */
+	influxdb_deparse_drop_measurement_stmt(&sql, rel);
+
+	ret_err = InfluxDBExecDDLCommand(options->svr_address, options->svr_port,
+							 options->svr_username, options->svr_password,
+							 options->svr_database, sql.data
+#ifdef CXX_CLIENT
+							 , options->svr_version, options->svr_token, options->svr_retention_policy
+#endif
+							 );
+
+	if (ret_err != NULL)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FDW_UNABLE_TO_CREATE_EXECUTION),
+				 errmsg("influxdb_fdw : %s", ret_err)));
+	}
+
+	pfree(sql.data);
+
+	return 0;
+}
+
+/* Check measurement is exised or not */
+static bool
+influxdb_is_existed_measurement(Oid serverOid, char* tbl_name, influxdb_opt *options)
+{
+	StringInfoData influxql;
+	struct InfluxDBQuery_return volatile ret;
+	struct InfluxDBResult volatile *result = NULL;
+	bool found = false;
+
+	initStringInfo(&influxql);
+	appendStringInfo(&influxql, "SHOW MEASUREMENTS ON %s WITH MEASUREMENT = %s", options->svr_database, tbl_name);
+
+#ifdef CXX_CLIENT
+	ret = InfluxDBQuery(influxql.data, GetUserMapping(GetUserId(), serverOid), options,
+#else
+	ret = InfluxDBQuery(influxql.data, options->svr_address, options->svr_port,
+						options->svr_username, options->svr_password,
+						options->svr_database,
+#endif
+						NULL, NULL, 0);
+	if (ret.r1 != NULL)
+	{
+		char	   *err = pstrdup(ret.r1);
+
+		free(ret.r1);
+		ret.r1 = err;
+		elog(ERROR, "influxdb_fdw : %s", err);
+	}
+#ifdef CXX_CLIENT
+	result = ret.r0;
+#else
+	result = &ret.r0;
+#endif
+
+	found = (result && result->nrow == 1) ? true : false;
+
+	if (result)
+		InfluxDBFreeResult((InfluxDBResult *)result);
+
+	return found;
+}

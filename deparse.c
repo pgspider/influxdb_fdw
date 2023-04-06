@@ -4558,3 +4558,15 @@ influxdb_escape_record_string(char *string)
 
 	return buffer->data;
 }
+
+/*
+ * Construct DROP MEASUREMENT <measurement_name> query.
+ *	This query deletes all data and series from the specified <measurement_name>
+ *	and deletes the measurement from the index.
+ */
+void
+influxdb_deparse_drop_measurement_stmt(StringInfo buf, Relation rel)
+{
+	appendStringInfo(buf, "DROP MEASUREMENT ");
+	influxdb_deparse_relation(buf, rel);
+}

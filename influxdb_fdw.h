@@ -297,6 +297,7 @@ extern bool influxdb_deparse_direct_delete_sql(StringInfo buf, PlannerInfo *root
 											   List *remote_conds,
 											   List **params_list,
 											   List **retrieved_attrs);
+extern void influxdb_deparse_drop_measurement_stmt(StringInfo buf, Relation rel);
 extern void influxdb_append_where_clause(StringInfo buf, PlannerInfo *root, RelOptInfo *baserel, List *exprs,
 										 bool is_first, List **params);
 extern void influxdb_deparse_analyze(StringInfo buf, char *dbname, char *relname);
@@ -352,4 +353,9 @@ extern int check_connected_influxdb_version(char* addr, int port, char* user, ch
 /* clean up all cache connections of influx cxx client */
 extern void cleanup_cxx_client_connection(void);
 #endif		/* CXX_CLIENT */
+
+extern int	ExecForeignDDL(Oid serverOid,
+						   Relation rel,
+						   int operation,
+						   bool if_not_exists);
 #endif							/* InfluxDB_FDW_H */
