@@ -88,4 +88,6 @@ struct InfluxDBQuery_return {
 	char* r1;
 };
 
+extern char * InfluxDBExecDDLCommand(char* addr, int port, char* user, char* pass, char* db, char* cquery, int version, char* auth_token, char* retention_policy);
+
 #endif  /* QUERY_CXX_H */

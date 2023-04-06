@@ -513,3 +513,63 @@ cleanup_cxx_client_connection(void)
 {
     influx_cleanup_connection();
 }
+
+/*
+ * InfluxDBExecDDLCommand
+ *      drop a measurement
+ * Return NULL if success, otherwise return error message
+ */
+extern "C" char *
+InfluxDBExecDDLCommand(char* addr, int port, char* user, char* pass, char* db, char* cquery, int version, char* auth_token, char* retention_policy)
+{
+    std::unique_ptr<influxdb::InfluxDB> influx;
+    char* retMsg = NULL;
+    bool retry_connect = false;
+
+    if (version != INFLUXDB_VERSION_1 && version != INFLUXDB_VERSION_2)
+    {
+        /* Automatically detect InfluxDB version 1.x and 2.x: trying to connect InfluxDB v2.x first */
+        influx = influxdb::InfluxDBFactory::GetV2(std::string(addr), port, std::string(db), std::string(auth_token), std::string(retention_policy));
+        try
+        {
+            auto err = influx->query(cquery);
+        }
+        catch(const std::exception& e)
+        {
+            /* Trying to connect InfluxDB v1.x */
+            retry_connect = true;
+        }
+
+        if (!retry_connect)
+            return NULL; /* Query successfully */
+
+        influx = influxdb::InfluxDBFactory::GetV1(std::string(addr), port, std::string(db), std::string(user), std::string(pass));
+        try
+        {
+            auto err = influx->query(cquery);
+        }
+        catch(const std::exception& e)
+        {
+            elog(ERROR, "influxdb_fdw: could not execute query: %s", cquery);
+        }
+    }
+    /* InfluxDB version is specified */
+    else if (version == INFLUXDB_VERSION_1)
+        influx = influxdb::InfluxDBFactory::GetV1(std::string(addr), port, std::string(db), std::string(user), std::string(pass));
+    else if (version == INFLUXDB_VERSION_2)
+        influx = influxdb::InfluxDBFactory::GetV2(std::string(addr), port, std::string(db), std::string(auth_token), std::string(retention_policy));
+
+    if (!influx)
+        elog(ERROR, "Fail to create influxDB client");
+
+    try
+    {
+        auto err = influx->query(cquery);
+    }
+    catch (const std::exception& e)
+    {
+        retMsg = (char *) pstrdup(e.what());
+    }
+
+    return retMsg;
+}
