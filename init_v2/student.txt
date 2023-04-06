@@ -1,0 +1,5 @@
+# DML
+# CONTEXT-DATABASE: coredb
+
+student name="fred",age=28i,location="(3.1,-1.5)",gpa=3.70000000000000020e+00 86400000000000
+student name="larry",age=60i,location="(21.8,4.9)",gpa=3.10000000000000010e+00 172800000000000

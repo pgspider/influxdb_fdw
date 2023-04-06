@@ -1,0 +1,1599 @@
+--SET log_min_messages=debug1;
+--SET client_min_messages=debug1;
+--Testcase 1:
+SET datestyle=ISO;
+-- timestamp with time zone differs based on this
+--Testcase 2:
+SET timezone='Japan';
+\set ECHO none
+--Testcase 3:
+CREATE EXTENSION influxdb_fdw;
+--Testcase 4:
+CREATE SERVER server1 FOREIGN DATA WRAPPER influxdb_fdw OPTIONS
+(dbname 'mydb', :SERVER);
+--Testcase 5:
+CREATE USER MAPPING FOR CURRENT_USER SERVER server1 OPTIONS (:AUTHENTICATION);
+-- import time column as timestamp and text type
+IMPORT FOREIGN SCHEMA public FROM SERVER server1 INTO public OPTIONS(import_time_text 'true', schemaless 'true');
+--Testcase 6:
+SELECT * FROM cpu;
+          time          |      time_text       |                 tags                 |                                fields                                 
+------------------------+----------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | 2015-08-18T00:00:00Z | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 09:00:00+09 | 2015-08-18T00:00:00Z | {"tag1": "tag1_B", "tag2": null}     | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+ 2015-08-18 09:48:08+09 | 2015-08-18T00:48:08Z | {"tag1": null, "tag2": "tag2_A"}     | {"value1": null, "value2": "2", "value3": null, "value4": null}
+(3 rows)
+
+--Testcase 7:
+SELECT tags->>'tag1' tag1, (fields->>'value1')::bigint value1 FROM cpu;
+  tag1  | value1 
+--------+--------
+ tag1_A |    100
+ tag1_B |    100
+(2 rows)
+
+--Testcase 8:
+SELECT (fields->>'value1')::bigint value1, time, (fields->>'value2')::double precision value2 FROM cpu;
+ value1 |          time          | value2 
+--------+------------------------+--------
+    100 | 2015-08-18 09:00:00+09 |    0.5
+    100 | 2015-08-18 09:00:00+09 |      2
+        | 2015-08-18 09:48:08+09 |      2
+(3 rows)
+
+--Testcase 9:
+SELECT (fields->>'value1')::bigint value1, time_text, (fields->>'value2')::double precision value2 FROM cpu;
+ value1 |      time_text       | value2 
+--------+----------------------+--------
+    100 | 2015-08-18T00:00:00Z |    0.5
+    100 | 2015-08-18T00:00:00Z |      2
+        | 2015-08-18T00:48:08Z |      2
+(3 rows)
+
+--Testcase 10:
+DROP FOREIGN TABLE cpu;
+--Testcase 11:
+DROP FOREIGN TABLE t3;
+--Testcase 12:
+DROP FOREIGN TABLE t4;
+--Testcase 13:
+DROP FOREIGN TABLE tx;
+--Testcase 14:
+DROP FOREIGN TABLE numbers;
+-- test EXECPT
+IMPORT FOREIGN SCHEMA public EXCEPT (cpu, t3, t4, tx, numbers) FROM SERVER server1 INTO public OPTIONS(schemaless 'true');
+--Testcase 15:
+SELECT ftoptions FROM pg_foreign_table;
+ ftoptions 
+-----------
+(0 rows)
+
+-- test LIMIT TO
+IMPORT FOREIGN SCHEMA public LIMIT TO (cpu) FROM SERVER server1 INTO public OPTIONS(schemaless 'true');
+--Testcase 16:
+SELECT ftoptions FROM pg_foreign_table;
+                  ftoptions                   
+----------------------------------------------
+ {table=cpu,schemaless=true,"tags=tag1,tag2"}
+(1 row)
+
+--Testcase 17:
+DROP FOREIGN TABLE cpu;
+IMPORT FOREIGN SCHEMA public FROM SERVER server1 INTO public OPTIONS(import_time_text 'false', schemaless 'true');
+--Testcase 18:
+SELECT * FROM cpu;
+          time          |                 tags                 |                                fields                                 
+------------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_B", "tag2": null}     | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+ 2015-08-18 09:48:08+09 | {"tag1": null, "tag2": "tag2_A"}     | {"value1": null, "value2": "2", "value3": null, "value4": null}
+(3 rows)
+
+--Testcase 19:
+SELECT tags->>'tag1' tag1, (fields->>'value1')::int value1 FROM cpu;
+  tag1  | value1 
+--------+--------
+ tag1_A |    100
+ tag1_B |    100
+(2 rows)
+
+--Testcase 20:
+SELECT (fields->>'value1')::int value1, time, (fields->>'value2')::double precision value2 FROM cpu;
+ value1 |          time          | value2 
+--------+------------------------+--------
+    100 | 2015-08-18 09:00:00+09 |    0.5
+    100 | 2015-08-18 09:00:00+09 |      2
+        | 2015-08-18 09:48:08+09 |      2
+(3 rows)
+
+--Testcase 21:
+SELECT tags->>'tag1' tag1 FROM cpu;
+  tag1  
+--------
+ tag1_A
+ tag1_B
+ 
+(3 rows)
+
+--Testcase 22:
+SELECT * FROM numbers;
+          time          |     tags      |         fields         
+------------------------+---------------+------------------------
+ 1970-01-01 09:00:00+09 | {"tag1": "a"} | {"a": "1", "b": "One"}
+ 1970-01-01 09:00:01+09 | {"tag1": "a"} | {"a": "2", "b": "Two"}
+(2 rows)
+
+--Testcase 23:
+\d cpu;
+                              Foreign table "public.cpu"
+ Column |           Type           | Collation | Nullable | Default |   FDW options   
+--------+--------------------------+-----------+----------+---------+-----------------
+ time   | timestamp with time zone |           |          |         | 
+ tags   | jsonb                    |           |          |         | (tags 'true')
+ fields | jsonb                    |           |          |         | (fields 'true')
+Server: server1
+FDW options: ("table" 'cpu', schemaless 'true', tags 'tag1,tag2')
+
+--Testcase 24:
+SELECT * FROM cpu WHERE (fields->>'value1')::int=100;
+          time          |                 tags                 |                                fields                                 
+------------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_B", "tag2": null}     | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+(2 rows)
+
+--Testcase 25:
+SELECT * FROM cpu WHERE (fields->>'value2')::double precision=0.5;
+          time          |                 tags                 |                                fields                                 
+------------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+(1 row)
+
+--Testcase 26:
+SELECT * FROM cpu WHERE fields->>'value3'='str';
+          time          |                 tags                 |                                fields                                 
+------------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+(1 row)
+
+--Testcase 27:
+SELECT * FROM cpu WHERE (fields->>'value4')::boolean=true;
+          time          |                 tags                 |                                fields                                 
+------------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+(1 row)
+
+--Testcase 28:
+SELECT * FROM cpu WHERE NOT ((fields->>'value4')::boolean AND (fields->>'value1')::int=100);
+          time          |               tags               |                               fields                                
+------------------------+----------------------------------+---------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_B", "tag2": null} | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+(1 row)
+
+--Testcase 29:
+SELECT * FROM cpu WHERE tags->>'tag1'='tag1_A';
+          time          |                 tags                 |                                fields                                 
+------------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+(1 row)
+
+--Testcase 30:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM cpu WHERE fields->>'value3' IS NULL;
+                     QUERY PLAN                      
+-----------------------------------------------------
+ Foreign Scan on public.cpu
+   Output: "time", tags, fields
+   Filter: ((cpu.fields ->> 'value3'::text) IS NULL)
+   InfluxDB query: SELECT * FROM "cpu"
+(4 rows)
+
+--Testcase 31:
+SELECT * FROM cpu WHERE fields->>'value3' IS NULL;
+          time          |               tags               |                               fields                                
+------------------------+----------------------------------+---------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_B", "tag2": null} | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+ 2015-08-18 09:48:08+09 | {"tag1": null, "tag2": "tag2_A"} | {"value1": null, "value2": "2", "value3": null, "value4": null}
+(2 rows)
+
+--Testcase 32:
+SELECT * FROM cpu WHERE tags->>'tag2' IS NULL;
+          time          |               tags               |                               fields                                
+------------------------+----------------------------------+---------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_B", "tag2": null} | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+(1 row)
+
+--Testcase 33:
+SELECT * FROM cpu WHERE fields->>'value3' IS NOT NULL;
+          time          |                 tags                 |                                fields                                 
+------------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+(1 row)
+
+--Testcase 34:
+SELECT * FROM cpu WHERE tags->>'tag2' IS NOT NULL;
+          time          |                 tags                 |                                fields                                 
+------------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 09:48:08+09 | {"tag1": null, "tag2": "tag2_A"}     | {"value1": null, "value2": "2", "value3": null, "value4": null}
+(2 rows)
+
+-- InfluxDB not support compare timestamp with OR condition
+--Testcase 35:
+SELECT * FROM cpu WHERE time = '2015-08-18 09:48:08+09' OR (fields->>'value2')::double precision = 0.5;
+          time          |                 tags                 |                                fields                                 
+------------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 09:48:08+09 | {"tag1": null, "tag2": "tag2_A"}     | {"value1": null, "value2": "2", "value3": null, "value4": null}
+(2 rows)
+
+-- InfluxDB not support compare timestamp with != or <>
+--Testcase 36:
+SELECT * FROM cpu WHERE time != '2015-08-18 09:48:08+09';
+          time          |                 tags                 |                                fields                                 
+------------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_B", "tag2": null}     | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+(2 rows)
+
+--Testcase 37:
+SELECT * FROM cpu WHERE time <> '2015-08-18 09:48:08+09';
+          time          |                 tags                 |                                fields                                 
+------------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_B", "tag2": null}     | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+(2 rows)
+
+--Testcase 38:
+SELECT * FROM cpu WHERE time = '2015-08-18 09:48:08+09' OR (fields->>'value2')::double precision = 0.5;
+          time          |                 tags                 |                                fields                                 
+------------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 09:48:08+09 | {"tag1": null, "tag2": "tag2_A"}     | {"value1": null, "value2": "2", "value3": null, "value4": null}
+(2 rows)
+
+-- There is inconsitency for search of missing values between tag and field
+--Testcase 39:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM cpu WHERE fields->>'value3' = '';
+                          QUERY PLAN                           
+---------------------------------------------------------------
+ Foreign Scan on public.cpu
+   Output: "time", tags, fields
+   InfluxDB query: SELECT * FROM "cpu" WHERE (("value3" = ''))
+(3 rows)
+
+--Testcase 40:
+SELECT * FROM cpu WHERE fields->>'value3' = '';
+ time | tags | fields 
+------+------+--------
+(0 rows)
+
+--Testcase 41:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM cpu WHERE tags->>'tag2' = '';
+                         QUERY PLAN                          
+-------------------------------------------------------------
+ Foreign Scan on public.cpu
+   Output: "time", tags, fields
+   InfluxDB query: SELECT * FROM "cpu" WHERE (("tag2" = ''))
+(3 rows)
+
+--Testcase 42:
+SELECT * FROM cpu WHERE tags->>'tag2' = '';
+          time          |               tags               |                               fields                                
+------------------------+----------------------------------+---------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_B", "tag2": null} | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+(1 row)
+
+--Testcase 43:
+SELECT * FROM cpu WHERE tags->>'tag1' IN ('tag1_A', 'tag1_B');
+          time          |                 tags                 |                                fields                                 
+------------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_B", "tag2": null}     | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+(2 rows)
+
+--Testcase 44:
+EXPLAIN VERBOSE
+SELECT * FROM cpu WHERE tags->>'tag1' IN ('tag1_A', 'tag1_B');
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Foreign Scan on public.cpu  (cost=10.00..9.00 rows=9 width=72)
+   Output: "time", tags, fields
+   InfluxDB query: SELECT * FROM "cpu" WHERE ("tag1" = 'tag1_A' OR "tag1" = 'tag1_B')
+(3 rows)
+
+-- Rows which have no tag are considered to have empty string
+--Testcase 45:
+SELECT * FROM cpu WHERE tags->>'tag1' NOT IN ('tag1_A', 'tag1_B');
+          time          |               tags               |                             fields                              
+------------------------+----------------------------------+-----------------------------------------------------------------
+ 2015-08-18 09:48:08+09 | {"tag1": null, "tag2": "tag2_A"} | {"value1": null, "value2": "2", "value3": null, "value4": null}
+(1 row)
+
+--Testcase 46:
+EXPLAIN VERBOSE
+SELECT * FROM cpu WHERE tags->>'tag1' NOT IN ('tag1_A', 'tag1_B');
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Foreign Scan on public.cpu  (cost=10.00..844.00 rows=844 width=72)
+   Output: "time", tags, fields
+   InfluxDB query: SELECT * FROM "cpu" WHERE ("tag1" <> 'tag1_A' AND "tag1" <> 'tag1_B')
+(3 rows)
+
+-- test IN/NOT IN
+--Testcase 47:
+SELECT * FROM cpu WHERE time IN ('2015-08-18 09:48:08+09','2016-08-28 07:44:00+07');
+          time          |               tags               |                             fields                              
+------------------------+----------------------------------+-----------------------------------------------------------------
+ 2015-08-18 09:48:08+09 | {"tag1": null, "tag2": "tag2_A"} | {"value1": null, "value2": "2", "value3": null, "value4": null}
+(1 row)
+
+--Testcase 48:
+SELECT * FROM cpu WHERE time NOT IN ('2015-08-18 09:48:08+09','2016-08-28 07:44:00+07');
+          time          |                 tags                 |                                fields                                 
+------------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_B", "tag2": null}     | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+(2 rows)
+
+--Testcase 49:
+SELECT * FROM cpu WHERE (fields->>'value1')::int NOT IN (100, 97);
+ time | tags | fields 
+------+------+--------
+(0 rows)
+
+--Testcase 50:
+SELECT * FROM cpu WHERE (fields->>'value1')::int IN (100, 97);
+          time          |                 tags                 |                                fields                                 
+------------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_B", "tag2": null}     | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+(2 rows)
+
+--Testcase 51:
+SELECT * FROM cpu WHERE (fields->>'value2')::double precision IN (0.5, 10.9);
+          time          |                 tags                 |                                fields                                 
+------------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+(1 row)
+
+--Testcase 52:
+SELECT * FROM cpu WHERE (fields->>'value2')::double precision NOT IN (2, 9.7);
+          time          |                 tags                 |                                fields                                 
+------------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+(1 row)
+
+--Testcase 53:
+SELECT * FROM cpu WHERE (fields->>'value4')::boolean NOT IN ('true', 'true');
+          time          |               tags               |                               fields                                
+------------------------+----------------------------------+---------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_B", "tag2": null} | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+(1 row)
+
+--Testcase 54:
+SELECT * FROM cpu WHERE time IN ('2015-08-18 09:48:08+09','2016-08-28 07:44:00+07');
+          time          |               tags               |                             fields                              
+------------------------+----------------------------------+-----------------------------------------------------------------
+ 2015-08-18 09:48:08+09 | {"tag1": null, "tag2": "tag2_A"} | {"value1": null, "value2": "2", "value3": null, "value4": null}
+(1 row)
+
+--Testcase 55:
+SELECT * FROM cpu WHERE time NOT IN ('2015-08-18 09:48:08+09','2016-08-28 07:44:00+07');
+          time          |                 tags                 |                                fields                                 
+------------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_B", "tag2": null}     | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+(2 rows)
+
+--Testcase 56:
+SELECT * FROM cpu WHERE (fields->>'value1')::int NOT IN (100, 97);
+ time | tags | fields 
+------+------+--------
+(0 rows)
+
+--Testcase 57:
+SELECT * FROM cpu WHERE (fields->>'value1')::int IN (100, 97);
+          time          |                 tags                 |                                fields                                 
+------------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_B", "tag2": null}     | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+(2 rows)
+
+--Testcase 58:
+SELECT * FROM cpu WHERE (fields->>'value2')::double precision IN (0.5, 10.9);
+          time          |                 tags                 |                                fields                                 
+------------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+(1 row)
+
+--Testcase 59:
+SELECT * FROM cpu WHERE (fields->>'value2')::double precision NOT IN (2, 9.7);
+          time          |                 tags                 |                                fields                                 
+------------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+(1 row)
+
+--Testcase 60:
+SELECT * FROM cpu WHERE (fields->>'value4')::boolean NOT IN ('true', 'true');
+          time          |               tags               |                               fields                                
+------------------------+----------------------------------+---------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_B", "tag2": null} | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+(1 row)
+
+--Testcase 61:
+SELECT * FROM cpu WHERE (fields->>'value4')::boolean IN ('f', 't');
+          time          |                 tags                 |                                fields                                 
+------------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_B", "tag2": null}     | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+(2 rows)
+
+--Testcase 62:
+CREATE FOREIGN TABLE t1(time timestamp with time zone ,tags jsonb OPTIONS(tags 'true'),  fields jsonb OPTIONS (fields 'true')) SERVER server1 OPTIONS (table 'cpu', schemaless 'true', tags 'tag1');
+--Testcase 63:
+CREATE FOREIGN TABLE t2(time timestamp ,tags jsonb OPTIONS(tags 'true'),  fields jsonb OPTIONS (fields 'true')) SERVER server1 OPTIONS (table 'cpu', schemaless 'true', tags 'tag1');
+--Testcase 64:
+SELECT * FROM t1;
+          time          |        tags        |                                         fields                                          
+------------------------+--------------------+-----------------------------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A"} | {"tag2": "tag2_A", "value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_B"} | {"tag2": null, "value1": "100", "value2": "2", "value3": null, "value4": "false"}
+ 2015-08-18 09:48:08+09 | {"tag1": null}     | {"tag2": "tag2_A", "value1": null, "value2": "2", "value3": null, "value4": null}
+(3 rows)
+
+--Testcase 65:
+SELECT * FROM t2;
+        time         |        tags        |                                         fields                                          
+---------------------+--------------------+-----------------------------------------------------------------------------------------
+ 2015-08-18 00:00:00 | {"tag1": "tag1_A"} | {"tag2": "tag2_A", "value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 00:00:00 | {"tag1": "tag1_B"} | {"tag2": null, "value1": "100", "value2": "2", "value3": null, "value4": "false"}
+ 2015-08-18 00:48:08 | {"tag1": null}     | {"tag2": "tag2_A", "value1": null, "value2": "2", "value3": null, "value4": null}
+(3 rows)
+
+-- In following four queries, timestamp condition is added to InfluxQL as "time = '2015-08-18 00:00:00'"
+--Testcase 66:
+SELECT * FROM t1 WHERE time = TIMESTAMP WITH TIME ZONE '2015-08-18 09:00:00+09';
+          time          |        tags        |                                         fields                                          
+------------------------+--------------------+-----------------------------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A"} | {"tag2": "tag2_A", "value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_B"} | {"tag2": null, "value1": "100", "value2": "2", "value3": null, "value4": "false"}
+(2 rows)
+
+--Testcase 67:
+SELECT * FROM t1 WHERE time = TIMESTAMP '2015-08-18 00:00:00';
+          time          |        tags        |                                         fields                                          
+------------------------+--------------------+-----------------------------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A"} | {"tag2": "tag2_A", "value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_B"} | {"tag2": null, "value1": "100", "value2": "2", "value3": null, "value4": "false"}
+(2 rows)
+
+--Testcase 68:
+SELECT * FROM t2 WHERE time = TIMESTAMP WITH TIME ZONE '2015-08-18 09:00:00+09';
+        time         |        tags        |                                         fields                                          
+---------------------+--------------------+-----------------------------------------------------------------------------------------
+ 2015-08-18 00:00:00 | {"tag1": "tag1_A"} | {"tag2": "tag2_A", "value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 00:00:00 | {"tag1": "tag1_B"} | {"tag2": null, "value1": "100", "value2": "2", "value3": null, "value4": "false"}
+(2 rows)
+
+--Testcase 69:
+SELECT * FROM t2 WHERE time = TIMESTAMP '2015-08-18 00:00:00';
+        time         |        tags        |                                         fields                                          
+---------------------+--------------------+-----------------------------------------------------------------------------------------
+ 2015-08-18 00:00:00 | {"tag1": "tag1_A"} | {"tag2": "tag2_A", "value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 00:00:00 | {"tag1": "tag1_B"} | {"tag2": null, "value1": "100", "value2": "2", "value3": null, "value4": "false"}
+(2 rows)
+
+-- pushdown now()
+--Testcase 70:
+SELECT * FROM t2 WHERE now() > time;
+        time         |        tags        |                                         fields                                          
+---------------------+--------------------+-----------------------------------------------------------------------------------------
+ 2015-08-18 00:00:00 | {"tag1": "tag1_A"} | {"tag2": "tag2_A", "value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 00:00:00 | {"tag1": "tag1_B"} | {"tag2": null, "value1": "100", "value2": "2", "value3": null, "value4": "false"}
+ 2015-08-18 00:48:08 | {"tag1": null}     | {"tag2": "tag2_A", "value1": null, "value2": "2", "value3": null, "value4": null}
+(3 rows)
+
+--Testcase 71:
+EXPLAIN VERBOSE
+SELECT * FROM t2 WHERE now() > time;
+                            QUERY PLAN                             
+-------------------------------------------------------------------
+ Foreign Scan on public.t2  (cost=10.00..284.00 rows=284 width=72)
+   Output: "time", tags, fields
+   InfluxDB query: SELECT * FROM "cpu" WHERE ((now() > time))
+(3 rows)
+
+--Testcase 72:
+SELECT * FROM t2 WHERE time = TIMESTAMP WITH TIME ZONE '2015-08-26 05:43:21.1+00' - interval '1 week 1 day 5 hour 43 minute 21 second 100 millisecond';
+        time         |        tags        |                                         fields                                          
+---------------------+--------------------+-----------------------------------------------------------------------------------------
+ 2015-08-18 00:00:00 | {"tag1": "tag1_A"} | {"tag2": "tag2_A", "value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 00:00:00 | {"tag1": "tag1_B"} | {"tag2": null, "value1": "100", "value2": "2", "value3": null, "value4": "false"}
+(2 rows)
+
+--Testcase 73:
+EXPLAIN VERBOSE
+SELECT * FROM t2 WHERE time = TIMESTAMP WITH TIME ZONE '2015-08-26 05:43:21.1+00' - interval '1 week 1 day 5 hour 43 minute 21 second 100 millisecond';
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.t2  (cost=10.00..4.00 rows=4 width=72)
+   Output: "time", tags, fields
+   InfluxDB query: SELECT * FROM "cpu" WHERE ((time = ('2015-08-26 05:43:21.1' - 8d5h43m21s100000u)))
+(3 rows)
+
+-- InfluxDB does not seem to support time column + interval, so below query returns empty result
+-- SELECT * FROM t2 WHERE time + interval '1 week 1 day 5 hour 43 minute 21 second 100 millisecond' = TIMESTAMP WITH TIME ZONE '2015-08-26 05:43:21.1+00';
+-- EXPLAIN (VERBOSE, COSTS OFF)
+-- SELECT * FROM t2 WHERE time + interval '1 week 1 day 5 hour 43 minute 21 second 100 millisecond' = TIMESTAMP WITH TIME ZONE '2015-08-26 05:43:21.1+00';
+-- InfluxDB does not support month or year interval, so not push down
+--Testcase 74:
+SELECT * FROM t2 WHERE time = TIMESTAMP '2015-09-18 00:00:00' - interval '1 months';
+        time         |        tags        |                                         fields                                          
+---------------------+--------------------+-----------------------------------------------------------------------------------------
+ 2015-08-18 00:00:00 | {"tag1": "tag1_A"} | {"tag2": "tag2_A", "value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 00:00:00 | {"tag1": "tag1_B"} | {"tag2": null, "value1": "100", "value2": "2", "value3": null, "value4": "false"}
+(2 rows)
+
+--Testcase 75:
+EXPLAIN VERBOSE
+SELECT * FROM t2 WHERE time = TIMESTAMP '2015-09-18 00:00:00' - interval '1 months';
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ Foreign Scan on public.t2  (cost=10.00..4.00 rows=4 width=72)
+   Output: "time", tags, fields
+   InfluxDB query: SELECT * FROM "cpu" WHERE ((time = '2015-08-18 00:00:00'))
+(3 rows)
+
+--Testcase 76:
+SELECT * FROM t2 WHERE (fields->>'value1')::int = ANY (ARRAY(SELECT (fields->>'value1')::int FROM t1 WHERE (fields->>'value1')::int < 1000));
+        time         |        tags        |                                         fields                                          
+---------------------+--------------------+-----------------------------------------------------------------------------------------
+ 2015-08-18 00:00:00 | {"tag1": "tag1_A"} | {"tag2": "tag2_A", "value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 00:00:00 | {"tag1": "tag1_B"} | {"tag2": null, "value1": "100", "value2": "2", "value3": null, "value4": "false"}
+(2 rows)
+
+-- ANY with ARRAY expression
+--Testcase 77:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int = ANY(ARRAY[1, (fields->>'a')::int + 1]);
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..15.15 rows=15 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE (("a" = 1) OR ("a" = ("a" + 1)))
+(3 rows)
+
+--Testcase 78:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int = ANY(ARRAY[1, (fields->>'a')::int + 1]);
+ a |  b  
+---+-----
+ 1 | One
+(1 row)
+
+--Testcase 79:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int <> ANY(ARRAY[1, (fields->>'a')::int + 1]);
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..1476.62 rows=1462 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE (("a" <> 1) OR ("a" <> ("a" + 1)))
+(3 rows)
+
+--Testcase 80:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int <> ANY(ARRAY[1, (fields->>'a')::int + 1]);
+ a |  b  
+---+-----
+ 1 | One
+ 2 | Two
+(2 rows)
+
+--Testcase 81:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int >= ANY(ARRAY[1, (fields->>'a')::int + 1]);
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..820.12 rows=812 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE (("a" >= 1) OR ("a" >= ("a" + 1)))
+(3 rows)
+
+--Testcase 82:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int >= ANY(ARRAY[1, (fields->>'a')::int + 1]);
+ a |  b  
+---+-----
+ 1 | One
+ 2 | Two
+(2 rows)
+
+--Testcase 83:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int <= ANY(ARRAY[1, (fields->>'a')::int + 1]);
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..820.12 rows=812 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE (("a" <= 1) OR ("a" <= ("a" + 1)))
+(3 rows)
+
+--Testcase 84:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int <= ANY(ARRAY[1, (fields->>'a')::int + 1]);
+ a |  b  
+---+-----
+ 1 | One
+ 2 | Two
+(2 rows)
+
+--Testcase 85:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int > ANY(ARRAY[1, (fields->>'a')::int + 1]);
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..820.12 rows=812 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE (("a" > 1) OR ("a" > ("a" + 1)))
+(3 rows)
+
+--Testcase 86:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int > ANY(ARRAY[1, (fields->>'a')::int + 1]);
+ a |  b  
+---+-----
+ 2 | Two
+(1 row)
+
+--Testcase 87:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int < ANY(ARRAY[1, (fields->>'a')::int + 1]);
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..820.12 rows=812 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE (("a" < 1) OR ("a" < ("a" + 1)))
+(3 rows)
+
+--Testcase 88:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int < ANY(ARRAY[1, (fields->>'a')::int + 1]);
+ a |  b  
+---+-----
+ 1 | One
+ 2 | Two
+(2 rows)
+
+-- ANY with ARRAY const
+--Testcase 89:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int = ANY(ARRAY[1, 2]);
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..15.15 rows=15 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE ("a" = 1 OR "a" = 2)
+(3 rows)
+
+--Testcase 90:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int = ANY(ARRAY[1, 2]);
+ a |  b  
+---+-----
+ 1 | One
+ 2 | Two
+(2 rows)
+
+--Testcase 91:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int <> ANY(ARRAY[1, 2]);
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..1476.62 rows=1462 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE ("a" <> 1 OR "a" <> 2)
+(3 rows)
+
+--Testcase 92:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int <> ANY(ARRAY[1, 2]);
+ a |  b  
+---+-----
+ 1 | One
+ 2 | Two
+(2 rows)
+
+--Testcase 93:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int >= ANY(ARRAY[1, 2]);
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..820.12 rows=812 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE ("a" >= 1 OR "a" >= 2)
+(3 rows)
+
+--Testcase 94:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int >= ANY(ARRAY[1, 2]);
+ a |  b  
+---+-----
+ 1 | One
+ 2 | Two
+(2 rows)
+
+--Testcase 95:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int <= ANY(ARRAY[1, 2]);
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..820.12 rows=812 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE ("a" <= 1 OR "a" <= 2)
+(3 rows)
+
+--Testcase 96:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int <= ANY(ARRAY[1, 2]);
+ a |  b  
+---+-----
+ 1 | One
+ 2 | Two
+(2 rows)
+
+--Testcase 97:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int > ANY(ARRAY[1, 2]);
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..820.12 rows=812 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE ("a" > 1 OR "a" > 2)
+(3 rows)
+
+--Testcase 98:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int > ANY(ARRAY[1, 2]);
+ a |  b  
+---+-----
+ 2 | Two
+(1 row)
+
+--Testcase 99:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int < ANY(ARRAY[1, 2]);
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..820.12 rows=812 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE ("a" < 1 OR "a" < 2)
+(3 rows)
+
+--Testcase 100:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int < ANY(ARRAY[1, 2]);
+ a |  b  
+---+-----
+ 1 | One
+(1 row)
+
+--Testcase 101:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int = ANY('{1, 2, 3}');
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..22.22 rows=22 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE ("a" = 1 OR "a" = 2 OR "a" = 3)
+(3 rows)
+
+--Testcase 102:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int = ANY('{1, 2, 3}');
+ a |  b  
+---+-----
+ 1 | One
+ 2 | Two
+(2 rows)
+
+--Testcase 103:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int <> ANY('{1, 2, 3}');
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..1476.62 rows=1462 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE ("a" <> 1 OR "a" <> 2 OR "a" <> 3)
+(3 rows)
+
+--Testcase 104:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int <> ANY('{1, 2, 3}');
+ a |  b  
+---+-----
+ 1 | One
+ 2 | Two
+(2 rows)
+
+-- ALL with ARRAY expression
+--Testcase 105:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int = ALL(ARRAY[1, (fields->>'a')::int * 1]);
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..1.01 rows=1 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE (("a" = 1) AND ("a" = ("a" * 1)))
+(3 rows)
+
+--Testcase 106:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int = ALL(ARRAY[1, (fields->>'a')::int * 1]);
+ a |  b  
+---+-----
+ 1 | One
+(1 row)
+
+--Testcase 107:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int <> ALL(ARRAY[1, (fields->>'a')::int + 1]);
+                                         QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..1461.47 rows=1447 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE (("a" <> 1) AND ("a" <> ("a" + 1)))
+(3 rows)
+
+--Testcase 108:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int <> ALL(ARRAY[1, (fields->>'a')::int + 1]);
+ a |  b  
+---+-----
+ 2 | Two
+(1 row)
+
+--Testcase 109:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int >= ALL(ARRAY[1, (fields->>'a')::int / 1]);
+                                         QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..163.62 rows=162 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE (("a" >= 1) AND ("a" >= ("a" / 1)))
+(3 rows)
+
+--Testcase 110:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int >= ALL(ARRAY[1, (fields->>'a')::int / 1]);
+ a |  b  
+---+-----
+ 1 | One
+ 2 | Two
+(2 rows)
+
+--Testcase 111:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int <= ALL(ARRAY[1, (fields->>'a')::int + 1]);
+                                         QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..163.62 rows=162 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE (("a" <= 1) AND ("a" <= ("a" + 1)))
+(3 rows)
+
+--Testcase 112:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int <= ALL(ARRAY[1, (fields->>'a')::int + 1]);
+ a |  b  
+---+-----
+ 1 | One
+(1 row)
+
+--Testcase 113:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int > ALL(ARRAY[1, (fields->>'a')::int - 1]);
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..163.62 rows=162 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE (("a" > 1) AND ("a" > ("a" - 1)))
+(3 rows)
+
+--Testcase 114:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int > ALL(ARRAY[1, (fields->>'a')::int - 1]);
+ a |  b  
+---+-----
+ 2 | Two
+(1 row)
+
+--Testcase 115:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int < ALL(ARRAY[2, (fields->>'a')::int + 1]);
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..163.62 rows=162 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE (("a" < 2) AND ("a" < ("a" + 1)))
+(3 rows)
+
+--Testcase 116:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int < ALL(ARRAY[2, (fields->>'a')::int + 1]);
+ a |  b  
+---+-----
+ 1 | One
+(1 row)
+
+-- ALL with ARRAY const
+--Testcase 117:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int = ALL(ARRAY[1, 1]);
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..1.01 rows=1 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE ("a" = 1 AND "a" = 1)
+(3 rows)
+
+--Testcase 118:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int = ALL(ARRAY[1, 1]);
+ a |  b  
+---+-----
+ 1 | One
+(1 row)
+
+--Testcase 119:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int <> ALL(ARRAY[1, 3]);
+                                   QUERY PLAN                                   
+--------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..1461.47 rows=1447 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE ("a" <> 1 AND "a" <> 3)
+(3 rows)
+
+--Testcase 120:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int <> ALL(ARRAY[1, 3]);
+ a |  b  
+---+-----
+ 2 | Two
+(1 row)
+
+--Testcase 121:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int >= ALL(ARRAY[1, 2]);
+                                   QUERY PLAN                                   
+--------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..163.62 rows=162 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE ("a" >= 1 AND "a" >= 2)
+(3 rows)
+
+--Testcase 122:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int >= ALL(ARRAY[1, 2]);
+ a |  b  
+---+-----
+ 2 | Two
+(1 row)
+
+--Testcase 123:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int <= ALL(ARRAY[1, 2]);
+                                   QUERY PLAN                                   
+--------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..163.62 rows=162 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE ("a" <= 1 AND "a" <= 2)
+(3 rows)
+
+--Testcase 124:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int <= ALL(ARRAY[1, 2]);
+ a |  b  
+---+-----
+ 1 | One
+(1 row)
+
+--Testcase 125:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int > ALL(ARRAY[0, 1]);
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..163.62 rows=162 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE ("a" > 0 AND "a" > 1)
+(3 rows)
+
+--Testcase 126:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int > ALL(ARRAY[0, 1]);
+ a |  b  
+---+-----
+ 2 | Two
+(1 row)
+
+--Testcase 127:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int < ALL(ARRAY[2, 3]);
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..163.62 rows=162 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE ("a" < 2 AND "a" < 3)
+(3 rows)
+
+--Testcase 128:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE (fields->>'a')::int < ALL(ARRAY[2, 3]);
+ a |  b  
+---+-----
+ 1 | One
+(1 row)
+
+-- ANY/ALL with TEXT ARRAY const
+--Testcase 129:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE fields->>'b' = ANY(ARRAY['One', 'Two']);
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..15.15 rows=15 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE ("b" = 'One' OR "b" = 'Two')
+(3 rows)
+
+--Testcase 130:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE fields->>'b' = ANY(ARRAY['One', 'Two']);
+ a |  b  
+---+-----
+ 1 | One
+ 2 | Two
+(2 rows)
+
+--Testcase 131:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE fields->>'b' <> ALL(ARRAY['One', 'Four']);
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..1461.47 rows=1447 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   InfluxDB query: SELECT "a", "b" FROM "numbers" WHERE ("b" <> 'One' AND "b" <> 'Four')
+(3 rows)
+
+--Testcase 132:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE fields->>'b' <> ALL(ARRAY['One', 'Four']);
+ a |  b  
+---+-----
+ 2 | Two
+(1 row)
+
+--Testcase 133:
+EXPLAIN VERBOSE
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE fields->>'b' > ANY(ARRAY['One', 'Two']);
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..820.12 rows=812 width=36)
+   Output: ((fields ->> 'a'::text))::integer, (fields ->> 'b'::text)
+   Filter: ((numbers.fields ->> 'b'::text) > ANY ('{One,Two}'::text[]))
+   InfluxDB query: SELECT "a", "b" FROM "numbers"
+(4 rows)
+
+--Testcase 134:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE fields->>'b' > ANY(ARRAY['One', 'Two']);
+ a |  b  
+---+-----
+ 2 | Two
+(1 row)
+
+--Testcase 135:
+EXPLAIN VERBOSE
+SELECT * FROM numbers WHERE fields->>'b' > ALL(ARRAY['Four', 'Five']);
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Foreign Scan on public.numbers  (cost=10.00..95.00 rows=95 width=72)
+   Output: "time", tags, fields
+   Filter: ((numbers.fields ->> 'b'::text) > ALL ('{Four,Five}'::text[]))
+   InfluxDB query: SELECT * FROM "numbers"
+(4 rows)
+
+--Testcase 136:
+SELECT (fields->>'a')::int a, fields->>'b' b FROM numbers WHERE fields->>'b' > ALL(ARRAY['Four', 'Five']);
+ a |  b  
+---+-----
+ 1 | One
+ 2 | Two
+(2 rows)
+
+--Testcase 137:
+DROP FOREIGN TABLE numbers;
+--Testcase 138:
+ALTER SERVER server1 OPTIONS (SET dbname 'no such database');
+--Testcase 139:
+SELECT * FROM t1;
+ERROR:  influxdb_fdw : database not found: no such database
+--Testcase 140:
+ALTER SERVER server1 OPTIONS (SET dbname 'mydb');
+--Testcase 141:
+SELECT * FROM t1;
+          time          |        tags        |                                         fields                                          
+------------------------+--------------------+-----------------------------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_A"} | {"tag2": "tag2_A", "value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 09:00:00+09 | {"tag1": "tag1_B"} | {"tag2": null, "value1": "100", "value2": "2", "value3": null, "value4": "false"}
+ 2015-08-18 09:48:08+09 | {"tag1": null}     | {"tag2": "tag2_A", "value1": null, "value2": "2", "value3": null, "value4": null}
+(3 rows)
+
+-- map time column to both timestamp and text
+--Testcase 142:
+CREATE FOREIGN TABLE t5(t timestamp OPTIONS (column_name 'time'), tag1 text OPTIONS (column_name 'time'), fields jsonb OPTIONS (fields 'true')) SERVER server1 OPTIONS (table 'cpu', schemaless 'true');
+--Testcase 143:
+SELECT * FROM t5;
+          t          |         tag1         |                                                  fields                                                   
+---------------------+----------------------+-----------------------------------------------------------------------------------------------------------
+ 2015-08-18 00:00:00 | 2015-08-18T00:00:00Z | {"tag1": "tag1_A", "tag2": "tag2_A", "value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 00:00:00 | 2015-08-18T00:00:00Z | {"tag1": "tag1_B", "tag2": null, "value1": "100", "value2": "2", "value3": null, "value4": "false"}
+ 2015-08-18 00:48:08 | 2015-08-18T00:48:08Z | {"tag1": null, "tag2": "tag2_A", "value1": null, "value2": "2", "value3": null, "value4": null}
+(3 rows)
+
+--get version
+--Testcase 144:
+\df influxdb_fdw*
+                                List of functions
+ Schema |          Name          | Result data type | Argument data types | Type 
+--------+------------------------+------------------+---------------------+------
+ public | influxdb_fdw_handler   | fdw_handler      |                     | func
+ public | influxdb_fdw_validator | void             | text[], oid         | func
+ public | influxdb_fdw_version   | integer          |                     | func
+(3 rows)
+
+--Testcase 145:
+SELECT * FROM public.influxdb_fdw_version();
+ influxdb_fdw_version 
+----------------------
+                20000
+(1 row)
+
+--Testcase 146:
+SELECT influxdb_fdw_version();
+ influxdb_fdw_version 
+----------------------
+                20000
+(1 row)
+
+--Test pushdown LIMIT...OFFSET
+--Testcase 147:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT tableoid::regclass, * FROM t1 LIMIT 1 OFFSET 0;
+                       QUERY PLAN                       
+--------------------------------------------------------
+ Foreign Scan on public.t1
+   Output: (tableoid)::regclass, "time", tags, fields
+   InfluxDB query: SELECT * FROM "cpu" LIMIT 1 OFFSET 0
+(3 rows)
+
+--Testcase 148:
+SELECT tableoid::regclass, * FROM t1 LIMIT 1 OFFSET 0;
+ tableoid |          time          |        tags        |                                         fields                                          
+----------+------------------------+--------------------+-----------------------------------------------------------------------------------------
+ t1       | 2015-08-18 09:00:00+09 | {"tag1": "tag1_A"} | {"tag2": "tag2_A", "value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+(1 row)
+
+--Testcase 149:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT tableoid::regclass, * FROM t1 LIMIT 1 OFFSET 1;
+                       QUERY PLAN                       
+--------------------------------------------------------
+ Foreign Scan on public.t1
+   Output: (tableoid)::regclass, "time", tags, fields
+   InfluxDB query: SELECT * FROM "cpu" LIMIT 1 OFFSET 1
+(3 rows)
+
+--Testcase 150:
+SELECT tableoid::regclass, * FROM t1 LIMIT 1 OFFSET 1;
+ tableoid |          time          |        tags        |                                      fields                                       
+----------+------------------------+--------------------+-----------------------------------------------------------------------------------
+ t1       | 2015-08-18 09:00:00+09 | {"tag1": "tag1_B"} | {"tag2": null, "value1": "100", "value2": "2", "value3": null, "value4": "false"}
+(1 row)
+
+--Testcase 151:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT ctid, * FROM t1 LIMIT 1 OFFSET 0;
+                       QUERY PLAN                       
+--------------------------------------------------------
+ Foreign Scan on public.t1
+   Output: ctid, "time", tags, fields
+   InfluxDB query: SELECT * FROM "cpu" LIMIT 1 OFFSET 0
+(3 rows)
+
+--Testcase 152:
+SELECT ctid, * FROM t1 LIMIT 1 OFFSET 0;
+      ctid      |          time          |        tags        |                                         fields                                          
+----------------+------------------------+--------------------+-----------------------------------------------------------------------------------------
+ (4294967295,0) | 2015-08-18 09:00:00+09 | {"tag1": "tag1_A"} | {"tag2": "tag2_A", "value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+(1 row)
+
+--Testcase 153:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT ctid, * FROM t2 LIMIT 10 OFFSET 20;
+                        QUERY PLAN                        
+----------------------------------------------------------
+ Foreign Scan on public.t2
+   Output: ctid, "time", tags, fields
+   InfluxDB query: SELECT * FROM "cpu" LIMIT 10 OFFSET 20
+(3 rows)
+
+--Testcase 154:
+SELECT ctid, * FROM t2 LIMIT 10 OFFSET 20;
+ ctid | time | tags | fields 
+------+------+------+--------
+(0 rows)
+
+--Testcase 155:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM
+  t1
+  LEFT JOIN t2
+  ON (t2.fields->>'value1')::int = 123,
+  LATERAL (SELECT (t2.fields->>'value1')::int value1, t1.tags->>'tag1' tag1 FROM t1 LIMIT 1 OFFSET 0) AS ss
+WHERE (t1.fields->>'value1')::int = ss.value1;
+                                                                     QUERY PLAN                                                                      
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop
+   Output: t1."time", t1.tags, t1.fields, t2."time", t2.tags, t2.fields, (((t2.fields ->> 'value1'::text))::integer), ((t1_1.tags ->> 'tag1'::text))
+   Join Filter: (((t1.fields ->> 'value1'::text))::integer = (((t2.fields ->> 'value1'::text))::integer))
+   ->  Nested Loop Left Join
+         Output: t1."time", t1.tags, t1.fields, t2."time", t2.tags, t2.fields
+         ->  Foreign Scan on public.t1
+               Output: t1."time", t1.tags, t1.fields
+               InfluxDB query: SELECT * FROM "cpu"
+         ->  Materialize
+               Output: t2."time", t2.tags, t2.fields
+               ->  Foreign Scan on public.t2
+                     Output: t2."time", t2.tags, t2.fields
+                     InfluxDB query: SELECT * FROM "cpu" WHERE (("value1" = 123))
+   ->  Foreign Scan on public.t1 t1_1
+         Output: ((t2.fields ->> 'value1'::text))::integer, (t1_1.tags ->> 'tag1'::text)
+         InfluxDB query: SELECT * FROM "cpu" LIMIT 1 OFFSET 0
+(16 rows)
+
+--Testcase 156:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM
+  t1
+  LEFT JOIN t2
+  ON (t2.fields->>'value1')::int = 123,
+  LATERAL (SELECT (t2.fields->>'value1')::int value1, t1.tags->>'tag1' tag1 FROM t1 LIMIT 1 OFFSET 0) AS ss1,
+  LATERAL (SELECT ss1.* from t3 LIMIT 1 OFFSET 20) AS ss2
+WHERE (t1.fields->>'value1')::int = ss2.value1;
+                                                                                                              QUERY PLAN                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop
+   Output: t1."time", t1.tags, t1.fields, t2."time", t2.tags, t2.fields, (((t2.fields ->> 'value1'::text))::integer), ((t1_1.tags ->> 'tag1'::text)), ((((t2.fields ->> 'value1'::text))::integer)), (((t1_1.tags ->> 'tag1'::text)))
+   Join Filter: (((t1.fields ->> 'value1'::text))::integer = ((((t2.fields ->> 'value1'::text))::integer)))
+   ->  Nested Loop
+         Output: t1."time", t1.tags, t1.fields, t2."time", t2.tags, t2.fields, (((t2.fields ->> 'value1'::text))::integer), ((t1_1.tags ->> 'tag1'::text))
+         ->  Nested Loop Left Join
+               Output: t1."time", t1.tags, t1.fields, t2."time", t2.tags, t2.fields
+               ->  Foreign Scan on public.t1
+                     Output: t1."time", t1.tags, t1.fields
+                     InfluxDB query: SELECT * FROM "cpu"
+               ->  Materialize
+                     Output: t2."time", t2.tags, t2.fields
+                     ->  Foreign Scan on public.t2
+                           Output: t2."time", t2.tags, t2.fields
+                           InfluxDB query: SELECT * FROM "cpu" WHERE (("value1" = 123))
+         ->  Foreign Scan on public.t1 t1_1
+               Output: ((t2.fields ->> 'value1'::text))::integer, (t1_1.tags ->> 'tag1'::text)
+               InfluxDB query: SELECT * FROM "cpu" LIMIT 1 OFFSET 0
+   ->  Foreign Scan on public.t3
+         Output: (((t2.fields ->> 'value1'::text))::integer), ((t1_1.tags ->> 'tag1'::text))
+         InfluxDB query: SELECT * FROM "t3" LIMIT 1 OFFSET 20
+(21 rows)
+
+--Testcase 157:
+DROP FOREIGN TABLE cpu;
+--Testcase 158:
+DROP FOREIGN TABLE t1;
+--Testcase 159:
+DROP FOREIGN TABLE t2;
+--Testcase 160:
+DROP FOREIGN TABLE t3;
+--Testcase 161:
+DROP FOREIGN TABLE t4;
+--Testcase 162:
+DROP FOREIGN TABLE t5;
+--Testcase 163:
+DROP FOREIGN TABLE tx;
+-- test INSERT, DELETE
+IMPORT FOREIGN SCHEMA public FROM SERVER server1 INTO public OPTIONS(import_time_text 'true', schemaless 'true');
+CREATE FOREIGN TABLE cpu_nsc (time timestamp with time zone, time_text text, tag1 text, tag2 text, value1 int, value2 float, value3 text, value4 boolean) SERVER server1 OPTIONS (table 'cpu', tags 'tag1, tag2');
+--Testcase 164:
+SELECT * FROM cpu;
+          time          |      time_text       |                 tags                 |                                fields                                 
+------------------------+----------------------+--------------------------------------+-----------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | 2015-08-18T00:00:00Z | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 09:00:00+09 | 2015-08-18T00:00:00Z | {"tag1": "tag1_B", "tag2": null}     | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+ 2015-08-18 09:48:08+09 | 2015-08-18T00:48:08Z | {"tag1": null, "tag2": "tag2_A"}     | {"value1": null, "value2": "2", "value3": null, "value4": null}
+(3 rows)
+
+--Testcase 165:
+EXPLAIN VERBOSE
+INSERT INTO cpu_nsc(time, tag1, tag2, value1, value2, value3, value4) VALUES('2021-01-01 00:00:01+09', 'tag1_K', 'tag2_H', 200, 5.5, 'test1', true);
+                                                                            QUERY PLAN                                                                             
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Insert on public.cpu_nsc  (cost=0.00..0.01 rows=1 width=149)
+   ->  Result  (cost=0.00..0.01 rows=1 width=149)
+         Output: '2021-01-01 00:00:01+09'::timestamp with time zone, NULL::text, 'tag1_K'::text, 'tag2_H'::text, 200, '5.5'::double precision, 'test1'::text, true
+(3 rows)
+
+--Testcase 166:
+INSERT INTO cpu_nsc(time, tag1, tag2, value1, value2, value3, value4) VALUES('2021-01-01 00:00:01+09', 'tag1_K', 'tag2_H', 200, 5.5, 'test', true);
+--Testcase 167:
+SELECT * FROM cpu;
+          time          |      time_text       |                 tags                 |                                 fields                                 
+------------------------+----------------------+--------------------------------------+------------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | 2015-08-18T00:00:00Z | {"tag1": "tag1_A", "tag2": "tag2_A"} | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 09:00:00+09 | 2015-08-18T00:00:00Z | {"tag1": "tag1_B", "tag2": null}     | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+ 2015-08-18 09:48:08+09 | 2015-08-18T00:48:08Z | {"tag1": null, "tag2": "tag2_A"}     | {"value1": null, "value2": "2", "value3": null, "value4": null}
+ 2021-01-01 00:00:01+09 | 2020-12-31T15:00:01Z | {"tag1": "tag1_K", "tag2": "tag2_H"} | {"value1": "200", "value2": "5.5", "value3": "test", "value4": "true"}
+(4 rows)
+
+--Testcase 168:
+EXPLAIN VERBOSE
+INSERT INTO cpu_nsc(time, tag1, tag2, value1, value2, value3, value4) VALUES('2021-01-02 00:00:02+05', 'tag1_I', 'tag2_E', 300, 15.5, 'test2', false),
+  ('2029-02-02 00:02:02+04', 'tag1_U', 'tag2_DZ', (SELECT 350), (SELECT i FROM (VALUES(6.9)) AS foo (i)), 'funny', true);
+                                                                               QUERY PLAN                                                                               
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Insert on public.cpu_nsc  (cost=0.02..0.04 rows=2 width=149)
+   InitPlan 1 (returns $0)
+     ->  Result  (cost=0.00..0.01 rows=1 width=4)
+           Output: 350
+   InitPlan 2 (returns $1)
+     ->  Result  (cost=0.00..0.01 rows=1 width=32)
+           Output: 6.9
+   ->  Values Scan on "*VALUES*"  (cost=0.00..0.03 rows=2 width=149)
+         Output: "*VALUES*".column1, NULL::text, "*VALUES*".column2, "*VALUES*".column3, "*VALUES*".column4, "*VALUES*".column5, "*VALUES*".column6, "*VALUES*".column7
+(9 rows)
+
+--Testcase 169:
+INSERT INTO cpu_nsc(time, tag1, tag2, value1, value2, value3, value4) VALUES('2021-01-02 00:00:02+05', 'tag1_I', 'tag2_E', 300, 15.5, 'test2', false),
+  ('2029-02-02 00:02:02+04', 'tag1_U', 'tag2_DZ', (SELECT 350), (SELECT i FROM (VALUES(6.9)) AS foo (i)), 'funny', true);
+--Testcase 170:
+SELECT * FROM cpu;
+          time          |      time_text       |                 tags                  |                                  fields                                   
+------------------------+----------------------+---------------------------------------+---------------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | 2015-08-18T00:00:00Z | {"tag1": "tag1_A", "tag2": "tag2_A"}  | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 09:00:00+09 | 2015-08-18T00:00:00Z | {"tag1": "tag1_B", "tag2": null}      | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+ 2015-08-18 09:48:08+09 | 2015-08-18T00:48:08Z | {"tag1": null, "tag2": "tag2_A"}      | {"value1": null, "value2": "2", "value3": null, "value4": null}
+ 2021-01-01 00:00:01+09 | 2020-12-31T15:00:01Z | {"tag1": "tag1_K", "tag2": "tag2_H"}  | {"value1": "200", "value2": "5.5", "value3": "test", "value4": "true"}
+ 2021-01-02 04:00:02+09 | 2021-01-01T19:00:02Z | {"tag1": "tag1_I", "tag2": "tag2_E"}  | {"value1": "300", "value2": "15.5", "value3": "test2", "value4": "false"}
+ 2029-02-02 05:02:02+09 | 2029-02-01T20:02:02Z | {"tag1": "tag1_U", "tag2": "tag2_DZ"} | {"value1": "350", "value2": "6.9", "value3": "funny", "value4": "true"}
+(6 rows)
+
+--Testcase 171:
+INSERT INTO cpu_nsc(tag2, value1) VALUES('tag2_KH', 400);
+--Testcase 172:
+SELECT tags->>'tag1' tag1, tags->>'tag2' tag2, (fields->>'value1')::bigint value1, (fields->>'value2')::double precision value2, fields->>'value3' value3, (fields->>'value4')::boolean value4 FROM cpu;
+  tag1  |  tag2   | value1 | value2 | value3 | value4 
+--------+---------+--------+--------+--------+--------
+ tag1_A | tag2_A  |    100 |    0.5 | str    | t
+ tag1_B |         |    100 |      2 |        | f
+        | tag2_A  |        |      2 |        | 
+ tag1_K | tag2_H  |    200 |    5.5 | test   | t
+ tag1_I | tag2_E  |    300 |   15.5 | test2  | f
+        | tag2_KH |    400 |        |        | 
+ tag1_U | tag2_DZ |    350 |    6.9 | funny  | t
+(7 rows)
+
+--Testcase 173:
+EXPLAIN VERBOSE
+DELETE FROM cpu_nsc WHERE tag2 = 'tag2_KH';
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Delete on public.cpu_nsc  (cost=10.00..3.00 rows=3 width=104)
+   ->  Foreign Delete on public.cpu_nsc  (cost=10.00..3.00 rows=3 width=104)
+         InfluxDB query: DELETE FROM "cpu" WHERE (("tag2" = 'tag2_KH'))
+(3 rows)
+
+--Testcase 174:
+DELETE FROM cpu_nsc WHERE tag2 = 'tag2_KH';
+--Testcase 175:
+SELECT tags->>'tag1' tag1, tags->>'tag2' tag2, (fields->>'value1')::bigint value1, (fields->>'value2')::double precision value2, fields->>'value3' value3, (fields->>'value4')::boolean value4 FROM cpu;
+  tag1  |  tag2   | value1 | value2 | value3 | value4 
+--------+---------+--------+--------+--------+--------
+ tag1_A | tag2_A  |    100 |    0.5 | str    | t
+ tag1_B |         |    100 |      2 |        | f
+        | tag2_A  |        |      2 |        | 
+ tag1_K | tag2_H  |    200 |    5.5 | test   | t
+ tag1_I | tag2_E  |    300 |   15.5 | test2  | f
+ tag1_U | tag2_DZ |    350 |    6.9 | funny  | t
+(6 rows)
+
+--Testcase 176:
+EXPLAIN VERBOSE
+DELETE FROM cpu WHERE time = '2021-01-02 04:00:02+09';
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Delete on public.cpu  (cost=10.00..6.00 rows=6 width=40)
+   ->  Foreign Delete on public.cpu  (cost=10.00..6.00 rows=6 width=40)
+         InfluxDB query: DELETE FROM "cpu" WHERE ((time = '2021-01-01 19:00:02'))
+(3 rows)
+
+--Testcase 177:
+DELETE FROM cpu WHERE time = '2021-01-02 04:00:02+09';
+--Testcase 178:
+SELECT * FROM cpu;
+          time          |      time_text       |                 tags                  |                                 fields                                  
+------------------------+----------------------+---------------------------------------+-------------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | 2015-08-18T00:00:00Z | {"tag1": "tag1_A", "tag2": "tag2_A"}  | {"value1": "100", "value2": "0.5", "value3": "str", "value4": "true"}
+ 2015-08-18 09:00:00+09 | 2015-08-18T00:00:00Z | {"tag1": "tag1_B", "tag2": null}      | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+ 2015-08-18 09:48:08+09 | 2015-08-18T00:48:08Z | {"tag1": null, "tag2": "tag2_A"}      | {"value1": null, "value2": "2", "value3": null, "value4": null}
+ 2021-01-01 00:00:01+09 | 2020-12-31T15:00:01Z | {"tag1": "tag1_K", "tag2": "tag2_H"}  | {"value1": "200", "value2": "5.5", "value3": "test", "value4": "true"}
+ 2029-02-02 05:02:02+09 | 2029-02-01T20:02:02Z | {"tag1": "tag1_U", "tag2": "tag2_DZ"} | {"value1": "350", "value2": "6.9", "value3": "funny", "value4": "true"}
+(5 rows)
+
+--Testcase 179:
+EXPLAIN VERBOSE
+DELETE FROM cpu_nsc WHERE time < '2018-07-07' AND tag1 != 'tag1_B';
+                                                 QUERY PLAN                                                  
+-------------------------------------------------------------------------------------------------------------
+ Delete on public.cpu_nsc  (cost=10.00..212.00 rows=212 width=104)
+   ->  Foreign Delete on public.cpu_nsc  (cost=10.00..212.00 rows=212 width=104)
+         InfluxDB query: DELETE FROM "cpu" WHERE ((time < '2018-07-06 15:00:00')) AND (("tag1" <> 'tag1_B'))
+(3 rows)
+
+--Testcase 180:
+DELETE FROM cpu_nsc WHERE time < '2018-07-07' AND tag1 != 'tag1_B';
+--Testcase 181:
+SELECT * FROM cpu;
+          time          |      time_text       |                 tags                  |                                 fields                                  
+------------------------+----------------------+---------------------------------------+-------------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | 2015-08-18T00:00:00Z | {"tag1": "tag1_B", "tag2": null}      | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+ 2021-01-01 00:00:01+09 | 2020-12-31T15:00:01Z | {"tag1": "tag1_K", "tag2": "tag2_H"}  | {"value1": "200", "value2": "5.5", "value3": "test", "value4": "true"}
+ 2029-02-02 05:02:02+09 | 2029-02-01T20:02:02Z | {"tag1": "tag1_U", "tag2": "tag2_DZ"} | {"value1": "350", "value2": "6.9", "value3": "funny", "value4": "true"}
+(3 rows)
+
+-- Test INSERT, DELETE with time_text column
+--Testcase 182:
+INSERT INTO cpu_nsc(time_text, tag1, tag2, value1, value2, value3, value4) VALUES('2021-02-02T00:00:00Z', 'tag1_D', 'tag2_E', 600, 20.2, 'test3', true);
+--Testcase 183:
+SELECT * FROM cpu;
+          time          |      time_text       |                 tags                  |                                  fields                                  
+------------------------+----------------------+---------------------------------------+--------------------------------------------------------------------------
+ 2015-08-18 09:00:00+09 | 2015-08-18T00:00:00Z | {"tag1": "tag1_B", "tag2": null}      | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+ 2021-01-01 00:00:01+09 | 2020-12-31T15:00:01Z | {"tag1": "tag1_K", "tag2": "tag2_H"}  | {"value1": "200", "value2": "5.5", "value3": "test", "value4": "true"}
+ 2021-02-02 09:00:00+09 | 2021-02-02T00:00:00Z | {"tag1": "tag1_D", "tag2": "tag2_E"}  | {"value1": "600", "value2": "20.2", "value3": "test3", "value4": "true"}
+ 2029-02-02 05:02:02+09 | 2029-02-01T20:02:02Z | {"tag1": "tag1_U", "tag2": "tag2_DZ"} | {"value1": "350", "value2": "6.9", "value3": "funny", "value4": "true"}
+(4 rows)
+
+--Testcase 184:
+INSERT INTO cpu_nsc(time_text, tag1, value2) VALUES('2021-02-02T00:00:00.123456789Z', 'tag1_P', 25.8);
+--Testcase 185:
+SELECT * FROM cpu;
+             time              |           time_text            |                 tags                  |                                  fields                                  
+-------------------------------+--------------------------------+---------------------------------------+--------------------------------------------------------------------------
+ 2015-08-18 09:00:00+09        | 2015-08-18T00:00:00Z           | {"tag1": "tag1_B", "tag2": null}      | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+ 2021-01-01 00:00:01+09        | 2020-12-31T15:00:01Z           | {"tag1": "tag1_K", "tag2": "tag2_H"}  | {"value1": "200", "value2": "5.5", "value3": "test", "value4": "true"}
+ 2021-02-02 09:00:00+09        | 2021-02-02T00:00:00Z           | {"tag1": "tag1_D", "tag2": "tag2_E"}  | {"value1": "600", "value2": "20.2", "value3": "test3", "value4": "true"}
+ 2021-02-02 09:00:00.123457+09 | 2021-02-02T00:00:00.123456789Z | {"tag1": "tag1_P", "tag2": null}      | {"value1": null, "value2": "25.8", "value3": null, "value4": null}
+ 2029-02-02 05:02:02+09        | 2029-02-01T20:02:02Z           | {"tag1": "tag1_U", "tag2": "tag2_DZ"} | {"value1": "350", "value2": "6.9", "value3": "funny", "value4": "true"}
+(5 rows)
+
+--Testcase 186:
+INSERT INTO cpu_nsc(time_text, tag1, value2) VALUES('2021-02-02 00:00:01', 'tag1_J', 37.1);
+--Testcase 187:
+SELECT * FROM cpu;
+             time              |           time_text            |                 tags                  |                                  fields                                  
+-------------------------------+--------------------------------+---------------------------------------+--------------------------------------------------------------------------
+ 2015-08-18 09:00:00+09        | 2015-08-18T00:00:00Z           | {"tag1": "tag1_B", "tag2": null}      | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+ 2021-01-01 00:00:01+09        | 2020-12-31T15:00:01Z           | {"tag1": "tag1_K", "tag2": "tag2_H"}  | {"value1": "200", "value2": "5.5", "value3": "test", "value4": "true"}
+ 2021-02-02 09:00:00+09        | 2021-02-02T00:00:00Z           | {"tag1": "tag1_D", "tag2": "tag2_E"}  | {"value1": "600", "value2": "20.2", "value3": "test3", "value4": "true"}
+ 2021-02-02 09:00:00.123457+09 | 2021-02-02T00:00:00.123456789Z | {"tag1": "tag1_P", "tag2": null}      | {"value1": null, "value2": "25.8", "value3": null, "value4": null}
+ 2021-02-02 09:00:01+09        | 2021-02-02T00:00:01Z           | {"tag1": "tag1_J", "tag2": null}      | {"value1": null, "value2": "37.1", "value3": null, "value4": null}
+ 2029-02-02 05:02:02+09        | 2029-02-01T20:02:02Z           | {"tag1": "tag1_U", "tag2": "tag2_DZ"} | {"value1": "350", "value2": "6.9", "value3": "funny", "value4": "true"}
+(6 rows)
+
+--Testcase 188:
+INSERT INTO cpu_nsc(time, time_text, tag1, tag2, value1, value2, value3, value4) VALUES('2021-02-02 00:00:01+05', '2021-02-02T00:00:02.123456789Z', 'tag1_A', 'tag2_B', 200, 5.5, 'test', true);
+WARNING:  Inserting value has both 'time_text' and 'time' columns specified. The 'time' will be ignored.
+--Testcase 189:
+SELECT * FROM cpu;
+             time              |           time_text            |                 tags                  |                                  fields                                  
+-------------------------------+--------------------------------+---------------------------------------+--------------------------------------------------------------------------
+ 2015-08-18 09:00:00+09        | 2015-08-18T00:00:00Z           | {"tag1": "tag1_B", "tag2": null}      | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+ 2021-01-01 00:00:01+09        | 2020-12-31T15:00:01Z           | {"tag1": "tag1_K", "tag2": "tag2_H"}  | {"value1": "200", "value2": "5.5", "value3": "test", "value4": "true"}
+ 2021-02-02 09:00:00+09        | 2021-02-02T00:00:00Z           | {"tag1": "tag1_D", "tag2": "tag2_E"}  | {"value1": "600", "value2": "20.2", "value3": "test3", "value4": "true"}
+ 2021-02-02 09:00:00.123457+09 | 2021-02-02T00:00:00.123456789Z | {"tag1": "tag1_P", "tag2": null}      | {"value1": null, "value2": "25.8", "value3": null, "value4": null}
+ 2021-02-02 09:00:01+09        | 2021-02-02T00:00:01Z           | {"tag1": "tag1_J", "tag2": null}      | {"value1": null, "value2": "37.1", "value3": null, "value4": null}
+ 2021-02-02 09:00:02.123457+09 | 2021-02-02T00:00:02.123456789Z | {"tag1": "tag1_A", "tag2": "tag2_B"}  | {"value1": "200", "value2": "5.5", "value3": "test", "value4": "true"}
+ 2029-02-02 05:02:02+09        | 2029-02-01T20:02:02Z           | {"tag1": "tag1_U", "tag2": "tag2_DZ"} | {"value1": "350", "value2": "6.9", "value3": "funny", "value4": "true"}
+(7 rows)
+
+--Testcase 190:
+INSERT INTO cpu_nsc(time_text, time, tag1, tag2, value1, value2, value3, value4) VALUES('2021-02-03T00:00:03.123456789Z', '2021-03-03 00:00:01+07', 'tag1_C', 'tag2_D', 200, 5.5, 'test', true);
+WARNING:  Inserting value has both 'time_text' and 'time' columns specified. The 'time' will be ignored.
+--Testcase 191:
+SELECT * FROM cpu;
+             time              |           time_text            |                 tags                  |                                  fields                                  
+-------------------------------+--------------------------------+---------------------------------------+--------------------------------------------------------------------------
+ 2015-08-18 09:00:00+09        | 2015-08-18T00:00:00Z           | {"tag1": "tag1_B", "tag2": null}      | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+ 2021-01-01 00:00:01+09        | 2020-12-31T15:00:01Z           | {"tag1": "tag1_K", "tag2": "tag2_H"}  | {"value1": "200", "value2": "5.5", "value3": "test", "value4": "true"}
+ 2021-02-02 09:00:00+09        | 2021-02-02T00:00:00Z           | {"tag1": "tag1_D", "tag2": "tag2_E"}  | {"value1": "600", "value2": "20.2", "value3": "test3", "value4": "true"}
+ 2021-02-02 09:00:00.123457+09 | 2021-02-02T00:00:00.123456789Z | {"tag1": "tag1_P", "tag2": null}      | {"value1": null, "value2": "25.8", "value3": null, "value4": null}
+ 2021-02-02 09:00:01+09        | 2021-02-02T00:00:01Z           | {"tag1": "tag1_J", "tag2": null}      | {"value1": null, "value2": "37.1", "value3": null, "value4": null}
+ 2021-02-02 09:00:02.123457+09 | 2021-02-02T00:00:02.123456789Z | {"tag1": "tag1_A", "tag2": "tag2_B"}  | {"value1": "200", "value2": "5.5", "value3": "test", "value4": "true"}
+ 2021-02-03 09:00:03.123457+09 | 2021-02-03T00:00:03.123456789Z | {"tag1": "tag1_C", "tag2": "tag2_D"}  | {"value1": "200", "value2": "5.5", "value3": "test", "value4": "true"}
+ 2029-02-02 05:02:02+09        | 2029-02-01T20:02:02Z           | {"tag1": "tag1_U", "tag2": "tag2_DZ"} | {"value1": "350", "value2": "6.9", "value3": "funny", "value4": "true"}
+(8 rows)
+
+--Testcase 192:
+EXPLAIN VERBOSE
+DELETE FROM cpu_nsc WHERE time_text = '2021-02-02T00:00:00.123456789Z';
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Delete on public.cpu_nsc  (cost=10.00..3.00 rows=3 width=104)
+   ->  Foreign Delete on public.cpu_nsc  (cost=10.00..3.00 rows=3 width=104)
+         InfluxDB query: DELETE FROM "cpu" WHERE ((time = '2021-02-02T00:00:00.123456789Z'))
+(3 rows)
+
+--Testcase 193:
+DELETE FROM cpu_nsc WHERE time_text = '2021-02-02T00:00:00.123456789Z';
+--Testcase 194:
+SELECT * FROM cpu;
+             time              |           time_text            |                 tags                  |                                  fields                                  
+-------------------------------+--------------------------------+---------------------------------------+--------------------------------------------------------------------------
+ 2015-08-18 09:00:00+09        | 2015-08-18T00:00:00Z           | {"tag1": "tag1_B", "tag2": null}      | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+ 2021-01-01 00:00:01+09        | 2020-12-31T15:00:01Z           | {"tag1": "tag1_K", "tag2": "tag2_H"}  | {"value1": "200", "value2": "5.5", "value3": "test", "value4": "true"}
+ 2021-02-02 09:00:00+09        | 2021-02-02T00:00:00Z           | {"tag1": "tag1_D", "tag2": "tag2_E"}  | {"value1": "600", "value2": "20.2", "value3": "test3", "value4": "true"}
+ 2021-02-02 09:00:01+09        | 2021-02-02T00:00:01Z           | {"tag1": "tag1_J", "tag2": null}      | {"value1": null, "value2": "37.1", "value3": null, "value4": null}
+ 2021-02-02 09:00:02.123457+09 | 2021-02-02T00:00:02.123456789Z | {"tag1": "tag1_A", "tag2": "tag2_B"}  | {"value1": "200", "value2": "5.5", "value3": "test", "value4": "true"}
+ 2021-02-03 09:00:03.123457+09 | 2021-02-03T00:00:03.123456789Z | {"tag1": "tag1_C", "tag2": "tag2_D"}  | {"value1": "200", "value2": "5.5", "value3": "test", "value4": "true"}
+ 2029-02-02 05:02:02+09        | 2029-02-01T20:02:02Z           | {"tag1": "tag1_U", "tag2": "tag2_DZ"} | {"value1": "350", "value2": "6.9", "value3": "funny", "value4": "true"}
+(7 rows)
+
+--Testcase 195:
+EXPLAIN VERBOSE
+DELETE FROM cpu_nsc WHERE time_text = '2021-02-02T00:00:01Z' AND tag1 = 'tag1_J';
+                                                 QUERY PLAN                                                  
+-------------------------------------------------------------------------------------------------------------
+ Delete on public.cpu_nsc  (cost=10.00..1.00 rows=1 width=104)
+   ->  Foreign Delete on public.cpu_nsc  (cost=10.00..1.00 rows=1 width=104)
+         InfluxDB query: DELETE FROM "cpu" WHERE ((time = '2021-02-02T00:00:01Z')) AND (("tag1" = 'tag1_J'))
+(3 rows)
+
+--Testcase 196:
+DELETE FROM cpu_nsc WHERE time_text = '2021-02-02T00:00:01Z' AND tag1 = 'tag1_J';
+--Testcase 197:
+SELECT * FROM cpu;
+             time              |           time_text            |                 tags                  |                                  fields                                  
+-------------------------------+--------------------------------+---------------------------------------+--------------------------------------------------------------------------
+ 2015-08-18 09:00:00+09        | 2015-08-18T00:00:00Z           | {"tag1": "tag1_B", "tag2": null}      | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+ 2021-01-01 00:00:01+09        | 2020-12-31T15:00:01Z           | {"tag1": "tag1_K", "tag2": "tag2_H"}  | {"value1": "200", "value2": "5.5", "value3": "test", "value4": "true"}
+ 2021-02-02 09:00:00+09        | 2021-02-02T00:00:00Z           | {"tag1": "tag1_D", "tag2": "tag2_E"}  | {"value1": "600", "value2": "20.2", "value3": "test3", "value4": "true"}
+ 2021-02-02 09:00:02.123457+09 | 2021-02-02T00:00:02.123456789Z | {"tag1": "tag1_A", "tag2": "tag2_B"}  | {"value1": "200", "value2": "5.5", "value3": "test", "value4": "true"}
+ 2021-02-03 09:00:03.123457+09 | 2021-02-03T00:00:03.123456789Z | {"tag1": "tag1_C", "tag2": "tag2_D"}  | {"value1": "200", "value2": "5.5", "value3": "test", "value4": "true"}
+ 2029-02-02 05:02:02+09        | 2029-02-01T20:02:02Z           | {"tag1": "tag1_U", "tag2": "tag2_DZ"} | {"value1": "350", "value2": "6.9", "value3": "funny", "value4": "true"}
+(6 rows)
+
+--Testcase 198:
+EXPLAIN VERBOSE
+DELETE FROM cpu_nsc WHERE time_text = '2021-02-02 00:00:00' OR time ='2029-02-02 05:02:02+09';
+                                                                  QUERY PLAN                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------
+ Delete on public.cpu_nsc  (cost=10.00..6.00 rows=6 width=104)
+   ->  Foreign Scan on public.cpu_nsc  (cost=10.00..6.00 rows=6 width=104)
+         Output: "time", time_text, tag1, tag2
+         Filter: ((cpu_nsc.time_text = '2021-02-02 00:00:00'::text) OR (cpu_nsc."time" = '2029-02-02 05:02:02+09'::timestamp with time zone))
+         InfluxDB query: SELECT "tag1", "tag2", "value1" FROM "cpu"
+(5 rows)
+
+--Testcase 199:
+DELETE FROM cpu_nsc WHERE time_text = '2021-02-02 00:00:00' OR time ='2029-02-02 05:02:02+09';
+--Testcase 200:
+SELECT * FROM cpu;
+             time              |           time_text            |                 tags                 |                                  fields                                  
+-------------------------------+--------------------------------+--------------------------------------+--------------------------------------------------------------------------
+ 2015-08-18 09:00:00+09        | 2015-08-18T00:00:00Z           | {"tag1": "tag1_B", "tag2": null}     | {"value1": "100", "value2": "2", "value3": null, "value4": "false"}
+ 2021-01-01 00:00:01+09        | 2020-12-31T15:00:01Z           | {"tag1": "tag1_K", "tag2": "tag2_H"} | {"value1": "200", "value2": "5.5", "value3": "test", "value4": "true"}
+ 2021-02-02 09:00:00+09        | 2021-02-02T00:00:00Z           | {"tag1": "tag1_D", "tag2": "tag2_E"} | {"value1": "600", "value2": "20.2", "value3": "test3", "value4": "true"}
+ 2021-02-02 09:00:02.123457+09 | 2021-02-02T00:00:02.123456789Z | {"tag1": "tag1_A", "tag2": "tag2_B"} | {"value1": "200", "value2": "5.5", "value3": "test", "value4": "true"}
+ 2021-02-03 09:00:03.123457+09 | 2021-02-03T00:00:03.123456789Z | {"tag1": "tag1_C", "tag2": "tag2_D"} | {"value1": "200", "value2": "5.5", "value3": "test", "value4": "true"}
+(5 rows)
+
+-- Recover data
+:RECOVER_INIT_TXT_DROP_BUCKET;
+:RECOVER_INIT_TXT_CREATE_BUCKET;
+:RECOVER_INIT_TXT;
+--Testcase 201:
+DROP FOREIGN TABLE cpu_nsc;
+DROP USER MAPPING FOR CURRENT_USER SERVER server1;
+--Testcase 202:
+DROP SERVER server1 CASCADE;
+NOTICE:  drop cascades to 5 other objects
+DETAIL:  drop cascades to foreign table cpu
+drop cascades to foreign table numbers
+drop cascades to foreign table t3
+drop cascades to foreign table t4
+drop cascades to foreign table tx
+--Testcase 203:
+DROP EXTENSION influxdb_fdw;

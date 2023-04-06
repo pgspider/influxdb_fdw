@@ -1,0 +1,46 @@
+# DDL
+# DROP DATABASE schemalessdb
+# CREATE DATABASE schemalessdb
+
+# DML
+# CONTEXT-DATABASE: schemalessdb
+
+sc1,device_id=dev1 sig1=1i,sig2="a",sig3=1.1,sig4=true 0
+sc1,device_id=dev2 sig1=2i,sig2="b",sig3=1.2,sig4=false 0
+sc1,device_id=dev3 sig1=3i,sig2="c",sig3=1.3,sig4=false 0
+sc1,device_id=dev1 sig1=4i,sig2="d",sig3=2.4,sig4=true 1
+sc1,device_id=dev2 sig1=5i,sig2="e",sig3=2.5,sig4=false 1
+sc1,device_id=dev3 sig1=6i,sig2="f",sig3=2.6,sig4=false 1
+sc1,device_id=dev1 sig1=7i,sig2="g",sig3=3.7,sig4=true 2
+sc1,device_id=dev2 sig1=8i,sig2="h",sig3=3.8,sig4=false 2
+sc1,device_id=dev3 sig1=9i,sig2="i",sig3=3.9,sig4=false 2
+
+sc2,device_id=dev1 sig1=10i,sig2="a",sig3=10.1,sig4=true 0
+sc2,device_id=dev2 sig1=20i,sig2="b",sig3=10.2,sig4=false 0
+sc2,device_id=dev3 sig1=30i,sig2="c",sig3=10.3,sig4=false 0
+sc2,device_id=dev1 sig1=40i,sig2="d",sig3=20.4,sig4=true 1
+sc2,device_id=dev2 sig1=50i,sig2="e",sig3=20.5,sig4=false 1
+sc2,device_id=dev3 sig1=60i,sig2="f",sig3=20.6,sig4=false 1
+sc2,device_id=dev1 sig1=70i,sig2="g",sig3=30.7,sig4=true 2
+sc2,device_id=dev2 sig1=80i,sig2="h",sig3=30.8,sig4=false 2
+sc2,device_id=dev3 sig1=90i,sig2="i",sig3=30.9,sig4=false 2
+
+sc3,device_id=dev1,sid=id1 sig1=10i,sig2="a",sig3=10.1,sig4=true 0
+sc3,device_id=dev2,sid=id1 sig1=20i,sig2="b",sig3=10.2,sig4=false 0
+sc3,device_id=dev3,sid=id1 sig1=30i,sig2="c",sig3=10.3,sig4=false 0
+sc3,device_id=dev1,sid=id2 sig1=40i,sig2="d",sig3=20.4,sig4=true 1
+sc3,device_id=dev2,sid=id2 sig1=50i,sig2="e",sig3=20.5,sig4=false 1
+sc3,device_id=dev3,sid=id2 sig1=60i,sig2="f",sig3=20.6,sig4=false 1
+sc3,device_id=dev1,sid=id3 sig1=70i,sig2="g",sig3=30.7,sig4=true 2
+sc3,device_id=dev2,sid=id3 sig1=80i,sig2="h",sig3=30.8,sig4=false 2
+sc3,device_id=dev3,sid=id3 sig1=90i,sig2="i",sig3=30.9,sig4=false 2
+
+sc4,device_id=dev1 sig1=10i,sig2="a",sig3=10.1,sig4=true,sig=1 0
+sc4,device_id=dev2 sig1=20i,sig2="b",sig3=10.2,sig4=false,sig=2 0
+sc4,device_id=dev3 sig1=30i,sig2="c",sig3=10.3,sig4=false,sig=3 0
+sc4,device_id=dev1 sig1=40i,sig2="d",sig3=20.4,sig4=true 1
+sc4,device_id=dev2 sig1=50i,sig2="e",sig3=20.5,sig4=false 1
+sc4,device_id=dev3 sig1=60i,sig2="f",sig3=20.6,sig4=false 1
+sc4,device_id=dev1 sig1=70i,sig2="g",sig3=30.7,sig4=true 2
+sc4,device_id=dev2 sig1=80i,sig2="h",sig3=30.8,sig4=false 2
+sc4,device_id=dev3 sig1=90i,sig2="i",sig3=30.9,sig4=false 2
