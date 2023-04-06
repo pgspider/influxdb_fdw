@@ -354,7 +354,7 @@ The port used to connect to InfluxDB server.
 InfluxDB server version which to connect to. If not, InfluxDB FDW will try to connect to InfluxDB V2 first. If unsuccessful, it will try to connect to InfluxDB V1. If it is still unsuccessful, error will be raised.
 Availlable values: `1` for InfluxDB ver 1.x and `2` for InfluxDB ver 2.x.
 
-- **retention_policy** as *string*, optional, default emplty.
+- **retention_policy** as *string*, optional, default empty.
 
 Retention policy of target database. See in InfluxDB ver 2.x documentation.
 
