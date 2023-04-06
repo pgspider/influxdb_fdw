@@ -81,14 +81,13 @@ Columns of foreign table in schemaless mode
           schemaless 'true'
 	);
 -- import foreign schema
-  IMPORT FOREIGN SCHEMA public 
-    FROM SERVER influxdb_svr
-    INTO public
- OPTIONS (
-       schemaless 'true'
-    );
+	IMPORT FOREIGN SCHEMA public
+	FROM SERVER influxdb_svr
+	INTO public
+	OPTIONS (
+          schemaless 'true'
+        );
 ```
-
 Querying foreign tables:
 - Initialize data in InfluxDB.
   <pre>
@@ -625,7 +624,7 @@ For more details on generated columns see:
 Character set handling
 ----------------------
 
-**Yet not described**. Strongly recommended any of Unicode encodings for PostgreSQL with `influxdb_fdw`.
+**Yet not described**. Strongly recommended to use any of Unicode encodings for PostgreSQL with `influxdb_fdw`.
 
 Examples
 --------
@@ -760,7 +759,7 @@ You can import foreign schema
 ```sql
 	IMPORT FOREIGN SCHEMA public
 	FROM SERVER influxdb_svr
-	 INTO public;
+	INTO public;
 ```
 Access foreign table
 ```sql
