@@ -1,7 +1,9 @@
 # InfluxDB Foreign Data Wrapper for PostgreSQL
-This PostgreSQL extension is a Foreign Data Wrapper (FDW) for InfluxDB (version 1.x series).
+This PostgreSQL extension is a Foreign Data Wrapper (FDW) for InfluxDB.
 
-The current version can work with PostgreSQL 11, 12, 13, 14 and 15.
+The current version can work with PostgreSQL 11, 12, 13, 14, 15 and confirmed with:   
+  - InfluxDB 1.8: with either [influxdb1-go](#install-influxdb-go-client-library) client or [influxdb-cxx](#install-influxdb_cxx-client-library) client.
+  - InfluxDB 2.2: with [influxdb-cxx](#install-influxdb_cxx-client-library) client via InfluxDB v1 compatibility API.
 
 ## Installation
 Influxdb_fdw supports 2 different client: Go client and Influxdb_cxx client. The installation for each kind of client is described as below.
@@ -13,7 +15,13 @@ go get github.com/influxdata/influxdb1-client/v2
 To use Go client, use GO_CLIENT=1 flag when compile the source code
 
 ### Install Influxdb_cxx client library
-Get source from Gitlab repository 'influxdb-cxx' and install as manual
+Get source code from [`influxdb-cxx github repository`](https://github.com/pgspider/influxdb-cxx) and install as manual:
+```
+git clone https://github.com/pgspider/influxdb-cxx
+cd influxdb-cxx
+cmake .. -DINFLUXCXX_WITH_BOOST=OFF -DINFLUXCXX_TESTING=OFF
+sudo make install
+```
 
 Update LD_LIBRARY_PATH follow the installation folder of Influxdb_cxx client
 
