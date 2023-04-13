@@ -25,7 +25,7 @@ ERROR:  influxdb_fdw: Server Host not specified
 --Testcase 10:
 DROP SERVER influxdb_svr CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to user mapping for tsdv on server influxdb_svr
+DETAIL:  drop cascades to user mapping for vagrant on server influxdb_svr
 drop cascades to foreign table optiontbl
 --Testcase 11:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname 'optiondb', host '', port '38086', version '2', retention_policy '');
@@ -39,7 +39,7 @@ ERROR:  influxdb_fdw: Server Host not specified
 --Testcase 15:
 DROP SERVER influxdb_svr CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to user mapping for tsdv on server influxdb_svr
+DETAIL:  drop cascades to user mapping for vagrant on server influxdb_svr
 drop cascades to foreign table optiontbl
 -- dbname must be not NULL or not empty
 --Testcase 16:
@@ -54,7 +54,7 @@ ERROR:  influxdb_fdw: Database not specified
 --Testcase 20:
 DROP SERVER influxdb_svr CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to user mapping for tsdv on server influxdb_svr
+DETAIL:  drop cascades to user mapping for vagrant on server influxdb_svr
 drop cascades to foreign table optiontbl
 --Testcase 21:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname '', host 'http://localhost', port '38086', version '2', retention_policy '');
@@ -68,7 +68,7 @@ ERROR:  influxdb_fdw: Database not specified
 --Testcase 25:
 DROP SERVER influxdb_svr CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to user mapping for tsdv on server influxdb_svr
+DETAIL:  drop cascades to user mapping for vagrant on server influxdb_svr
 drop cascades to foreign table optiontbl
 -- retention_policy can be NULL
 --Testcase 26:
@@ -91,7 +91,7 @@ SELECT * FROM optiontbl;
 --Testcase 30:
 DROP SERVER influxdb_svr CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to user mapping for tsdv on server influxdb_svr
+DETAIL:  drop cascades to user mapping for vagrant on server influxdb_svr
 drop cascades to foreign table optiontbl
 --Testcase 31:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname 'optiondb', host 'http://localhost', port '38086', version '2', retention_policy '');
@@ -113,7 +113,7 @@ SELECT * FROM optiontbl;
 --Testcase 35:
 DROP SERVER influxdb_svr CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to user mapping for tsdv on server influxdb_svr
+DETAIL:  drop cascades to user mapping for vagrant on server influxdb_svr
 drop cascades to foreign table optiontbl
 -- auth_token can be NULL
 --Testcase 36:
@@ -128,7 +128,7 @@ ERROR:  influxdb_fdw : influx-cxx [treatCurlResponse]: Bad request: CODE: unauth
 --Testcase 40:
 DROP SERVER influxdb_svr CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to user mapping for tsdv on server influxdb_svr
+DETAIL:  drop cascades to user mapping for vagrant on server influxdb_svr
 drop cascades to foreign table optiontbl
 -- auth_token invalid
 --Testcase 41:
@@ -143,7 +143,7 @@ ERROR:  influxdb_fdw : influx-cxx [treatCurlResponse]: Bad request: CODE: unauth
 --Testcase 45:
 DROP SERVER influxdb_svr CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to user mapping for tsdv on server influxdb_svr
+DETAIL:  drop cascades to user mapping for vagrant on server influxdb_svr
 drop cascades to foreign table optiontbl
 --Testcase 46:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname 'optiondb', host 'http://localhost', port '38086', version '2', retention_policy '');
@@ -157,7 +157,7 @@ ERROR:  influxdb_fdw : influx-cxx [treatCurlResponse]: Bad request: CODE: unauth
 --Testcase 50:
 DROP SERVER influxdb_svr CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to user mapping for tsdv on server influxdb_svr
+DETAIL:  drop cascades to user mapping for vagrant on server influxdb_svr
 drop cascades to foreign table optiontbl
 -- user must can be NULL
 --Testcase 51:
@@ -172,7 +172,7 @@ ERROR:  influxdb_fdw : influx-cxx [treatCurlResponse]: Bad request: ERROR: unabl
 --Testcase 55:
 DROP SERVER influxdb_svr CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to user mapping for tsdv on server influxdb_svr
+DETAIL:  drop cascades to user mapping for vagrant on server influxdb_svr
 drop cascades to foreign table optiontbl
 --Testcase 56:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname 'optiondb', host 'http://localhost', port '18086', version '1');
@@ -186,7 +186,7 @@ ERROR:  influxdb_fdw : influx-cxx [treatCurlResponse]: Bad request: ERROR: unabl
 --Testcase 60:
 DROP SERVER influxdb_svr CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to user mapping for tsdv on server influxdb_svr
+DETAIL:  drop cascades to user mapping for vagrant on server influxdb_svr
 drop cascades to foreign table optiontbl
 -- password can be NULL
 --Testcase 61:
@@ -201,7 +201,7 @@ ERROR:  influxdb_fdw : influx-cxx [treatCurlResponse]: Bad request: ERROR: autho
 --Testcase 65:
 DROP SERVER influxdb_svr CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to user mapping for tsdv on server influxdb_svr
+DETAIL:  drop cascades to user mapping for vagrant on server influxdb_svr
 drop cascades to foreign table optiontbl
 --Testcase 66:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname 'optiondb', host 'http://localhost', port '18086', version '1');
@@ -215,7 +215,7 @@ ERROR:  influxdb_fdw : influx-cxx [treatCurlResponse]: Bad request: ERROR: autho
 --Testcase 70:
 DROP SERVER influxdb_svr CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to user mapping for tsdv on server influxdb_svr
+DETAIL:  drop cascades to user mapping for vagrant on server influxdb_svr
 drop cascades to foreign table optiontbl
 --Testcase 71:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname 'optiondb', host 'http://localhost', port '18086', version '1');
@@ -229,7 +229,7 @@ ERROR:  influxdb_fdw : influx-cxx [treatCurlResponse]: Bad request: ERROR: unabl
 --Testcase 75:
 DROP SERVER influxdb_svr CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to user mapping for tsdv on server influxdb_svr
+DETAIL:  drop cascades to user mapping for vagrant on server influxdb_svr
 drop cascades to foreign table optiontbl
 --Testcase 76:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname 'optiondb', host 'http://localhost', port '18086', version '1');
@@ -251,7 +251,7 @@ SELECT * FROM optiontbl;
 --Testcase 80:
 DROP SERVER influxdb_svr CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to user mapping for tsdv on server influxdb_svr
+DETAIL:  drop cascades to user mapping for vagrant on server influxdb_svr
 drop cascades to foreign table optiontbl
 -- Test if version option is not set
 -- Connect to InfluxDB version 1
@@ -275,7 +275,7 @@ SELECT * FROM optiontbl;
 --Testcase 85:
 DROP SERVER influxdb_svr CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to user mapping for tsdv on server influxdb_svr
+DETAIL:  drop cascades to user mapping for vagrant on server influxdb_svr
 drop cascades to foreign table optiontbl
 -- Connect to InfluxDB version 2
 --Testcase 86:
@@ -298,7 +298,7 @@ SELECT * FROM optiontbl;
 --Testcase 90:
 DROP SERVER influxdb_svr CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to user mapping for tsdv on server influxdb_svr
+DETAIL:  drop cascades to user mapping for vagrant on server influxdb_svr
 drop cascades to foreign table optiontbl
 --Testcase 91:
 DROP EXTENSION influxdb_fdw CASCADE;

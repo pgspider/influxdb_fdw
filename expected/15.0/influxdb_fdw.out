@@ -1128,14 +1128,14 @@ SELECT * FROM t5;
 SELECT * FROM public.influxdb_fdw_version();
  influxdb_fdw_version 
 ----------------------
-                10101
+                20000
 (1 row)
 
 --Testcase 146:
 SELECT influxdb_fdw_version();
  influxdb_fdw_version 
 ----------------------
-                10101
+                20000
 (1 row)
 
 --Test pushdown LIMIT...OFFSET
