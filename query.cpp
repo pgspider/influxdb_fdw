@@ -402,20 +402,29 @@ InfluxDBInsert(char *tablename, UserMapping *user, influxdb_opt *opts, struct In
     auto influxdb = influxdb_get_connection(user, opts);
     try
     {
+        long long prev_time = 0;
+        long long cur_time;
+
         influxdb->batchOf(cnumSlots);
+
+        /* wait a microsecond to ensure different timestamps with previous batch */
+        pg_usleep(1);
+
         /* Write batches of cnumSlots points */
         for (size_t idx = 0; idx < (size_t)cnumSlots; idx++)
         {
             influxdb::Point record(tablename);
 
-            /*
-             * InfluxDB does not accept two points with the same timestamp value,
-             * so, wait a microsecond to ensure that all inserted points have different timestamps
-             */
-            pg_usleep(1);
+            /* Busy wait to different timestamp */
+            do
+            {
+                cur_time = getCurrentMicroSecond();
+            }
+            while (cur_time <= prev_time);
+            prev_time = cur_time;
 
             /* set current time in micro second as default */
-            record.setTimestamp(getCurrentMicroSecond() * 1000);
+            record.setTimestamp(cur_time * 1000);
             for (size_t pos = 0; pos < (size_t)cparamNum; pos++)
                 makeRecord(record, ccolumns + pos, ctypes[idx * cparamNum + pos], cvalues[idx * cparamNum + pos]);
             influxdb->write(std::move(record));
