@@ -490,12 +490,16 @@ func makeBatchPoint(db *C.char, tablename *C.char, ccolumns *C.struct_InfluxDBCo
 		Database: C.GoString(db),
 	})
 
+	//Wait a microsecond to ensure different timestamps with previous batch
+	time.Sleep(1 * time.Microsecond)
+
 	//Initialize tags, fields and time value
 	paramNum := int(cparamNum) * int(cnumSlots)
 	endOfPoint := float64(cparamNum - 1)
 	fields := make(map[string]interface{})
 	tags := make(map[string]string)
 	timecol, _ := time.Parse(timestamptzFormat, time.Now().Format(timestamptzFormat))
+	prev_time := timecol
 
 	if cparamNum > 0 {
 		columnInfo := (*[1 << 30]C.struct_InfluxDBColumnInfo)(unsafe.Pointer(ccolumns))[:paramNum:paramNum]
@@ -569,7 +573,15 @@ func makeBatchPoint(db *C.char, tablename *C.char, ccolumns *C.struct_InfluxDBCo
 				//Reset value of record
 				fields = make(map[string]interface{})
 				tags = make(map[string]string)
-				timecol, _ = time.Parse(timestamptzFormat, time.Now().Format(timestamptzFormat))
+				//Busy wait to different timestamp
+				for {
+					timecol, _ = time.Parse(timestamptzFormat, time.Now().Format(timestamptzFormat))
+					if (timecol.After(prev_time)) {
+						break
+					}
+				}
+				prev_time = timecol
+
 			}
 		}
 	}
