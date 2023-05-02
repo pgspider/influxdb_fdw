@@ -27,7 +27,7 @@ Contents
 
 Features
 --------
-## Common features
+### Common features
 
 - InfluxDB FDW supports `INSERT`, `DELETE` statements.
   - `time` and `time_text` column can used for `INSERT`, `DELETE` statements.
@@ -35,7 +35,7 @@ Features
   - `time_text` column can express timestamp with precision down to nanoseconds.
 - InfluxDB FDW supports bulk `INSERT` by using `batch_size` option (with PostgreSQL 14+).
 
-### `GROUP BY` time intervals and `fill()`
+#### `GROUP BY` time intervals and `fill()`
 
 Support `GROUP BY` `times()` `fill()` syntax for InfluxDB.
 The `fill()` is supported by two stub function:
@@ -53,7 +53,7 @@ The `influx_fill_numeric()` and `influx_fill_option()` is embeded as last parame
 |influx_time(time, interval '2h', interval '1h', influx_fill_numeric(100))|time(2h, 1h) fill(100)|
 |influx_time(time, interval '2h', interval '1h', influx_fill_option('linear'))|time(2h,1h) fill(linear)|
 
-### Schemaless feature
+#### Schemaless feature
 - The feature enables user to utilize schema-less feature of InfluxDB, enabled by setting special options.
 - For example, without schemaless feature if a tag-key or field-key is added to InfluxDB measurement, user have to create corresponding foreign table in PostgreSQL. This feature eliminates this re-creation of foreign table.
 
@@ -208,7 +208,7 @@ For examples:
   (3 rows)
   </pre>
 
-## Pushdowning
+### Pushdowning
 
 - `WHERE` clauses including `timestamp`, `interval` and `now()` functions.
 - Some of aggregate functions: `count`, `stddev`, `sum`, `max`, `min`.
@@ -216,9 +216,9 @@ For examples:
 - `DISTINCT` argument for only `count` clause.
 - `ANY ARRAY`.
 
-## Notes about features
+### Notes about features
 
-### The existence of `NULL` values depends on the target list in remote query in InfluxDB
+#### The existence of `NULL` values depends on the target list in remote query in InfluxDB
 - If specific field keys are selected, InfluxDB does not return `NULL` values for any row that has `NULL` value.
 - In InfluxDB, `SELECT tag_keys` - selecting only tag keys does not return values, so some field keys are required to be selected.
 Current implementation of non-schemaless need arbitrary on field key added to remote select query. And this is a limitation of current `influxdb_fdw`, e.g. remote query: `SELECT tag_keys, field_key`. 
@@ -273,7 +273,7 @@ For example:
   10     0
   </pre>
 
-### The targets list contains both functions and `fields` schemaless jsonb column
+#### The targets list contains both functions and `fields` schemaless jsonb column
 - If the targets list contains both functions and `fields` schemaless `jsonb` column, the function is not pushed down.
 - For examples, if the target list contains:
   - `fields, fields->>'c2', sqrt((fields->>'c1')::int)`: function `sqrt()` is not pushed down.
