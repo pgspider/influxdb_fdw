@@ -3,8 +3,8 @@ InfluxDB Foreign Data Wrapper for PostgreSQL
 
 This is a foreign data wrapper (FDW) to connect [PostgreSQL](https://www.postgresql.org/)
 to [InfluxDB](https://www.influxdata.com) database file. This FDW works with PostgreSQL 11, 12, 13, 14, 15 and confirmed with
-- InfluxDB 1.8: with either [influxdb1-go](https://github.com/pgspider/influxdb_fdw/pull/35#install-influxdb-go-client-library) client or [influxdb-cxx](https://github.com/pgspider/influxdb_fdw/pull/35#install-influxdb_cxx-client-library) client.
-- InfluxDB 2.2: with [influxdb-cxx](https://github.com/pgspider/influxdb_fdw/pull/35#install-influxdb_cxx-client-library) client via InfluxDB v1 compatibility API.
+- InfluxDB 1.8: with either [influxdb1-go](#install-influxdb-go-client-library) client or [influxdb-cxx](#install-influxdb_cxx-client-library) client.
+- InfluxDB 2.2: with [influxdb-cxx](#install-influxdb_cxx-client-library) client via InfluxDB v1 compatibility API.
 
 <img src="https://upload.wikimedia.org/wikipedia/commons/2/29/Postgresql_elephant.svg" align="center" height="100" alt="PostgreSQL"/>	+	<img src="https://assets.zabbix.com/img/brands/influxdb.svg" align="center" height="100" alt="InfluxDB"/>
 
@@ -27,20 +27,20 @@ Contents
 
 Features
 --------
-## Common features
+### Common features
 
 - InfluxDB FDW supports `INSERT`, `DELETE` statements.
   - `time` and `time_text` column can used for `INSERT`, `DELETE` statements.
   - `time` column can express timestamp with precision down to microseconds.
   - `time_text` column can express timestamp with precision down to nanoseconds.
-- InfluxDB FDW supports bulk `INSERT` by using `batch_size` option from PostgreSQL version 14 or later.
+- InfluxDB FDW supports bulk `INSERT` by using `batch_size` option (with PostgreSQL 14+).
 
-### `GROUP BY` time intervals and `fill()`
+#### `GROUP BY` time intervals and `fill()`
 
 Support `GROUP BY` `times()` `fill()` syntax for InfluxDB.
 The `fill()` is supported by two stub function:
-- `influx_fill_numeric()`: use with numeric parameter for example: 100, 100.1111
-- `influx_fill_option()`: use with specified option such as: none, null, linear, previous.
+- `influx_fill_numeric()`: use with numeric parameter for example: `100`, `100.1111`
+- `influx_fill_option()`: use with specified option such as: `none`, `null`, `linear`, `previous`.
 
 The `influx_fill_numeric()` and `influx_fill_option()` is embeded as last parameter of `time()` function. The table below illustrates the usage:
 
@@ -53,7 +53,7 @@ The `influx_fill_numeric()` and `influx_fill_option()` is embeded as last parame
 |influx_time(time, interval '2h', interval '1h', influx_fill_numeric(100))|time(2h, 1h) fill(100)|
 |influx_time(time, interval '2h', interval '1h', influx_fill_option('linear'))|time(2h,1h) fill(linear)|
 
-### Schemaless feature
+#### Schemaless feature
 - The feature enables user to utilize schema-less feature of InfluxDB, enabled by setting special options.
 - For example, without schemaless feature if a tag-key or field-key is added to InfluxDB measurement, user have to create corresponding foreign table in PostgreSQL. This feature eliminates this re-creation of foreign table.
 
@@ -67,18 +67,27 @@ Columns of foreign table in schemaless mode
   - tags `true` indicates this column as containing values of tags in InfluxDB measurement.
   - fields `true` indicates this column as containing values of fields in InfluxDB measurement.
 - Creation of foreign table in schemaless mode, for example:
-  <pre>
+```sql
   -- Create foreign table
-  CREATE FOREIGN TABLE sc1(
-      time timestamp with time zone,
-      tags jsonb OPTIONS(tags 'true'),
-      fields jsonb OPTIONS (fields 'true')
-  )SERVER influxdb_svr OPTIONS(table 'sc1', tags 'device_id', schemaless 'true');
-
-  -- import foreign schema
-  IMPORT FOREIGN SCHEMA public FROM SERVER influxdb_svr INTO public OPTIONS (schemaless 'true');
-  </pre>
-
+	CREATE FOREIGN TABLE sc1(
+	  time timestamp with time zone,
+          tags jsonb OPTIONS(tags 'true'),
+          fields jsonb OPTIONS (fields 'true')      
+	)
+	SERVER influxdb_svr
+	OPTIONS (
+	  table 'sc1',
+          tags 'device_id',
+          schemaless 'true'
+	);
+-- import foreign schema
+	IMPORT FOREIGN SCHEMA public
+	FROM SERVER influxdb_svr
+	INTO public
+	OPTIONS (
+          schemaless 'true'
+        );
+```
 Querying foreign tables:
 - Initialize data in InfluxDB.
   <pre>
@@ -199,26 +208,26 @@ For examples:
   (3 rows)
   </pre>
 
-## Pushdowning
+### Pushdowning
 
-- `WHERE` clauses including `timestamp`, `interval` and `now()` functions are pushed down.
+- `WHERE` clauses including `timestamp`, `interval` and `now()` functions.
 - Some of aggregate functions: `count`, `stddev`, `sum`, `max`, `min`.
-- `LIMIT...OFFSET` clauses are pushed down when there is `LIMIT` clause only or both `LIMIT` and `OFFSET`.
+- `LIMIT...OFFSET` clauses when there is `LIMIT` clause only or both `LIMIT` and `OFFSET`.
 - `DISTINCT` argument for only `count` clause.
 - `ANY ARRAY`.
 
-## Notes about features
+### Notes about features
 
-### The existence of `NULL` values depends on the target list in remote query in InfluxDB
-- If specific field keys are selected, InfluxDB does not return null values for any row that has null value.
+#### The existence of `NULL` values depends on the target list in remote query in InfluxDB
+- If specific field keys are selected, InfluxDB does not return `NULL` values for any row that has `NULL` value.
 - In InfluxDB, `SELECT tag_keys` - selecting only tag keys does not return values, so some field keys are required to be selected.
-Current implementation of non-schemaless need arbitrary on field key added to remote select query. And this is a limitation of current influxdb_fdw, e.g. remote query: `SELECT tag_keys, field_key`. 
-Even though the field key has null values, this InfluxDB query does not return null values.
-- If all field key is selected by `SELECT *` in remote query, null values are returned by InfluxDB.
+Current implementation of non-schemaless need arbitrary on field key added to remote select query. And this is a limitation of current `influxdb_fdw`, e.g. remote query: `SELECT tag_keys, field_key`. 
+Even though the field key has `NULL` values, this InfluxDB query does not return `NULL` values.
+- If all field key is selected by `SELECT *` in remote query, `NULL` values are returned by InfluxDB.
 
 For example:
 - Initialize data: 8 records are inserted.
-  <pre>
+```sql
   CREATE FOREIGN TABLE J2_TBL (
     i integer,
     k integer
@@ -233,7 +242,7 @@ For example:
   INSERT INTO J2_TBL VALUES (5, -5);
   INSERT INTO J2_TBL VALUES (0, NULL);
   INSERT INTO J2_TBL VALUES (NULL, 0);
-  </pre>
+```
 - Query in InfluxDB server by selecting specific field keys: 7 records are returned without null value.
   <pre>
   > SELECT k FROM j2_tbl;
@@ -264,8 +273,8 @@ For example:
   10     0
   </pre>
 
-### The targets list contains both functions and `fields` schemaless jsonb column
-- If the targets list contains both functions and `fields` schemaless jsonb column, the function is not pushed down.
+#### The targets list contains both functions and `fields` schemaless jsonb column
+- If the targets list contains both functions and `fields` schemaless `jsonb` column, the function is not pushed down.
 - For examples, if the target list contains:
   - `fields, fields->>'c2', sqrt((fields->>'c1')::int)`: function `sqrt()` is not pushed down.
   - `fields, sqrt((fields->>'c1')::int)`: function `sqrt()` is not pushed down.
@@ -408,7 +417,192 @@ Functions
 
 As well as the standard `influxdb_fdw_handler()` and `influxdb_fdw_validator()`
 functions, `influxdb_fdw` provides the following user-callable utility functions:
-Functions from this FDW in PostgreSQL catalog are **yet not described**.
+
+Listed as *type*, *name with arguments*, *returm datatype* where such function types are availlable:
+- **vf** - volatile functions
+- **a** - aggregations
+- **sf** - stable functions 
+- **f** - simple function
+
+### Common functions
+- vf  'log2(float8)', 'float8'
+- vf  'log10(float8)', 'float8'
+
+### Special aggregations
+- a   'influx_count_all(*)', 'text'
+- a   'influx_count(text)', 'text'
+- a   'influx_distinct(anyelement)', 'anyelement'
+- a   'integral(bigint)', 'bigint'
+- a   'integral(float8)', 'float8'
+- a   'integral(bigint, interval)', 'bigint'
+- a   'integral(float8, interval)', 'float8'
+- a   'integral_all(*)', 'text'
+- a   'integral(text)', 'text'
+- a   'mean(bigint)', 'bigint'
+- a   'mean(float8)', 'float8'
+- a   'mean_all(*)', 'text'
+- a   'mean(text)', 'text'
+- a   'median(bigint)', 'bigint'
+- a   'median(float8)', 'float8'
+- a   'median_all(*)', 'text'
+- a   'median(text)', 'text'
+- a   'influx_mode(anyelement)', 'anyelement'
+- a   'influx_mode_all(*)', 'text'
+- a   'influx_mode(text)', 'text'
+- a   'spread(bigint)', 'bigint'
+- a   'spread(float8)', 'float8'
+- a   'spread_all(*)', 'text'
+- a   'spread(text)', 'text'
+- a   'stddev_all(*)', 'text'
+- a   'stddev(text)', 'text'
+- a   'influx_sum_all(*)', 'text'
+- a   'influx_sum(text)', 'text'
+
+### Selectors
+- f   'bottom(bigint, int)', 'float8'
+- f   'bottom(float8, int)', 'float8'
+- f   'bottom(bigint, text, int)', 'float8'
+- f   'bottom(float8, text, int)', 'float8'
+- a   'first(timestamp with time zone, anyelement)', 'anyelement'
+- a   'first_all(*)', 'text'
+- a   'first(text)', 'text'
+- a   'last(timestamp with time zone, anyelement)', 'anyelement'
+- a   'last_all(*)', 'text'
+- a   'last(text)', 'text'
+- a   'influx_max_all(*)', 'text'
+- a   'influx_max(text)', 'text'
+- a   'influx_min_all(*)', 'text'
+- a   'influx_min(text)', 'text'
+- f   'percentile(bigint, int)', 'float8'
+- f   'percentile(float8, int)', 'float8'
+- f   'percentile(bigint, float8)', 'float8'
+- f   'percentile(float8, float8)', 'float8'
+- sf  'percentile_all(int)', 'text'
+- sf  'percentile_all(float8)', 'text'
+- sf  'percentile(text, int)', 'text'
+- sf  'percentile(text, float8)', 'text'
+- a   'sample(anyelement, int)', 'anyelement'
+- sf  'sample_all(int)', 'text'
+- sf  'sample(text, int)', 'text'
+- f   'top(bigint, int)', 'float8'
+- f   'top(float8, int)', 'float8'
+- f   'top(bigint, text, int)', 'float8'
+- f   'top(float8, text, int)', 'float8'
+
+### Transformations
+- sf  'abs_all()', 'text'
+- sf  'acos_all()', 'text'
+- sf  'asin_all()', 'text'
+- sf  'atan_all()', 'text'
+- sf  'atan2_all(bigint)', 'text'
+- sf  'atan2_all(float8)', 'text'
+- sf  'ceil_all()', 'text'
+- sf  'cos_all()', 'text'
+- f   'cumulative_sum(bigint)', 'bigint'
+- f   'cumulative_sum(float8)', 'float8'
+- sf  'cumulative_sum_all()', 'text'
+- sf  'cumulative_sum(text)', 'text'
+- f   'derivative(anyelement)', 'anyelement'
+- f   'derivative(anyelement, interval)', 'anyelement'
+- sf  'derivative_all()', 'text'
+- sf  'derivative(text)', 'text'
+- f   'difference(bigint)', 'bigint'
+- f   'difference(float8)', 'float8'
+- sf  'difference_all()', 'text'
+- sf  'difference(text)', 'text'
+- f   'elapsed(anyelement)', 'bigint'
+- sf  'elapsed_all()', 'text'
+- sf  'elapsed(text)', 'text'
+- f   'elapsed(anyelement, interval)', 'bigint'
+- sf  'exp_all()', 'text'
+- sf  'floor_all()', 'text'
+- sf  'ln_all()', 'text'
+- sf  'log_all(bigint)', 'text'
+- sf  'log_all(float8)', 'text'
+- sf  'log2_all()', 'text'
+- sf  'log10_all()', 'text'
+- f   'moving_average(bigint, int)', 'float8'
+- f   'moving_average(float8, int)', 'float8'
+- sf  'moving_average_all(int)', 'text'
+- sf  'moving_average(text, int)', 'text'
+- f   'non_negative_derivative(anyelement)', 'anyelement'
+- f   'non_negative_derivative(anyelement, interval)', 'anyelement'
+- sf  'non_negative_derivative_all()', 'text'
+- sf  'non_negative_derivative(text)', 'text'
+- f   'non_negative_difference(bigint)', 'bigint'
+- f   'non_negative_difference(float8)', 'float8'
+- sf  'non_negative_difference_all()', 'text'
+- sf  'non_negative_difference(text)', 'text'
+- sf  'pow_all(int)', 'text'
+- sf  'round_all()', 'text'
+- sf  'sin_all()', 'text'
+- sf  'sqrt_all()', 'text'
+- sf  'tan_all()', 'text'
+
+### Predictors
+- f   'holt_winters(anyelement, int, int)', 'anyelement'
+- f   'holt_winters_with_fit(anyelement, int, int)', 'anyelement'
+
+### Technical Analysis
+- f   'chande_momentum_oscillator(bigint, int)', 'float8'
+- f   'chande_momentum_oscillator(float8, int)', 'float8'
+- f   'chande_momentum_oscillator(bigint, int, int)', 'float8'
+- f   'chande_momentum_oscillator(float8, int, int)', 'float8'
+- f   'chande_momentum_oscillator(double precision, int)', 'float8'
+- f   'chande_momentum_oscillator(double precision, int, int)', 'float8'
+- sf  'chande_momentum_oscillator_all(int)', 'text'
+- sf  'chande_momentum_oscillator(text, int)', 'text'
+- f   'exponential_moving_average(bigint, int)', 'float8'
+- f   'exponential_moving_average(float8, int)', 'float8'
+- f   'exponential_moving_average(bigint, int, int)', 'float8'
+- f   'exponential_moving_average(float8, int, int)', 'float8'
+- sf  'exponential_moving_average_all(int)', 'text'
+- sf  'exponential_moving_average(text, int)', 'text'
+- f   'double_exponential_moving_average(bigint, int)', 'float8'
+- f   'double_exponential_moving_average(float8, int)', 'float8'
+- f   'double_exponential_moving_average(bigint, int, int)', 'float8'
+- f   'double_exponential_moving_average(float8, int, int)', 'float8'
+- sf  'double_exponential_moving_average_all(int)', 'text'
+- sf  'double_exponential_moving_average(text, int)', 'text'
+- f   'kaufmans_efficiency_ratio(bigint, int)', 'float8'
+- f   'kaufmans_efficiency_ratio(float8, int)', 'float8'
+- f   'kaufmans_efficiency_ratio(bigint, int, int)', 'float8'
+- f   'kaufmans_efficiency_ratio(float8, int, int)', 'float8'
+- sf  'kaufmans_efficiency_ratio_all(int)', 'text'
+- sf  'kaufmans_efficiency_ratio(text, int)', 'text'
+- f   'kaufmans_adaptive_moving_average(bigint, int)', 'float8'
+- f   'kaufmans_adaptive_moving_average(float8, int)', 'float8'
+- f   'kaufmans_adaptive_moving_average(bigint, int, int)', 'float8'
+- f   'kaufmans_adaptive_moving_average(float8, int, int)', 'float8'
+- sf  'kaufmans_adaptive_moving_average_all(int)', 'text'
+- sf  'kaufmans_adaptive_moving_average(text, int)', 'text'
+- f   'triple_exponential_moving_average(bigint, int)', 'float8'
+- f   'triple_exponential_moving_average(float8, int)', 'float8'
+- f   'triple_exponential_moving_average(bigint, int, int)', 'float8'
+- f   'triple_exponential_moving_average(float8, int, int)', 'float8'
+- sf  'triple_exponential_moving_average_all(int)', 'text'
+- sf  'triple_exponential_moving_average(text, int)', 'text'
+- f   'triple_exponential_derivative(bigint, int)', 'float8'
+- f   'triple_exponential_derivative(float8, int)', 'float8'
+- f   'triple_exponential_derivative(bigint, int, int)', 'float8'
+- f   'triple_exponential_derivative(float8, int, int)', 'float8'
+- sf  'triple_exponential_derivative_all(int)', 'text'
+- sf  'triple_exponential_derivative(text, int)', 'text'
+- f   'relative_strength_index(bigint, int)', 'float8'
+- f   'relative_strength_index(float8, int)', 'float8'
+- f   'relative_strength_index(bigint, int, int)', 'float8'
+- f   'relative_strength_index(float8, int, int)', 'float8'
+- sf  'relative_strength_index_all(int)', 'text'
+- sf  'relative_strength_index(text, int)', 'text'
+
+### Special time functions
+- f   'influx_time(timestamp with time zone, interval, interval)', 'timestamp with time zone'
+- f   'influx_time(timestamp with time zone, interval)', 'timestamp with time zone'
+- f   'influx_time(timestamp with time zone, interval, interval, anyelement)', 'timestamp with time zone'
+- f   'influx_time(timestamp with time zone, interval, anyelement)', 'timestamp with time zone'
+- sf  'influx_fill_option(influx_fill_enum)', 'int'
+- sf  'influx_fill_numeric(float8)', 'float8'
+- sf  'influx_fill_numeric(int)', 'int'
 
 Identifier case handling
 ------------------------
@@ -430,7 +624,7 @@ For more details on generated columns see:
 Character set handling
 ----------------------
 
-**Yet not described**.
+**Yet not described**. Strongly recommended to use any of Unicode encodings for PostgreSQL with `influxdb_fdw`.
 
 Examples
 --------
@@ -565,7 +759,7 @@ You can import foreign schema
 ```sql
 	IMPORT FOREIGN SCHEMA public
 	FROM SERVER influxdb_svr
-	 INTO public;
+	INTO public;
 ```
 Access foreign table
 ```sql
@@ -576,7 +770,9 @@ Limitations
 
 - `UPDATE` is not supported.
 - `WITH CHECK OPTION` constraints is not supported.
-Following limitations originate from data model and query language of *InfluxDB*.
+
+### Limitations originate from data model and query language of *InfluxDB*
+
 - Result sets have different number of rows depending on specified target list.
 For example, `SELECT field1 FROM t1` and `SELECT field2 FROM t1` returns different number of rows if
 the number of points with field1 and field2 are different in *InfluxDB* database.
