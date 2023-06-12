@@ -26,6 +26,52 @@
     - Other unique functions: distinct, time   
       User needs to append prefix with influx_.   
       Example: time() -> influx_time()
+
+- Support DDL commands:
+  - `CREATE DATASOURCE TABLE` command.
+    - Creating a new datasource table without initial data.
+    - The creating new datasource table on InfluxDB is depended on `IF NOT EXISTS` option:
+      - If `IF NOT EXISTS` option is specified, execution of CREATE datasource command has no effect, new datasource will be created by INSERT operation.
+      - Otherwise, `IF NOT EXISTS` option is not specified, an error will be raised if the target datasource is already existed.
+        If target datasource is not existed, execution of CREATE datasource command has no effect, new datasource will be created by INSERT operation.
+
+    For example:
+    - Need to prepare a foreign table which will remote to new datasource.
+    - Then execute `CREATE DATASOURCE TABLE` command on foreign table to create new datasource.
+    ```sql
+    -- Prepare foreign table
+    CREATE FOREIGN TABLE tbl3 (
+      c1	smallint,
+      c2	int	NOT NULL,
+      c3	bigint DEFAULT 10,
+      c4	float,
+      c5	double precision,
+      c6	numeric,
+      c7	bool DEFAULT 'f',
+      c8	bpchar,
+      c9	time DEFAULT '00:00:00',
+      c10	timestamp,
+      c11	timestamptz,
+      c12	text,
+      c13	real DEFAULT 1,
+      c14	char DEFAULT 'd',
+      c15	varchar(10)
+    ) SERVER influx_svr OPTIONS (table 'tbl3');
+
+    -- Create new datasource
+    CREATE DATASOURCE TABLE IF NOT EXISTS tbl3;
+    ```
+  - `DROP DATASOURCE TABLE` command.
+    - The command will remove a datasource table.
+    - Name of target datasource table is name of foreign table. If the "table" option is specified, use its value instead of foreign table's name.
+    - Support `IF EXIST` option. If this option is specified, do not throw an error if the target datasource table does not exist.  Otherwise, if this option is not specified, throw an error if the target datasource table does not exist.
+
+    For example:
+    ```sql
+    -- Drop datasource table
+    DROP DATASOURCE TABLE IF EXISTS tbl3;
+    ```
+
 ## 2. Limitations
 - If we want to treat individual values from the result of influxdb functions specified by star or regular expression and the result does not have the same type as foreign table, we can execute by influxdb functions with individual columns instead of star or regular expression.   
   Example: SELECT log2(c1), log2(c2), log2(c3), log2(c4), ... FROM s3;
