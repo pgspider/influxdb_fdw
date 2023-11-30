@@ -2,7 +2,7 @@ InfluxDB Foreign Data Wrapper for PostgreSQL
 ============================================
 
 This is a foreign data wrapper (FDW) to connect [PostgreSQL](https://www.postgresql.org/)
-to [InfluxDB](https://www.influxdata.com) database file. This FDW works with PostgreSQL 11, 12, 13, 14, 15 and confirmed with
+to [InfluxDB](https://www.influxdata.com) database file. This FDW works with PostgreSQL 12, 13, 14, 15, 16.0 and confirmed with
 - InfluxDB 1.8: with either [influxdb1-go](#install-influxdb-go-client-library) client or [influxdb-cxx](#install-influxdb_cxx-client-library) client.
 - InfluxDB 2.2: with [influxdb-cxx](#install-influxdb_cxx-client-library) client via InfluxDB v1 compatibility API.
 
@@ -288,7 +288,7 @@ Supported platforms
 `influxdb_fdw` was developed on Linux, and should run on any
 reasonably POSIX-compliant system.
 
-`influxdb_fdw` is designed to be compatible with PostgreSQL 11 ~ 15.
+`influxdb_fdw` is designed to be compatible with PostgreSQL 12 ~ 16.0.
 
 Installation
 ------------

@@ -432,6 +432,8 @@ InfluxDBInsert(char *tablename, UserMapping *user, influxdb_opt *opts, struct In
     }
     catch (const std::exception& e)
     {
+        /* clean error batch */
+        influxdb->clearBatch();
         retMsg = (char *) palloc0(sizeof(char) * (strlen(e.what()) + 1));
         strcpy(retMsg, e.what());
         return retMsg;

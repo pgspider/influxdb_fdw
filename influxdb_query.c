@@ -358,8 +358,8 @@ influxdb_bind_sql_var(Oid type, int idx, Datum value, bool *isnull, InfluxDBColu
 			{
 				/* Bind as string */
 				char	   *outputString = NULL;
-				Oid			outputFunctionId = InvalidOid;
-				bool		typeVarLength = false;
+				outputFunctionId = InvalidOid;
+				typeVarLength = false;
 
 				getTypeOutputInfo(type, &outputFunctionId, &typeVarLength);
 				outputString = OidOutputFunctionCall(outputFunctionId, value);
@@ -373,8 +373,8 @@ influxdb_bind_sql_var(Oid type, int idx, Datum value, bool *isnull, InfluxDBColu
 			{
 				/* Bind as string, but types is time */
 				char	   *outputString = NULL;
-				Oid			outputFunctionId = InvalidOid;
-				bool		typeVarLength = false;
+				outputFunctionId = InvalidOid;
+				typeVarLength = false;
 
 				getTypeOutputInfo(type, &outputFunctionId, &typeVarLength);
 				outputString = OidOutputFunctionCall(outputFunctionId, value);

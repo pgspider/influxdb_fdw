@@ -74,6 +74,26 @@ INSERT INTO J2_TBL VALUES (0, NULL);
 --Testcase 24:
 INSERT INTO J2_TBL VALUES (NULL, 0);
 
+--Testcase 607:
+CREATE FOREIGN TABLE onek (
+  unique1   int4,
+  unique2   int4,
+  two       int4,
+  four      int4,
+  ten       int4,
+  twenty    int4,
+  hundred   int4,
+  thousand  int4,
+  twothousand int4,
+  fivethous int4,
+  tenthous  int4,
+  odd       int4,
+  even      int4,
+  stringu1  name,
+  stringu2  name,
+  string4   name
+) SERVER influxdb_svr;
+
 --Testcase 25:
 CREATE FOREIGN TABLE tenk1 (
   unique1   int4,
@@ -605,8 +625,8 @@ select * from int8_tbl i1 left join (int8_tbl i2 join
 order by 1, 2;
 
 --
--- regression test: check a case where join_clause_is_movable_into() gives
--- an imprecise result, causing an assertion failure
+-- regression test: check a case where join_clause_is_movable_into()
+-- used to give an imprecise result, causing an assertion failure
 --
 --Testcase 130:
 select count(*)
@@ -637,6 +657,125 @@ select a.f1, b.f1, t.thousand, t.tenthous from
   (select sum(f1)+1 as f1 from int4_tbl i4a) a,
   (select sum(f1) as f1 from int4_tbl i4b) b
 where b.f1 = t.thousand and a.f1 = b.f1 and (a.f1+b.f1+999) = t.tenthous;
+
+--
+-- checks for correct handling of quals in multiway outer joins
+--
+--Testcase 608:
+explain (costs off)
+select t1.f1
+from int4_tbl t1, int4_tbl t2
+  left join int4_tbl t3 on t3.f1 > 0
+  left join int4_tbl t4 on t3.f1 > 1
+where t4.f1 is null;
+
+--Testcase 609:
+select t1.f1
+from int4_tbl t1, int4_tbl t2
+  left join int4_tbl t3 on t3.f1 > 0
+  left join int4_tbl t4 on t3.f1 > 1
+where t4.f1 is null;
+
+--Testcase 610:
+explain (costs off)
+select *
+from int4_tbl t1 left join int4_tbl t2 on true
+  left join int4_tbl t3 on t2.f1 > 0
+  left join int4_tbl t4 on t3.f1 > 0;
+
+--Testcase 611:
+explain (costs off)
+select * from onek t1
+  left join onek t2 on t1.unique1 = t2.unique1
+  left join onek t3 on t2.unique1 != t3.unique1
+  left join onek t4 on t3.unique1 = t4.unique1;
+
+--Testcase 612:
+explain (costs off)
+select * from int4_tbl t1
+  left join (select now() from int4_tbl t2
+             left join int4_tbl t3 on t2.f1 = t3.f1
+             left join int4_tbl t4 on t3.f1 = t4.f1) s on true
+  inner join int4_tbl t5 on true;
+
+--Testcase 613:
+explain (costs off)
+select * from int4_tbl t1
+  left join int4_tbl t2 on true
+  left join int4_tbl t3 on true
+  left join int4_tbl t4 on t2.f1 = t3.f1;
+
+--Testcase 614:
+explain (costs off)
+select * from int4_tbl t1
+  left join int4_tbl t2 on true
+  left join int4_tbl t3 on t2.f1 = t3.f1
+  left join int4_tbl t4 on t3.f1 != t4.f1;
+
+--Testcase 615:
+explain (costs off)
+select * from int4_tbl t1
+  left join (int4_tbl t2 left join int4_tbl t3 on t2.f1 > 0) on t2.f1 > 1
+  left join int4_tbl t4 on t2.f1 > 2 and t3.f1 > 3
+where t1.f1 = coalesce(t2.f1, 1);
+
+--Testcase 616:
+explain (costs off)
+select * from int4_tbl t1
+  left join ((select t2.f1 from int4_tbl t2
+                left join int4_tbl t3 on t2.f1 > 0
+                where t3.f1 is null) s
+             left join tenk1 t4 on s.f1 > 1)
+    on s.f1 = t1.f1;
+
+explain (costs off)
+select * from int4_tbl t1
+  left join ((select t2.f1 from int4_tbl t2
+                left join int4_tbl t3 on t2.f1 > 0
+                where t2.f1 <> coalesce(t3.f1, -1)) s
+             left join tenk1 t4 on s.f1 > 1)
+    on s.f1 = t1.f1;
+
+--Testcase 617:
+explain (costs off)
+select * from onek t1
+    left join onek t2 on t1.unique1 = t2.unique1
+    left join onek t3 on t2.unique1 = t3.unique1
+    left join onek t4 on t3.unique1 = t4.unique1 and t2.unique2 = t4.unique2;
+
+explain (costs off)
+select * from int8_tbl t1 left join
+    (int8_tbl t2 left join int8_tbl t3 full join int8_tbl t4 on false on false)
+    left join int8_tbl t5 on t2.q1 = t5.q1
+on t2.q2 = 123;
+
+explain (costs off)
+select * from int8_tbl t1
+    left join int8_tbl t2 on true
+    left join lateral
+      (select * from int8_tbl t3 where t3.q1 = t2.q1 offset 0) s
+      on t2.q1 = 1;
+
+explain (costs off)
+select * from int8_tbl t1
+    left join int8_tbl t2 on true
+    left join lateral
+      (select * from generate_series(t2.q1, 100)) s
+      on t2.q1 = 1;
+
+explain (costs off)
+select * from int8_tbl t1
+    left join int8_tbl t2 on true
+    left join lateral
+      (select t2.q1 from int8_tbl t3) s
+      on t2.q1 = 1;
+
+explain (costs off)
+select * from onek t1
+    left join onek t2 on true
+    left join lateral
+      (select * from onek t3 where t3.two = t2.two offset 0) s
+      on t2.unique1 = 1;
 
 --
 -- check a case where we formerly got confused by conflicting sort orders
@@ -673,6 +812,25 @@ select count(*) from
   (select * from tenk1 y order by y.unique2) y
   on x.thousand = y.unique2 and x.twothousand = y.hundred and x.fivethous = y.unique2;
 
+set enable_hashjoin = 0;
+set enable_nestloop = 0;
+set enable_hashagg = 0;
+
+--
+-- Check that we use the pathkeys from a prefix of the group by / order by
+-- clause for the join pathkeys when that prefix covers all join quals.  We
+-- expect this to lead to an incremental sort for the group by / order by.
+--
+--Testcase 618:
+explain (costs off)
+select x.thousand, x.twothousand, count(*)
+from tenk1 x inner join tenk1 y on x.thousand = y.thousand
+group by x.thousand, x.twothousand
+order by x.thousand desc, x.twothousand;
+
+reset enable_hashagg;
+reset enable_nestloop;
+reset enable_hashjoin;
 
 --
 -- Clean up
@@ -774,22 +932,27 @@ select t1.x from t1 join t3 on (t1.a = t3.x);
 
 -- Test matching of locking clause with wrong alias
 
+--Testcase 602:
 select t1.*, t2.*, unnamed_join.* from
   t1 join t2 on (t1.a = t2.a), t3 as unnamed_join
   for update of unnamed_join;
 
+--Testcase 603:
 select foo.*, unnamed_join.* from
   t1 join t2 using (a) as foo, t3 as unnamed_join
   for update of unnamed_join;
 
+--Testcase 604:
 select foo.*, unnamed_join.* from
   t1 join t2 using (a) as foo, t3 as unnamed_join
   for update of foo;
 
+--Testcase 605:
 select bar.*, unnamed_join.* from
   (t1 join t2 using (a) as foo) as bar, t3 as unnamed_join
   for update of foo;
 
+--Testcase 606:
 select bar.*, unnamed_join.* from
   (t1 join t2 using (a) as foo) as bar, t3 as unnamed_join
   for update of bar;
@@ -870,15 +1033,62 @@ create foreign table tt4(f1 int) server influxdb_svr;
 --Testcase 192:
 insert into tt4 values (0),(1),(9999);
 
---Testcase 193:
+set enable_nestloop to off;
+
+--Testcase 619:
+EXPLAIN (COSTS OFF)
 SELECT a.f1
 FROM tt4 a
 LEFT JOIN (
         SELECT b.f1
         FROM tt3 b LEFT JOIN tt3 c ON (b.f1 = c.f1)
-        WHERE c.f1 IS NULL
+        WHERE COALESCE(c.f1, 0) = 0
 ) AS d ON (a.f1 = d.f1)
-WHERE d.f1 IS NULL;
+WHERE COALESCE(d.f1, 0) = 0
+ORDER BY 1;
+
+--Testcase 620:
+SELECT a.f1
+FROM tt4 a
+LEFT JOIN (
+        SELECT b.f1
+        FROM tt3 b LEFT JOIN tt3 c ON (b.f1 = c.f1)
+        WHERE COALESCE(c.f1, 0) = 0
+) AS d ON (a.f1 = d.f1)
+WHERE COALESCE(d.f1, 0) = 0
+ORDER BY 1;
+
+reset enable_nestloop;
+
+--
+-- basic semijoin and antijoin recognition tests
+--
+
+--Testcase 621:
+explain (costs off)
+select a.* from tenk1 a
+where unique1 in (select unique2 from tenk1 b);
+
+-- sadly, this is not an antijoin
+--Testcase 622:
+explain (costs off)
+select a.* from tenk1 a
+where unique1 not in (select unique2 from tenk1 b);
+
+--Testcase 623:
+explain (costs off)
+select a.* from tenk1 a
+where exists (select 1 from tenk1 b where a.unique1 = b.unique2);
+
+--Testcase 624:
+explain (costs off)
+select a.* from tenk1 a
+where not exists (select 1 from tenk1 b where a.unique1 = b.unique2);
+
+--Testcase 625:
+explain (costs off)
+select a.* from tenk1 a left join tenk1 b on a.unique1 = b.unique2
+where b.unique2 is null;
 
 --
 -- regression test for proper handling of outer joins within antijoins
@@ -1493,6 +1703,35 @@ select * from
            select a as b) as t3
 where b;
 
+-- Test PHV in a semijoin qual, which confused useless-RTE removal (bug #17700)
+--Testcase 626:
+explain (verbose, costs off)
+with ctetable as not materialized ( select 1 as f1 )
+select * from ctetable c1
+where f1 in ( select c3.f1 from ctetable c2 full join ctetable c3 on true );
+
+--Testcase 627:
+with ctetable as not materialized ( select 1 as f1 )
+select * from ctetable c1
+where f1 in ( select c3.f1 from ctetable c2 full join ctetable c3 on true );
+
+-- Test PHV that winds up in a Result node, despite having nonempty nullingrels
+--Testcase 628:
+explain (verbose, costs off)
+select table_catalog, table_name
+from int4_tbl t1
+  inner join (int8_tbl t2
+              left join information_schema.column_udt_usage on null)
+  on null;
+
+-- Test handling of qual pushdown to appendrel members with non-Var outputs
+--Testcase 629:
+explain (verbose, costs off)
+select * from int4_tbl left join (
+  select text 'foo' union all select text 'bar'
+) ss(x) on true
+where ss.x is null;
+
 --
 -- test inlining of immutable functions
 --
@@ -1730,6 +1969,17 @@ select a.unique1, b.unique1, c.unique1, coalesce(b.twothousand, a.twothousand)
   from tenk1 a left join tenk1 b on b.thousand = a.unique1                        left join tenk1 c on c.unique2 = coalesce(b.twothousand, a.twothousand)
   where a.unique2 < 10 and coalesce(b.twothousand, a.twothousand) = 44;
 
+-- related case
+
+--Testcase 630:
+explain (costs off)
+select * from int8_tbl t1 left join int8_tbl t2 on t1.q2 = t2.q1,
+  lateral (select * from int8_tbl t3 where t2.q1 = t2.q2) ss;
+
+--Testcase 631:
+select * from int8_tbl t1 left join int8_tbl t2 on t1.q2 = t2.q1,
+  lateral (select * from int8_tbl t3 where t2.q1 = t2.q2) ss;
+
 --
 -- check handling of join aliases when flattening multiple levels of subquery
 --
@@ -1762,6 +2012,32 @@ left join
    using (join_key)
   ) foo3
 using (join_key);
+
+--
+-- check handling of a variable-free join alias
+--
+--Testcase 632:
+explain (verbose, costs off)
+select * from
+int4_tbl i0 left join
+( (select *, 123 as x from int4_tbl i1) ss1
+  left join
+  (select *, q2 as x from int8_tbl i2) ss2
+  using (x)
+) ss0
+on (i0.f1 = ss0.f1)
+order by i0.f1, x;
+
+--Testcase 633:
+select * from
+int4_tbl i0 left join
+( (select *, 123 as x from int4_tbl i1) ss1
+  left join
+  (select *, q2 as x from int8_tbl i2) ss2
+  using (x)
+) ss0
+on (i0.f1 = ss0.f1)
+order by i0.f1, x;
 
 --
 -- test successful handling of nested outer joins with degenerate join quals
@@ -1867,6 +2143,29 @@ select * from
   left join int4_tbl i4
   on i8.q1 = i4.f1;
 
+-- check handling of a variable-free qual for a non-commutable outer join
+--Testcase 634:
+explain (costs off)
+select nspname
+from (select 1 as x) ss1
+left join
+( select n.nspname, c.relname
+  from pg_class c left join pg_namespace n on n.oid = c.relnamespace
+  where c.relkind = 'r'
+) ss2 on false;
+
+-- check handling of apparently-commutable outer joins with non-commutable
+-- joins between them
+--Testcase 635:
+explain (costs off)
+select 1 from
+  int4_tbl i4
+  left join int8_tbl i8 on i4.f1 is not null
+  left join (select 1 as a) ss1 on null
+  join int4_tbl i42 on ss1.a is null or i8.q1 <> i8.q2
+  right join (select 2 as b) ss2
+  on ss2.b < i4.f1;
+
 --
 -- test for appropriate join order in the presence of lateral references
 --
@@ -1925,6 +2224,47 @@ select 1 from
   left join text_tbl as tt4 on (tt3.f1 = tt4.f1),
   lateral (select tt4.f1 as c0 from text_tbl as tt5 limit 1) as ss1
 where tt1.f1 = ss1.c0;
+
+--Testcase 636:
+explain (verbose, costs off)
+select 1 from
+  int4_tbl as i4
+  inner join
+    ((select 42 as n from int4_tbl x1 left join int8_tbl x2 on f1 = q1) as ss1
+     right join (select 1 as z) as ss2 on true)
+  on false,
+  lateral (select i4.f1, ss1.n from int8_tbl as i8 limit 1) as ss3;
+
+--Testcase 637:
+select 1 from
+  int4_tbl as i4
+  inner join
+    ((select 42 as n from int4_tbl x1 left join int8_tbl x2 on f1 = q1) as ss1
+     right join (select 1 as z) as ss2 on true)
+  on false,
+  lateral (select i4.f1, ss1.n from int8_tbl as i8 limit 1) as ss3;
+
+--
+-- check a case where we formerly generated invalid parameterized paths
+--
+
+begin;
+
+CREATE FOREIGN TABLE temp_t (a int) SERVER influxdb_svr;
+
+explain (costs off)
+select 1 from temp_t t1
+  join lateral (select t1.a from (select 1) foo offset 0) as s1 on true
+  join
+    (select 1 from temp_t t2
+       inner join (temp_t t3
+                   left join (temp_t t4 left join temp_t t5 on t4.a = 1)
+                   on t3.a = t4.a)
+       on false
+     where t3.a = coalesce(t5.a,1)) as s2
+  on true;
+
+rollback;
 
 --
 -- check a case in which a PlaceHolderVar forces join order
@@ -2011,6 +2351,77 @@ reset enable_hashjoin;
 reset enable_nestloop;
 
 --
+-- test join strength reduction with a SubPlan providing the proof
+--
+
+--Testcase 638:
+explain (costs off)
+select a.unique1, b.unique2
+  from onek a left join onek b on a.unique1 = b.unique2
+  where b.unique2 = any (select q1 from int8_tbl c where c.q1 < b.unique1);
+
+--Testcase 639:
+select a.unique1, b.unique2
+  from onek a left join onek b on a.unique1 = b.unique2
+  where b.unique2 = any (select q1 from int8_tbl c where c.q1 < b.unique1);
+
+--
+-- test full-join strength reduction
+--
+
+--Testcase 640:
+explain (costs off)
+select a.unique1, b.unique2
+  from onek a full join onek b on a.unique1 = b.unique2
+  where a.unique1 = 42;
+
+--Testcase 641:
+select a.unique1, b.unique2
+  from onek a full join onek b on a.unique1 = b.unique2
+  where a.unique1 = 42;
+
+--Testcase 642:
+explain (costs off)
+select a.unique1, b.unique2
+  from onek a full join onek b on a.unique1 = b.unique2
+  where b.unique2 = 43;
+
+--Testcase 643:
+select a.unique1, b.unique2
+  from onek a full join onek b on a.unique1 = b.unique2
+  where b.unique2 = 43;
+
+--Testcase 644:
+explain (costs off)
+select a.unique1, b.unique2
+  from onek a full join onek b on a.unique1 = b.unique2
+  where a.unique1 = 42 and b.unique2 = 42;
+
+--Testcase 645:
+select a.unique1, b.unique2
+  from onek a full join onek b on a.unique1 = b.unique2
+  where a.unique1 = 42 and b.unique2 = 42;
+
+--
+-- test result-RTE removal underneath a full join
+--
+
+--Testcase 646:
+explain (costs off)
+select * from
+  (select * from int8_tbl i81 join (values(123,2)) v(v1,v2) on q2=v1) ss1
+full join
+  (select * from (values(456,2)) w(v1,v2) join int8_tbl i82 on q2=v1) ss2
+on true;
+
+--Testcase 647:
+select * from
+  (select * from int8_tbl i81 join (values(123,2)) v(v1,v2) on q2=v1) ss1
+full join
+  (select * from (values(456,2)) w(v1,v2) join int8_tbl i82 on q2=v1) ss2
+on true;
+
+--
 -- test join removal
 --
 
@@ -2050,6 +2461,105 @@ select id from a where id in (
 	select b.id from b left join c on b.id = c.id
 );
 
+-- check optimization with oddly-nested outer joins
+--Testcase 648:
+explain (costs off)
+select a1.id from
+  (a a1 left join a a2 on true)
+  left join
+  (a a3 left join a a4 on a3.id = a4.id)
+  on a2.id = a3.id;
+
+--Testcase 649:
+explain (costs off)
+select a1.id from
+  (a a1 left join a a2 on a1.id = a2.id)
+  left join
+  (a a3 left join a a4 on a3.id = a4.id)
+  on a2.id = a3.id;
+
+explain (costs off)
+select 1 from a t1
+    left join a t2 on true
+   inner join a t3 on true
+    left join a t4 on t2.id = t4.id and t2.id = t3.id;
+
+-- another example (bug #17781)
+--Testcase 650:
+explain (costs off)
+select ss1.f1
+from int4_tbl as t1
+  left join (int4_tbl as t2
+             right join int4_tbl as t3 on null
+             left join (int4_tbl as t4
+                        right join int8_tbl as t5 on null)
+               on t2.f1 = t4.f1
+             left join ((select null as f1 from int4_tbl as t6) as ss1
+                        inner join int8_tbl as t7 on null)
+               on t5.q1 = t7.q2)
+    on false;
+
+-- variant with Var rather than PHV coming from t6
+--Testcase 651:
+explain (costs off)
+select ss1.f1
+from int4_tbl as t1
+  left join (int4_tbl as t2
+             right join int4_tbl as t3 on null
+             left join (int4_tbl as t4
+                        right join int8_tbl as t5 on null)
+               on t2.f1 = t4.f1
+             left join ((select f1 from int4_tbl as t6) as ss1
+                        inner join int8_tbl as t7 on null)
+               on t5.q1 = t7.q2)
+    on false;
+
+-- per further discussion of bug #17781
+--Testcase 652:
+explain (costs off)
+select ss1.x
+from (select f1/2 as x from int4_tbl i4 left join a on a.id = i4.f1) ss1
+     right join int8_tbl i8 on true
+where current_user is not null;  -- this is to add a Result node
+
+-- and further discussion of bug #17781
+--Testcase 653:
+explain (costs off)
+select *
+from int8_tbl t1
+  left join (int8_tbl t2 left join onek t3 on t2.q1 > t3.unique1)
+    on t1.q2 = t2.q2
+  left join onek t4
+    on t2.q2 < t3.unique2;
+
+-- More tests of correct placement of pseudoconstant quals
+
+-- simple constant-false condition
+--Testcase 654:
+explain (costs off)
+select * from int8_tbl t1 left join
+  (int8_tbl t2 inner join int8_tbl t3 on false
+   left join int8_tbl t4 on t2.q2 = t4.q2)
+on t1.q1 = t2.q1;
+
+-- deduce constant-false from an EquivalenceClass
+--Testcase 655:
+explain (costs off)
+select * from int8_tbl t1 left join
+  (int8_tbl t2 inner join int8_tbl t3 on (t2.q1-t3.q2) = 0 and (t2.q1-t3.q2) = 1
+   left join int8_tbl t4 on t2.q2 = t4.q2)
+on t1.q1 = t2.q1;
+
+-- pseudoconstant based on an outer-level Param
+--Testcase 656:
+explain (costs off)
+select exists(
+  select * from int8_tbl t1 left join
+    (int8_tbl t2 inner join int8_tbl t3 on x0.f1 = 1
+     left join int8_tbl t4 on t2.q2 = t4.q2)
+  on t1.q1 = t2.q1
+) from int4_tbl x0;
+
 -- check that join removal works for a left join when joining a subquery
 -- that is guaranteed to be unique by its GROUP BY clause
 --Testcase 379:
@@ -2078,6 +2588,12 @@ explain (costs off)
 select d.* from d left join (select distinct * from b) s
   on d.a = s.id;
 
+-- join removal is not possible here
+--Testcase 657:
+explain (costs off)
+select 1 from a t1
+  left join (a t2 left join a t3 on t2.id = 1) on t2.id = 1;
+
 -- check join removal works when uniqueness of the join condition is enforced
 -- by a UNION
 --Testcase 383:
@@ -2096,6 +2612,23 @@ select i8.* from int8_tbl i8 left join (select f1 from int4_tbl group by f1) i4
 explain (costs off)
 select 1 from (select a.id FROM a left join b on a.b_id = b.id) q,
 			  lateral generate_series(1, q.id) gs(i) where q.id = gs.i;
+
+-- check join removal within RHS of an outer join
+--Testcase 658:
+explain (costs off)
+select c.id, ss.a from c
+  left join (select d.a from onerow, d left join b on d.a = b.id) ss
+  on c.id = ss.a;
+
+--Testcase 659:
+CREATE TEMP TABLE parted_b (id int PRIMARY KEY) partition by range(id);
+--Testcase 660:
+CREATE TEMP TABLE parted_b1 partition of parted_b for values from (0) to (10);
+
+-- test join removals on a partitioned table
+--Testcase 661:
+explain (costs off)
+select a.* from a left join parted_b pb on a.b_id = pb.id;
 
 --Testcase 386:
 DELETE FROM a;
@@ -2206,6 +2739,32 @@ SELECT * FROM
      FROM int8_tbl LEFT JOIN innertab ON q2 = id) ss2
   ON true;
 
+-- join removal bug #17769: can't remove if there's a pushed-down reference
+--Testcase 662:
+EXPLAIN (COSTS OFF)
+SELECT q2 FROM
+  (SELECT *
+   FROM int8_tbl LEFT JOIN innertab ON q2 = id) ss
+ WHERE COALESCE(dat1, 0) = q1;
+
+-- join removal bug #17773: otherwise-removable PHV appears in a qual condition
+--Testcase 663:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT q2 FROM
+  (SELECT q2, 'constant'::text AS x
+   FROM int8_tbl LEFT JOIN innertab ON q2 = id) ss
+  RIGHT JOIN int4_tbl ON NULL
+ WHERE x >= x;
+
+-- join removal bug #17786: check that OR conditions are cleaned up
+--Testcase 664:
+EXPLAIN (COSTS OFF)
+SELECT f1, x
+FROM int4_tbl
+     JOIN ((SELECT 42 AS x FROM int8_tbl LEFT JOIN innertab ON q1 = id) AS ss1
+           RIGHT JOIN tenk1 ON NULL)
+        ON tenk1.unique1 = ss1.x OR tenk1.unique2 = ss1.x;
+
 -- Clean up
 --Testcase 581:
 DELETE FROM innertab;
@@ -2255,6 +2814,67 @@ from
      left join uniquetbl u1 ON u1.f1 = t1.string4) ss
   on t0.f1 = ss.case1
 where ss.stringu2 !~* ss.case1;
+
+rollback;
+
+-- another join removal bug: we must clean up EquivalenceClasses too
+begin;
+
+create foreign table t (a int) server influxdb_svr OPTIONS (table 't1_eq_class');
+insert into t values (1);
+
+explain (costs off)
+select 1
+from t t1
+  left join (select 2 as c
+             from t t2 left join t t3 on t2.a = t3.a) s
+    on true
+where t1.a = s.c;
+
+select 1
+from t t1
+  left join (select 2 as c
+             from t t2 left join t t3 on t2.a = t3.a) s
+    on true
+where t1.a = s.c;
+
+delete from t;
+
+rollback;
+
+-- test cases where we can remove a join, but not a PHV computed at it
+begin;
+
+create foreign table t (a int, b int) server influxdb_svr OPTIONS (table 't2_eq_class');
+insert into t values (1,1), (2,2);
+
+explain (costs off)
+select 1
+from t t1
+  left join (select t2.a, 1 as c
+             from t t2 left join t t3 on t2.a = t3.a) s
+  on true
+  left join t t4 on true
+where s.a < s.c;
+
+explain (costs off)
+select t1.a, s.*
+from t t1
+  left join lateral (select t2.a, coalesce(t1.a, 1) as c
+                     from t t2 left join t t3 on t2.a = t3.a) s
+  on true
+  left join t t4 on true
+where s.a < s.c;
+
+select t1.a, s.*
+from t t1
+  left join lateral (select t2.a, coalesce(t1.a, 1) as c
+                     from t t2 left join t t3 on t2.a = t3.a) s
+  on true
+  left join t t4 on true
+where s.a < s.c;
+
+delete from t;
 
 rollback;
 
@@ -2323,6 +2943,9 @@ select t2.uunique1 from
 --Testcase 430:
 select uunique1 from
   tenk1 t1 join tenk2 t2 on t1.two = t2.two; -- error, suggest both at once
+--Testcase 665:
+select ctid from
+  tenk1 t1 join tenk2 t2 on t1.two = t2.two; -- error, need qualification
 
 --
 -- Take care to reference the correct RTE
@@ -2334,6 +2957,13 @@ select atts.relid::regclass, s.* from pg_stats s join
     a.attrelid::regclass::text join (select unnest(indkey) attnum,
     indexrelid from pg_index i) atts on atts.attnum = a.attnum where
     schemaname != 'pg_catalog';
+
+-- Test bug in rangetable flattening
+--Testcase 666:
+explain (verbose, costs off)
+select 1 from
+  (select * from int8_tbl where q1 <> (select 42) offset 0) ss
+where false;
 
 --
 -- Test LATERAL
@@ -2576,6 +3206,13 @@ select * from
   left join lateral (
     select * from (select 3 as z offset 0) z where z.z = x.x
   ) zz on zz.z = y.y;
+
+-- a new postponed-quals issue (bug #17768)
+--Testcase 667:
+explain (costs off)
+select * from int4_tbl t1,
+  lateral (select * from int4_tbl t2 inner join int4_tbl t3 on t1.f1 = 1
+           inner join (int4_tbl t4 left join int4_tbl t5 on true) on true) ss;
 
 -- check dummy rels with lateral references (bug #15694)
 --Testcase 481:
@@ -2894,6 +3531,15 @@ explain (verbose, costs off)
 select * from j1
 left join j2 on j1.id1 = j2.id1 where j1.id2 = 1;
 
+-- create unique index j1_id2_idx on j1(id2) where id2 is not null;
+
+-- ensure we don't use a partial unique index as unique proofs
+explain (verbose, costs off)
+select * from j1
+inner join j2 on j1.id2 = j2.id2;
+
+-- drop index j1_id2_idx;
+
 -- validate logic in merge joins which skips mark and restore.
 -- it should only do this if all quals which were used to detect the unique
 -- are present as join quals, and not plain quals.
@@ -2964,27 +3610,6 @@ drop foreign table j1;
 drop foreign table j2;
 --Testcase 559:
 drop foreign table j3;
-
--- check that semijoin inner is not seen as unique for a portion of the outerrel
---Testcase 560:
-CREATE FOREIGN TABLE onek (
-  unique1   int4,
-  unique2   int4,
-  two       int4,
-  four      int4,
-  ten       int4,
-  twenty    int4,
-  hundred   int4,
-  thousand  int4,
-  twothousand int4,
-  fivethous int4,
-  tenthous  int4,
-  odd       int4,
-  even      int4,
-  stringu1  name,
-  stringu2  name,
-  string4   name
-) SERVER influxdb_svr;
 
 -- check that semijoin inner is not seen as unique for a portion of the outerrel
 --Testcase 561:

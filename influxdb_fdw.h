@@ -278,7 +278,7 @@ extern bool influxdb_is_foreign_function_tlist(PlannerInfo *root,
 
 
 /* option.c headers */
-extern influxdb_opt * influxdb_get_options(Oid foreigntableid);
+extern influxdb_opt * influxdb_get_options(Oid foreigntableid, Oid userid);
 #ifdef CXX_CLIENT
 extern int influxdb_get_version_option(influxdb_opt *opt);
 #endif
@@ -354,7 +354,11 @@ extern int check_connected_influxdb_version(char* addr, int port, char* user, ch
 extern void cleanup_cxx_client_connection(void);
 #endif		/* CXX_CLIENT */
 
-extern int	ExecForeignDDL(Oid serverOid,
+extern
+#if (PG_VERSION_NUM >= 160000)
+PGDLLEXPORT
+#endif
+int	ExecForeignDDL(Oid serverOid,
 						   Relation rel,
 						   int operation,
 						   bool if_not_exists);
