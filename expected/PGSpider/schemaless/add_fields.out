@@ -47,7 +47,7 @@ SELECT max(time), max((fields->>'sig1')::bigint), max((fields->>'sig1')::bigint)
 (9 rows)
 
 --Testcase 8:
-SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4 from sctbl1 ORDER BY tags->>'device_id';
+SELECT (tags->>'device_id' COLLATE "en_US") device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4 from sctbl1 ORDER BY (tags->>'device_id' COLLATE "en_US");
  device_id | sig1  |                  sig2                  |      sig3      | sig4 
 -----------+-------+----------------------------------------+----------------+------
  dev1      |  -664 |                                        |           0.78 | t
@@ -97,7 +97,7 @@ LINE 1: SELECT fields->>'sig2' sig2, mode((fields->>'sig3')::float8)...
                                      ^
 HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
 --Testcase 12:
-SELECT upper(fields->>'sig2'), upper(fields->>'sig2'), lower(fields->>'sig2'), lower(fields->>'sig2') FROM sctbl1 ORDER BY 1 ASC,2 DESC,3 ASC,4;
+SELECT upper(fields->>'sig2' COLLATE "en_US"), upper(fields->>'sig2'), lower(fields->>'sig2'), lower(fields->>'sig2') FROM sctbl1 ORDER BY 1 ASC,2 DESC,3 ASC,4;
                  upper                  |                 upper                  |                 lower                  |                 lower                  
 ----------------------------------------+----------------------------------------+----------------------------------------+----------------------------------------
  `~!@#$%^&*()_+=                        | `~!@#$%^&*()_+=                        | `~!@#$%^&*()_+=                        | `~!@#$%^&*()_+=
@@ -134,7 +134,7 @@ SELECT * FROM sctbl1;
 
 --Select fields,tags
 --Testcase 16:
-SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3 FROM sctbl1 WHERE NOT (fields->>'sig1')::bigint < (fields->>'sig3')::float8 ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 5 OFFSET 0;
+SELECT (tags->>'device_id' COLLATE "en_US") device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3 FROM sctbl1 WHERE NOT (fields->>'sig1')::bigint < (fields->>'sig3')::float8 ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 5 OFFSET 0;
  device_id | sig1  | sig3  
 -----------+-------+-------
  'dev3'    | 34422 |  0.32
@@ -145,7 +145,7 @@ SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'si
 (5 rows)
 
 --Testcase 17:
-SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3 FROM sctbl1 WHERE (fields->>'sig3')::float8 < 0 ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 5 OFFSET 0;
+SELECT (tags->>'device_id' COLLATE "en_US") device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3 FROM sctbl1 WHERE (fields->>'sig3')::float8 < 0 ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 5 OFFSET 0;
  device_id | sig1  |      sig3      
 -----------+-------+----------------
  dev3      | 65535 |          -0.91
@@ -154,7 +154,7 @@ SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'si
 (3 rows)
 
 --Testcase 18:
-SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3 FROM sctbl1 WHERE NOT time >'2020-1-3 20:30:50' ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 5 OFFSET 2;
+SELECT (tags->>'device_id' COLLATE "en_US") device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3 FROM sctbl1 WHERE NOT time >'2020-1-3 20:30:50' ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 5 OFFSET 2;
  device_id | sig1  | sig3 
 -----------+-------+------
  d ,=ev2   |  2222 |   -1
@@ -165,7 +165,7 @@ SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'si
 (5 rows)
 
 --Testcase 19:
-SELECT time, tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM sctbl1 WHERE true ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 5 OFFSET 0;
+SELECT time, (tags->>'device_id' COLLATE "en_US") device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM sctbl1 WHERE true ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 5 OFFSET 0;
              time              | device_id | sig1  |                  sig2                  |      sig3      | sig4 | sig5 
 -------------------------------+-----------+-------+----------------------------------------+----------------+------+------
  2262-04-11 23:47:16.854776+00 | 'dev3'    | 34422 | 散りぬるを我が世誰                     |           0.32 | f    | t
@@ -191,7 +191,7 @@ SELECT (fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3, (fields->>
 (3 rows)
 
 --Testcase 22:
-SELECT time, tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM sctbl1 WHERE fields->>'sig2' LIKE 'x%' ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 5 OFFSET 0;
+SELECT time, (tags->>'device_id' COLLATE "en_US") device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM sctbl1 WHERE fields->>'sig2' LIKE 'x%' ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 5 OFFSET 0;
             time             | device_id | sig1  |            sig2            | sig3 | sig4 | sig5 
 -----------------------------+-----------+-------+----------------------------+------+------+------
  2016-06-13 17:43:50.1004+00 | dev2      | 35655 | abcdefghijklmnopqrstuvwxyz | 0.25 | f    | t
@@ -199,7 +199,7 @@ SELECT time, tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields-
 (2 rows)
 
 --Testcase 23:
-SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4 FROM sctbl1 WHERE NOT EXISTS (SELECT fields->>'sig2' FROM sctbl1 WHERE fields->>'sig2'='AHW') ORDER BY 1 DESC,2 ASC LIMIT 5 OFFSET 0;
+SELECT (tags->>'device_id' COLLATE "en_US") device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4 FROM sctbl1 WHERE NOT EXISTS (SELECT fields->>'sig2' FROM sctbl1 WHERE fields->>'sig2'='AHW') ORDER BY 1 DESC,2 ASC LIMIT 5 OFFSET 0;
  device_id | sig1  |        sig2         | sig3  | sig4 
 -----------+-------+---------------------+-------+------
  'dev3'    | 34422 | 散りぬるを我が世誰  |  0.32 | f
@@ -270,7 +270,7 @@ SELECT (fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3,(fields->>'
 (1 row)
 
 --Testcase 30:
-SELECT (fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3,(fields->>'sig5')::boolean sig5,(fields->>'sig1')::bigint/(fields->>'sig3')::float8 as dd FROM sctbl1 WHERE fields->>'sig2' IS NOT NULL ORDER BY fields->>'sig2' DESC,(fields->>'sig1')::bigint ASC LIMIT 5 OFFSET 0;
+SELECT (fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3,(fields->>'sig5')::boolean sig5,(fields->>'sig1')::bigint/(fields->>'sig3')::float8 as dd FROM sctbl1 WHERE (fields->>'sig2' COLLATE "en_US") IS NOT NULL ORDER BY (fields->>'sig2' COLLATE "en_US") DESC,(fields->>'sig1')::bigint ASC LIMIT 5 OFFSET 0;
  sig1  | sig3 | sig5 |         dd         
 -------+------+------+--------------------
  34422 | 0.32 | t    |          107568.75
@@ -281,7 +281,7 @@ SELECT (fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3,(fields->>'
 (5 rows)
 
 --Testcase 31:
-SELECT (fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3,(fields->>'sig5')::boolean sig5,(fields->>'sig1')::bigint*(fields->>'sig3')::float8 as mm FROM sctbl1 WHERE NOT (fields->>'sig1')::bigint=5 ORDER BY fields->>'sig2' DESC LIMIT 5 OFFSET 0;
+SELECT (fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3,(fields->>'sig5')::boolean sig5,(fields->>'sig1')::bigint*(fields->>'sig3')::float8 as mm FROM sctbl1 WHERE NOT (fields->>'sig1')::bigint=5 ORDER BY (fields->>'sig2' COLLATE "en_US") DESC LIMIT 5 OFFSET 0;
  sig1  | sig3 | sig5 |         mm          
 -------+------+------+---------------------
   -664 | 0.78 | f    |  -517.9200000000001
@@ -311,7 +311,7 @@ SELECT (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::
 (5 rows)
 
 --Testcase 34:
-SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig1')::bigint>-1000 AND (fields->>'sig3')::float8 < 1 ) AS tb1 WHERE (fields->>'sig3')::float8 < -0.1 AND fields->>'sig2' > 'Mee' ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 5 OFFSET 0;
+SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM ( SELECT * FROM sctbl1 WHERE (fields->>'sig1')::bigint>-1000 AND (fields->>'sig3')::float8 < 1 ) AS tb1 WHERE (fields->>'sig3')::float8 < -0.1 AND (fields->>'sig2' COLLATE "en_US") > 'Mee' ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 5 OFFSET 0;
  sig1 |        sig2         | sig3 | sig4 | sig5 
 ------+---------------------+------+------+------
  2222 | x'a8a9aaabacadaeaf' |   -1 | f    | f
@@ -364,7 +364,7 @@ SELECT (fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::fl
 (4 rows)
 
 --Testcase 40:
-SELECT time, fields->>'sig2' sig2 FROM sctbl1 WHERE fields->>'sig2' <= 'A' AND (fields->>'sig3')::float8 <>-5 AND (fields->>'sig1')::bigint <> 100 ORDER BY 1 ASC,2 DESC LIMIT 5 OFFSET 1;
+SELECT time, (fields->>'sig2' COLLATE "en_US") sig2 FROM sctbl1 WHERE (fields->>'sig2' COLLATE "en_US") <= 'A' AND (fields->>'sig3')::float8 <>-5 AND (fields->>'sig1')::bigint <> 100 ORDER BY 1 ASC,2 DESC LIMIT 5 OFFSET 1;
             time            |                  sig2                  
 ----------------------------+----------------------------------------
  2019-05-02 16:12:41.098+00 | 2e2eawekfrjq2o
@@ -478,7 +478,7 @@ SELECT floor((fields->>'sig1')::bigint*(fields->>'sig3')::float8), floor((fields
 (5 rows)
 
 --Testcase 54:
-SELECT time, tags->>'device_id' device_id, pow((fields->>'sig1')::bigint,-2) FROM sctbl1 WHERE ((fields->>'sig3')::float8 - 1)/3 != 1 GROUP BY time, tags->>'device_id', fields->>'sig1' ORDER BY 1 ASC,2 DESC LIMIT 5 OFFSET 0;
+SELECT time, (tags->>'device_id' COLLATE "en_US") device_id, pow((fields->>'sig1')::bigint,-2) FROM sctbl1 WHERE ((fields->>'sig3')::float8 - 1)/3 != 1 GROUP BY time, (tags->>'device_id' COLLATE "en_US"), fields->>'sig1' ORDER BY 1 ASC,2 DESC LIMIT 5 OFFSET 0;
              time              | device_id |          pow           
 -------------------------------+-----------+------------------------
  1677-09-21 00:12:43.145224+00 | dev1      | 2.2681085788938886e-06
@@ -513,7 +513,7 @@ SELECT max((fields->>'sig3')::float8), count(*), exists(SELECT * FROM sctbl1 WHE
 
 --Join table, each table has 5 fields
 --Testcase 58:
-SELECT * FROM sctbl1 s1 FULL JOIN sctbl2 s2 ON s1.tags->>'device_id'=s2.tags->>'device_id';
+SELECT * FROM sctbl1 s1 FULL JOIN sctbl2 s2 ON (s1.tags->>'device_id' COLLATE "en_US")=(s2.tags->>'device_id' COLLATE "en_US");
              time              |            tags            |                                                        fields                                                        |             time              |         tags          |                                                                              fields                                                                               
 -------------------------------+----------------------------+----------------------------------------------------------------------------------------------------------------------+-------------------------------+-----------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
  1677-09-21 00:12:43.145224+00 | {"device_id": "dev1"}      | {"sig1": "-664", "sig2": null, "sig3": "0.78", "sig4": "true", "sig5": "false"}                                      | 2016-06-13 17:43:50.1004+00   | {"device_id": "dev1"} | {"sig1": "640", "sig2": "敷ヘカウ告政ヨハツヤ", "sig3": "20.4222211221", "sig4": "true", "sig5": "[(-122.107,37.664),(-122.107101,37.66425),(-122.1074,37.665)]"}
@@ -596,7 +596,8 @@ SELECT * FROM (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::big
 
 --Testcase 62:
 SELECT s1.device_id,s1.sig1,s1.sig2,s1.sig3,s1.sig4,s1.sig5 FROM (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5 FROM sctbl1) s1 NATURAL JOIN (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,fields->>'sig5' sig5 FROM sctbl2) s2;
-ERROR:  JOIN/USING types boolean and text cannot be matched
+ERROR:  operator does not exist: boolean = text
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
 --Testcase 63:
 SELECT s1.tags->>'device_id' device_id,(s1.fields->>'sig1')::bigint sig1,s1.fields->>'sig2' sig2,(s1.fields->>'sig3')::float8 sig3,(s1.fields->>'sig4')::boolean sig4,(s1.fields->>'sig5')::boolean sig5 FROM sctbl1 s1 JOIN sctbl2 s2 on true;
  device_id | sig1  |                  sig2                  |      sig3      | sig4 | sig5 
@@ -710,7 +711,7 @@ SELECT sum('NaN'::numeric) FROM sctbl1;
 
 --Select fields,tags
 --Testcase 70:
-SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3,(fields->>'sig6')::bigint sig6 FROM sctbl1 WHERE NOT (fields->>'sig6')::bigint < (fields->>'sig1')::bigint ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 15 OFFSET 0;
+SELECT (tags->>'device_id' COLLATE "en_US") device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3,(fields->>'sig6')::bigint sig6 FROM sctbl1 WHERE NOT (fields->>'sig6')::bigint < (fields->>'sig1')::bigint ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 15 OFFSET 0;
  device_id | sig1  |      sig3       |  sig6  
 -----------+-------+-----------------+--------
  dev3      |   319 |            0.32 | 111545
@@ -721,7 +722,7 @@ SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'si
 (5 rows)
 
 --Testcase 71:
-SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3,(fields->>'sig7')::float8 sig7 FROM sctbl1 WHERE (fields->>'sig7')::float8 < 0 ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 15 OFFSET 0;
+SELECT (tags->>'device_id' COLLATE "en_US") device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3,(fields->>'sig7')::float8 sig7 FROM sctbl1 WHERE (fields->>'sig7')::float8 < 0 ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 15 OFFSET 0;
  device_id | sig1  |      sig3       |     sig7      
 -----------+-------+-----------------+---------------
  dev3      |   319 |            0.32 |    -223445600
@@ -733,7 +734,7 @@ SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'si
 (6 rows)
 
 --Testcase 72:
-SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3,(fields->>'sig8')::float8 sig8 FROM sctbl1 WHERE NOT time >'2020-1-3 20:30:50' ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 15 OFFSET 2;
+SELECT (tags->>'device_id' COLLATE "en_US") device_id,(fields->>'sig1')::bigint sig1,(fields->>'sig3')::float8 sig3,(fields->>'sig8')::float8 sig8 FROM sctbl1 WHERE NOT time >'2020-1-3 20:30:50' ORDER BY 1 DESC,2 ASC,3 DESC LIMIT 15 OFFSET 2;
  device_id | sig1  |      sig3       | sig8  
 -----------+-------+-----------------+-------
  d ,=ev2   |  2222 |              -1 | 2.024
@@ -745,7 +746,7 @@ SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,(fields->>'si
 (6 rows)
 
 --Testcase 73:
-SELECT time, tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5,(fields->>'sig6')::bigint sig6,(fields->>'sig7')::float8 sig7,(fields->>'sig8')::float8 sig8,(fields->>'sig9')::float8 sig9,(fields->>'sig10')::int sig10,fields->>'sig11' sig11,fields->>'sig12' sig12,(fields->>'sig13')::boolean sig13,fields->>'sig14' sig14,(fields->>'sig15')::bigint sig15,(fields->>'sig16')::bigint sig16,(fields->>'sig17')::bigint sig17,fields->>'sig18' sig18,fields->>'sig19' sig19,fields->>'sig20' sig20,(fields->>'sig21')::boolean sig21,fields->>'sig22' sig22,(fields->>'sig23')::bigint sig23,(fields->>'sig24')::int sig24,(fields->>'sig25')::float8 sig25 FROM sctbl1 WHERE true ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 15 OFFSET 0;
+SELECT time, (tags->>'device_id' COLLATE "en_US") device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::float8 sig3,(fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5,(fields->>'sig6')::bigint sig6,(fields->>'sig7')::float8 sig7,(fields->>'sig8')::float8 sig8,(fields->>'sig9')::float8 sig9,(fields->>'sig10')::int sig10,fields->>'sig11' sig11,fields->>'sig12' sig12,(fields->>'sig13')::boolean sig13,fields->>'sig14' sig14,(fields->>'sig15')::bigint sig15,(fields->>'sig16')::bigint sig16,(fields->>'sig17')::bigint sig17,fields->>'sig18' sig18,fields->>'sig19' sig19,fields->>'sig20' sig20,(fields->>'sig21')::boolean sig21,fields->>'sig22' sig22,(fields->>'sig23')::bigint sig23,(fields->>'sig24')::int sig24,(fields->>'sig25')::float8 sig25 FROM sctbl1 WHERE true ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 15 OFFSET 0;
              time              | device_id | sig1  |                  sig2                  |      sig3       | sig4 | sig5 |  sig6  |     sig7      | sig8  |  sig9  | sig10 |    sig11     |      sig12       | sig13 |     sig14      |        sig15        |        sig16         |        sig17        | sig18 | sig19 | sig20 | sig21 | sig22 | sig23 | sig24 | sig25 
 -------------------------------+-----------+-------+----------------------------------------+-----------------+------+------+--------+---------------+-------+--------+-------+--------------+------------------+-------+----------------+---------------------+----------------------+---------------------+-------+-------+-------+-------+-------+-------+-------+-------
  2262-04-11 23:47:16.854776+00 | 'dev3'    | 34422 | 散りぬるを我が世誰                     |            0.32 | f    | t    |    232 |     123445600 | 3.025 | -0.423 |    22 | Zep          |                  | f     |                | 9223372036854775807 | -9223372036854775808 | 9223372036854775807 | west  | east  |       | t     | wef   |  1112 |   122 |   0.2
@@ -788,7 +789,7 @@ SELECT * FROM sctbl1 WHERE fields->>'sig11' LIKE 'w%' ORDER BY fields->>'sig11' 
 (3 rows)
 
 --Testcase 77:
-SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,fields->>'sig12' sig12,(fields->>'sig13')::boolean sig13 FROM sctbl1 WHERE NOT EXISTS (SELECT fields->>'sig12' FROM sctbl1 WHERE fields->>'sig11'='33') ORDER BY tags->>'device_id' DESC,(fields->>'sig1')::bigint ASC LIMIT 15 OFFSET 0;
+SELECT tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,fields->>'sig12' sig12,(fields->>'sig13')::boolean sig13 FROM sctbl1 WHERE NOT EXISTS (SELECT fields->>'sig12' FROM sctbl1 WHERE fields->>'sig11'='33') ORDER BY (tags->>'device_id' COLLATE "en_US") DESC,(fields->>'sig1')::bigint ASC LIMIT 15 OFFSET 0;
  device_id | sig1  |                  sig2                  |      sig12       | sig13 
 -----------+-------+----------------------------------------+------------------+-------
  'dev3'    | 34422 | 散りぬるを我が世誰                     |                  | f
@@ -1097,7 +1098,7 @@ SELECT min(time)+'10 days'::interval, min((fields->>'sig10')::bigint + (fields->
 SELECT floor((fields->>'sig23')::bigint*(fields->>'sig25')::float8), floor((fields->>'sig24')::bigint/(fields->>'sig25')::float8) FROM sctbl1 WHERE ((fields->>'sig25')::float8 - 1)/3 != 1 GROUP BY (fields->>'sig23')::bigint, (fields->>'sig24')::bigint,(fields->>'sig25')::float8 HAVING sum((fields->>'sig23')::bigint) > avg((fields->>'sig24')::bigint) ORDER BY 1 ASC,2 DESC LIMIT 15 OFFSET 0;
 ERROR:  division by zero
 --Testcase 108:
-SELECT time, tags->>'device_id' device_id, pow((fields->>'sig25')::float8,2) FROM sctbl1 WHERE ((fields->>'sig25')::float8 - 1)/3 != 1 GROUP BY time,tags->>'device_id',fields->>'sig25' ORDER BY 1 ASC,2 DESC LIMIT 15 OFFSET 0;
+SELECT time, (tags->>'device_id' COLLATE "en_US") device_id, pow((fields->>'sig25')::float8,2) FROM sctbl1 WHERE ((fields->>'sig25')::float8 - 1)/3 != 1 GROUP BY time,(tags->>'device_id' COLLATE "en_US"),fields->>'sig25' ORDER BY 1 ASC,2 DESC LIMIT 15 OFFSET 0;
              time              | device_id |         pow          
 -------------------------------+-----------+----------------------
  1677-09-21 00:12:43.145224+00 | dev1      |                    0
@@ -1143,7 +1144,7 @@ SELECT (fields->>'sig9')::float8 sig9, abs(avg((fields->>'sig16')::bigint)),stri
 
 --Join table
 --Testcase 113:
-SELECT s1.tags->>'device_id' device_id,(s1.fields->>'sig21')::boolean sig21,s1.fields->>'sig22' sig22,(s1.fields->>'sig23')::bigint sig23,(s1.fields->>'sig24')::int sig24,(s1.fields->>'sig25')::float8 sig25 FROM sctbl1 s1 FULL JOIN sctbl2 s2 ON s1.tags->>'device_id'=s2.tags->>'device_id' ORDER BY device_id,sig21,sig22,sig23,sig24,sig25;
+SELECT (s1.tags->>'device_id' COLLATE "en_US") device_id,(s1.fields->>'sig21')::boolean sig21,s1.fields->>'sig22' sig22,(s1.fields->>'sig23')::bigint sig23,(s1.fields->>'sig24')::int sig24,(s1.fields->>'sig25')::float8 sig25 FROM sctbl1 s1 FULL JOIN sctbl2 s2 ON s1.tags->>'device_id'=s2.tags->>'device_id' ORDER BY device_id,sig21,sig22,sig23,sig24,sig25;
  device_id | sig21 | sig22 | sig23 | sig24 | sig25 
 -----------+-------+-------+-------+-------+-------
  dev1      | f     | wef   |  1112 |   122 |     0
@@ -1208,7 +1209,7 @@ SELECT s1.device_id,s1.sig21,s1.sig22,s1.sig23,s1.sig24,s1.sig25 FROM (SELECT ti
 (6 rows)
 
 --Testcase 116:
-SELECT * FROM (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5,(fields->>'sig6')::bigint sig6, (fields->>'sig7')::float8 sig7,(fields->>'sig8')::float8 sig8,(fields->>'sig9')::float8 sig9,(fields->>'sig10')::bigint sig10,fields->>'sig11' sig11,fields->>'sig12' sig12, (fields->>'sig13')::boolean sig13, fields->>'sig14' sig14, (fields->>'sig15')::bigint sig15,(fields->>'sig16')::bigint sig16, (fields->>'sig17')::bigint sig17, fields->>'sig18' sig18,fields->>'sig19' sig19, fields->>'sig20' sig20, (fields->>'sig21')::boolean sig21, fields->>'sig22' sig22, (fields->>'sig23')::bigint sig23, (fields->>'sig24')::bigint sig24, (fields->>'sig25')::float8 sig25 FROM sctbl1) s1 FULL OUTER JOIN (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,fields->>'sig5' sig5 FROM sctbl2) s2 USING(sig2) ORDER BY s1.sig2, s1.time, s1.device_id, s2.time, s2.device_id;
+SELECT * FROM (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5,(fields->>'sig6')::bigint sig6, (fields->>'sig7')::float8 sig7,(fields->>'sig8')::float8 sig8,(fields->>'sig9')::float8 sig9,(fields->>'sig10')::bigint sig10,fields->>'sig11' sig11,fields->>'sig12' sig12, (fields->>'sig13')::boolean sig13, fields->>'sig14' sig14, (fields->>'sig15')::bigint sig15,(fields->>'sig16')::bigint sig16, (fields->>'sig17')::bigint sig17, fields->>'sig18' sig18,fields->>'sig19' sig19, fields->>'sig20' sig20, (fields->>'sig21')::boolean sig21, fields->>'sig22' sig22, (fields->>'sig23')::bigint sig23, (fields->>'sig24')::bigint sig24, (fields->>'sig25')::float8 sig25 FROM sctbl1) s1 FULL OUTER JOIN (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,fields->>'sig5' sig5 FROM sctbl2) s2 USING(sig2) ORDER BY s1.sig2 COLLATE "en_US", s1.time, s1.device_id, s2.time, s2.device_id;
                   sig2                  |             time              | device_id | sig1  |      sig3       | sig4 | sig5 |  sig6  |     sig7      | sig8  |  sig9  | sig10 |    sig11     |      sig12       | sig13 |     sig14      |        sig15        |        sig16         |        sig17        | sig18 | sig19 | sig20 | sig21 | sig22 | sig23 | sig24 | sig25 |             time              | device_id | sig1  |      sig3      | sig4 |                             sig5                              
 ----------------------------------------+-------------------------------+-----------+-------+-----------------+------+------+--------+---------------+-------+--------+-------+--------------+------------------+-------+----------------+---------------------+----------------------+---------------------+-------+-------+-------+-------+-------+-------+-------+-------+-------------------------------+-----------+-------+----------------+------+---------------------------------------------------------------
  `~!@#$%^&*()_+=                        | 2016-06-13 17:43:50.1004+00   | dev3      | 65535 |           -0.91 | f    | t    |    311 |    -123445600 | 6.028 |   0.26 |    55 | wwefs        |                  | f     | example string | 9223372036854775807 | -9223372036854775808 | 9223372036854775807 |       |       | OFF   | f     | wef   |  1112 |   122 |   0.5 |                               |           |       |                |      | 
@@ -1230,7 +1231,8 @@ SELECT * FROM (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::big
 
 --Testcase 117:
 SELECT s2.device_id,s2.sig1,s2.sig2,s2.sig3,s2.sig4,s2.sig5 FROM (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5,(fields->>'sig6')::bigint sig6, (fields->>'sig7')::float8 sig7,(fields->>'sig8')::float8 sig8,(fields->>'sig9')::float8 sig9,(fields->>'sig10')::bigint sig10,fields->>'sig11' sig11,fields->>'sig12' sig12, (fields->>'sig13')::boolean sig13, fields->>'sig14' sig14, (fields->>'sig15')::bigint sig15,(fields->>'sig16')::bigint sig16, (fields->>'sig17')::bigint sig17, fields->>'sig18' sig18,fields->>'sig19' sig19, fields->>'sig20' sig20, (fields->>'sig21')::boolean sig21, fields->>'sig22' sig22, (fields->>'sig23')::bigint sig23, (fields->>'sig24')::bigint sig24, (fields->>'sig25')::float8 sig25 FROM sctbl1) s1 NATURAL JOIN (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,fields->>'sig5' sig5 FROM sctbl2) s2;
-ERROR:  JOIN/USING types boolean and text cannot be matched
+ERROR:  operator does not exist: boolean = text
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
 --Testcase 118:
 SELECT s1.device_id,s1.sig11,s1.sig12,s1.sig13,s1.sig14,s1.sig15 FROM (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,(fields->>'sig5')::boolean sig5,(fields->>'sig6')::bigint sig6, (fields->>'sig7')::float8 sig7,(fields->>'sig8')::float8 sig8,(fields->>'sig9')::float8 sig9,(fields->>'sig10')::bigint sig10,fields->>'sig11' sig11,fields->>'sig12' sig12, (fields->>'sig13')::boolean sig13, fields->>'sig14' sig14, (fields->>'sig15')::bigint sig15,(fields->>'sig16')::bigint sig16, (fields->>'sig17')::bigint sig17, fields->>'sig18' sig18,fields->>'sig19' sig19, fields->>'sig20' sig20, (fields->>'sig21')::boolean sig21, fields->>'sig22' sig22, (fields->>'sig23')::bigint sig23, (fields->>'sig24')::bigint sig24, (fields->>'sig25')::float8 sig25 FROM sctbl1) s1 JOIN (SELECT time, tags->>'device_id' device_id, (fields->>'sig1')::bigint sig1, fields->>'sig2' sig2, (fields->>'sig3')::float8 sig3, (fields->>'sig4')::boolean sig4,fields->>'sig5' sig5 FROM sctbl2) s2 on true;
  device_id |    sig11     |      sig12       | sig13 |     sig14      |        sig15        

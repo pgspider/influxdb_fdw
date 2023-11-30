@@ -160,7 +160,7 @@ ERROR:  column "sctbl3.fields" must appear in the GROUP BY clause or be used in 
 LINE 1: SELECT count(fields->>'c2'), (fields->>'c3')::bigint c3, fie...
                                       ^
 --Testcase 18:
-SELECT 32 + (fields->>'c3')::bigint, (fields->>'c3')::bigint + (fields->>'c3')::bigint from sctbl3 GROUP  BY fields->>'c3', fields->>'c5', fields->>'c2' ORDER BY fields->>'c2';
+SELECT 32 + (fields->>'c3')::bigint, (fields->>'c3')::bigint + (fields->>'c3')::bigint from sctbl3 GROUP BY fields->>'c3', fields->>'c5', (fields->>'c2' COLLATE "en_US") ORDER BY (fields->>'c2' COLLATE "en_US");
    ?column?   |   ?column?   
 --------------+--------------
            30 |           -4
@@ -246,7 +246,7 @@ SELECT stddev((fields->>'c3')::bigint), stddev((fields->>'c3')::bigint ORDER BY 
 (13 rows)
 
 --Testcase 23:
-SELECT string_agg(fields->>'c2', ';' ORDER BY fields->>'c2') FROM sctbl3 GROUP BY fields->>'c2' ORDER BY 1;
+SELECT string_agg(fields->>'c2' COLLATE "en_US", ';' ORDER BY fields->>'c2') FROM sctbl3 GROUP BY fields->>'c2' ORDER BY 1;
                                     string_agg                                    
 ----------------------------------------------------------------------------------
  `~!@#$%^&*()_+=-{}[]|:;<>?/.
@@ -756,7 +756,7 @@ SELECT time,fields->>'c2' c2,(fields->>'c3')::bigint c3,(fields->>'c4')::double 
 
 -- Select many target aggregate in one query and combine with condition
 --Testcase 62:
-SELECT upper(fields->>'c2'), upper(fields->>'c2'), lower(fields->>'c2'), lower(fields->>'c2') FROM sctbl3 ORDER BY 1 ASC,2 DESC,3 ASC,4;
+SELECT upper(fields->>'c2' COLLATE "en_US"), upper(fields->>'c2' COLLATE "en_US"), lower(fields->>'c2' COLLATE "en_US"), lower(fields->>'c2' COLLATE "en_US") FROM sctbl3 ORDER BY 1 ASC,2 DESC,3 ASC,4;
                                       upper                                       |                                      upper                                       |                                      lower                                       |                                      lower                                       
 ----------------------------------------------------------------------------------+----------------------------------------------------------------------------------+----------------------------------------------------------------------------------+----------------------------------------------------------------------------------
  `~!@#$%^&*()_+=-{}[]|:;<>?/.                                                     | `~!@#$%^&*()_+=-{}[]|:;<>?/.                                                     | `~!@#$%^&*()_+=-{}[]|:;<>?/.                                                     | `~!@#$%^&*()_+=-{}[]|:;<>?/.
@@ -927,7 +927,7 @@ SELECT count(fields->>'c2'), bit_and((fields->>'c3')::bigint), bit_or((fields->>
 SELECT array_agg((fields->>'c3')::bigint-(fields->>'c3')::bigint-(fields->>'c3')::bigint), array_agg((fields->>'c3')::bigint/(fields->>'c3')::bigint*(fields->>'c3')::bigint), array_agg(((fields->>'c3')::bigint+(fields->>'c3')::bigint/(fields->>'c3')::bigint)*-1000), array_agg((fields->>'c3')::bigint*(fields->>'c3')::bigint-(fields->>'c3')::bigint), array_agg(((fields->>'c3')::bigint-(fields->>'c3')::bigint+(fields->>'c3')::bigint)+9999999999999.998) from sctbl3 GROUP BY (fields->>'c3')::bigint, (fields->>'c3')::bigint ORDER BY 1, 2, 3, 4, 5;
 ERROR:  bigint out of range
 --Testcase 74:
-SELECT avg((fields->>'c3')::bigint-(fields->>'c3')::bigint-(fields->>'c3')::bigint)-0.567-avg((fields->>'c3')::bigint/3+(fields->>'c3')::bigint)+17.55435, avg((fields->>'c3')::bigint+(fields->>'c3')::bigint/((fields->>'c3')::bigint+45))- -9.5+2*avg((fields->>'c3')::bigint), avg((fields->>'c3')::bigint/((fields->>'c3')::bigint-10.2)*(fields->>'c3')::bigint)+0.567+avg((fields->>'c3')::bigint)*4.5+(fields->>'c3')::bigint, avg((fields->>'c3')::bigint+(fields->>'c3')::bigint/((fields->>'c3')::bigint+5.6))+100-(fields->>'c3')::bigint from sctbl3 WHERE fields->>'c2'<='$' AND (fields->>'c3')::bigint<>-5 AND (fields->>'c3')::bigint<>10.746  GROUP BY fields->>'c3', fields->>'c3' ORDER BY 1,2,3,4 limit 5;
+SELECT avg((fields->>'c3')::bigint-(fields->>'c3')::bigint-(fields->>'c3')::bigint)-0.567-avg((fields->>'c3')::bigint/3+(fields->>'c3')::bigint)+17.55435, avg((fields->>'c3')::bigint+(fields->>'c3')::bigint/((fields->>'c3')::bigint+45))- -9.5+2*avg((fields->>'c3')::bigint), avg((fields->>'c3')::bigint/((fields->>'c3')::bigint-10.2)*(fields->>'c3')::bigint)+0.567+avg((fields->>'c3')::bigint)*4.5+(fields->>'c3')::bigint, avg((fields->>'c3')::bigint+(fields->>'c3')::bigint/((fields->>'c3')::bigint+5.6))+100-(fields->>'c3')::bigint from sctbl3 WHERE fields->>'c2'<='$' COLLATE "en_US" AND (fields->>'c3')::bigint<>-5 AND (fields->>'c3')::bigint<>10.746  GROUP BY fields->>'c3', fields->>'c3' ORDER BY 1,2,3,4 limit 5;
        ?column?       |        ?column?        |              ?column?              |         ?column?         
 ----------------------+------------------------+------------------------------------+--------------------------
    5.9873500000000000 |    24.5000000000000000 |            23.25930769230769230770 | 100.47169811320754716981
@@ -936,13 +936,13 @@ SELECT avg((fields->>'c3')::bigint-(fields->>'c3')::bigint-(fields->>'c3')::bigi
 (3 rows)
 
 --Testcase 75:
-SELECT bit_and((fields->>'c3')::bigint/3*(fields->>'c3')::bigint)-1 + bit_and((fields->>'c3')::bigint/4/((fields->>'c3')::bigint+6)),2* bit_and((fields->>'c3')::bigint-(fields->>'c3')::bigint+(fields->>'c3')::bigint)*1, 5-bit_and((fields->>'c3')::bigint+(fields->>'c3')::bigint-(fields->>'c3')::bigint)-1000000+(fields->>'c3')::bigint  from sctbl3 WHERE fields->>'c2'<='$' AND (fields->>'c3')::bigint<>-5 AND (fields->>'c3')::bigint<>10.746 GROUP BY fields->>'c3' ORDER BY 1,2,3;
+SELECT bit_and((fields->>'c3')::bigint/3*(fields->>'c3')::bigint)-1 + bit_and((fields->>'c3')::bigint/4/((fields->>'c3')::bigint+6)),2* bit_and((fields->>'c3')::bigint-(fields->>'c3')::bigint+(fields->>'c3')::bigint)*1, 5-bit_and((fields->>'c3')::bigint+(fields->>'c3')::bigint-(fields->>'c3')::bigint)-1000000+(fields->>'c3')::bigint  from sctbl3 WHERE fields->>'c2'<='$' COLLATE "en_US" AND (fields->>'c3')::bigint<>-5 AND (fields->>'c3')::bigint<>10.746 GROUP BY fields->>'c3' ORDER BY 1,2,3;
 ERROR:  bigint out of range
 --Testcase 76:
-SELECT bit_or((fields->>'c3')::bigint/3*(fields->>'c3')::bigint)-1 + bit_or((fields->>'c3')::bigint/4/((fields->>'c3')::bigint+6)),2* bit_or((fields->>'c3')::bigint-(fields->>'c3')::bigint+(fields->>'c3')::bigint)*1, 5-bit_or((fields->>'c3')::bigint+(fields->>'c3')::bigint-(fields->>'c3')::bigint)-1000000+(fields->>'c3')::bigint  from sctbl3 WHERE fields->>'c2'<='$' AND (fields->>'c3')::bigint<>-5 AND (fields->>'c3')::bigint<>10.746 GROUP BY fields->>'c3' ORDER BY 1,2,3;
+SELECT bit_or((fields->>'c3')::bigint/3*(fields->>'c3')::bigint)-1 + bit_or((fields->>'c3')::bigint/4/((fields->>'c3')::bigint+6)),2* bit_or((fields->>'c3')::bigint-(fields->>'c3')::bigint+(fields->>'c3')::bigint)*1, 5-bit_or((fields->>'c3')::bigint+(fields->>'c3')::bigint-(fields->>'c3')::bigint)-1000000+(fields->>'c3')::bigint  from sctbl3 WHERE fields->>'c2'<='$' COLLATE "en_US" AND (fields->>'c3')::bigint<>-5 AND (fields->>'c3')::bigint<>10.746 GROUP BY fields->>'c3' ORDER BY 1,2,3;
 ERROR:  bigint out of range
 --Testcase 77:
-SELECT count(*)-5.6, 2*count(*), 10.2/count(*)+count(*)-(fields->>'c3')::bigint from sctbl3 WHERE (fields->>'c3')::bigint>0.774 OR fields->>'c2' = 'Which started out as a kind' GROUP BY fields->>'c3' ORDER BY 1, 2, 3;
+SELECT count(*)-5.6, 2*count(*), 10.2/count(*)+count(*)-(fields->>'c3')::bigint from sctbl3 WHERE (fields->>'c3')::bigint>0.774 OR fields->>'c2' = 'Which started out as a kind' COLLATE "en_US" GROUP BY fields->>'c3' ORDER BY 1, 2, 3;
  ?column? | ?column? |           ?column?            
 ----------+----------+-------------------------------
      -4.6 |        2 | -36854775795.8000000000000000
@@ -1025,7 +1025,7 @@ SELECT max((fields->>'c4')::double precision), max((fields->>'c3')::bigint)+(fie
 (8 rows)
 
 --Testcase 84:
-SELECT min(fields->>'c2'), min((fields->>'c3')::bigint)+(fields->>'c3')::bigint-1, min((fields->>'c3')::bigint+(fields->>'c3')::bigint)-(fields->>'c3')::bigint-3, min((fields->>'c3')::bigint)+min((fields->>'c3')::bigint) from sctbl3 WHERE (fields->>'c4')::double precision<0 GROUP BY fields->>'c3', fields->>'c3' ORDER BY 1,2,3,4;
+SELECT min(fields->>'c2' COLLATE "en_US"), min((fields->>'c3')::bigint)+(fields->>'c3')::bigint-1, min((fields->>'c3')::bigint+(fields->>'c3')::bigint)-(fields->>'c3')::bigint-3, min((fields->>'c3')::bigint)+min((fields->>'c3')::bigint) from sctbl3 WHERE (fields->>'c4')::double precision<0 GROUP BY fields->>'c3', fields->>'c3' ORDER BY 1,2,3,4;
                                        min                                        |  ?column?   |  ?column?   |  ?column?   
 ----------------------------------------------------------------------------------+-------------+-------------+-------------
  `~!@#$%^&*()_+=-{}[]|:;<>?/.                                                     |          -5 |          -5 |          -4
@@ -1142,7 +1142,7 @@ SELECT time,tags->>'t1' t1,(fields->>'c1')::bool c1,fields->>'c2' c2,(fields->>'
 (4 rows)
 
 --Testcase 91:
-SELECT * FROM sctbl3 WHERE EXISTS (SELECT (fields->>'c3')::bigint FROM sctbl3 WHERE (fields->>'c3')::bigint != 40.772) ORDER BY tags->>'t1';
+SELECT * FROM sctbl3 WHERE EXISTS (SELECT (fields->>'c3')::bigint FROM sctbl3 WHERE (fields->>'c3')::bigint != 40.772) ORDER BY tags->>'t1' COLLATE "en_US";
              time              |         tags          |                                                                      fields                                                                       
 -------------------------------+-----------------------+---------------------------------------------------------------------------------------------------------------------------------------------------
  1970-01-01 00:00:00+00        | {"t1": "-2323.54454"} | {"c1": "true", "c2": "Tôi không biết", "c3": "32", "c4": "78.14", "c5": "false"}
@@ -1237,7 +1237,7 @@ SELECT time,tags->>'t1' t1,(fields->>'c1')::bool c1,fields->>'c2' c2,(fields->>'
 
 -- Select aggregate function  and specific column from original table
 --Testcase 97:
-SELECT tags->>'t1' t1, (fields->>'c1')::bool c1, max(tags->>'t1'), sum((fields->>'c3')::bigint), sum((fields->>'c3')::bigint ORDER BY (fields->>'c3')::bigint) FROM sctbl3 GROUP BY tags->>'t1', (fields->>'c1')::bool, (fields->>'c3')::bigint, fields->>'c2' ORDER BY 1;
+SELECT (tags->>'t1' COLLATE "en_US") t1, (fields->>'c1')::bool c1, max(tags->>'t1'), sum((fields->>'c3')::bigint), sum((fields->>'c3')::bigint ORDER BY (fields->>'c3')::bigint) FROM sctbl3 GROUP BY (tags->>'t1' COLLATE "en_US"), (fields->>'c1')::bool, (fields->>'c3')::bigint, fields->>'c2' ORDER BY 1;
      t1      | c1 |     max     |     sum      |     sum      
 -------------+----+-------------+--------------+--------------
  -2323.54454 | t  | -2323.54454 |           32 |           32
@@ -1268,7 +1268,7 @@ SELECT sum((fields->>'c3')::bigint), tags->>'t1' t1, sum((fields->>'c3')::bigint
 (0 rows)
 
 --Testcase 99:
-SELECT stddev((fields->>'c3')::bigint), (fields->>'c1')::bool c1, stddev((fields->>'c3')::bigint ORDER BY (fields->>'c3')::bigint), tags->>'t1' t1 FROM sctbl3 GROUP BY time, fields->>'c3', tags->>'t1', fields->>'c1' ORDER BY tags->>'t1' ASC,fields->>'c1' DESC;
+SELECT stddev((fields->>'c3')::bigint), (fields->>'c1')::bool c1, stddev((fields->>'c3')::bigint ORDER BY (fields->>'c3')::bigint), (tags->>'t1' COLLATE "en_US") t1 FROM sctbl3 GROUP BY time, fields->>'c3', (tags->>'t1' COLLATE "en_US"), fields->>'c1' ORDER BY (tags->>'t1' COLLATE "en_US") ASC,fields->>'c1' DESC;
  stddev | c1 | stddev |     t1      
 --------+----+--------+-------------
         | t  |        | -2323.54454
@@ -1376,10 +1376,10 @@ SELECT max(time), max((fields->>'c3')::bigint), max((fields->>'c3')::bigint)+10,
 (19 rows)
 
 --Testcase 104:
-SELECT array_agg((fields->>'c3')::bigint/2 ORDER BY (fields->>'c3')::bigint), array_agg((fields->>'c1')::bool), array_agg(tags->>'t1'), array_agg(fields->>'c2' ORDER BY fields->>'c2'), array_agg(time ORDER BY time) FROM ( SELECT * FROM sctbl3 WHERE (fields->>'c3')::bigint>-1000 AND (fields->>'c3')::bigint<1000 ) AS sctbl3 GROUP BY fields->>'c5' HAVING (fields->>'c5')::boolean != true ORDER BY 1 DESC, 2, 3;
+SELECT array_agg((fields->>'c3')::bigint/2 ORDER BY (fields->>'c3')::bigint), array_agg((fields->>'c1' COLLATE "en_US")::bool ORDER BY (fields->>'c1' COLLATE "en_US")::bool), array_agg((tags->>'t1' COLLATE "en_US") ORDER BY (tags->>'t1' COLLATE "en_US")), array_agg((fields->>'c2' COLLATE "en_US") ORDER BY (fields->>'c2' COLLATE "en_US")), array_agg(time ORDER BY time) FROM ( SELECT * FROM sctbl3 WHERE (fields->>'c3')::bigint>-1000 AND (fields->>'c3')::bigint<1000 ) AS sctbl3 GROUP BY fields->>'c5' HAVING (fields->>'c5')::boolean != true ORDER BY 1 DESC, 2, 3;
       array_agg       |              array_agg              |                     array_agg                      |                                                                                     array_agg                                                                                     |                                                                                                 array_agg                                                                                                 
 ----------------------+-------------------------------------+----------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {-1,0,0,1,2,2,16,17} | {t,t,NULL,NULL,NULL,NULL,NULL,NULL} | {faefek,-2323.54454,NULL,NULL,NULL,NULL,NULL,NULL} | {"`~!@#$%^&*()_+=-{}[]|:;<>?/.",$,0123456789,"change for new change","Change our locale from $ to ¥ in","Chúc mừng năm mới 2021","In Bulgarian it is desirable","Tôi không biết"} | {"1969-12-22 20:42:30+00","1970-01-01 00:00:00+00","2020-01-06 01:00:00+00","2020-01-07 01:00:00+00","2020-01-08 01:00:00+00","2020-01-11 01:00:00+00","2020-01-12 01:00:00+00","2020-01-13 01:00:00+00"}
+ {-1,0,0,1,2,2,16,17} | {t,t,NULL,NULL,NULL,NULL,NULL,NULL} | {-2323.54454,faefek,NULL,NULL,NULL,NULL,NULL,NULL} | {"`~!@#$%^&*()_+=-{}[]|:;<>?/.",$,0123456789,"change for new change","Change our locale from $ to ¥ in","Chúc mừng năm mới 2021","In Bulgarian it is desirable","Tôi không biết"} | {"1969-12-22 20:42:30+00","1970-01-01 00:00:00+00","2020-01-06 01:00:00+00","2020-01-07 01:00:00+00","2020-01-08 01:00:00+00","2020-01-11 01:00:00+00","2020-01-12 01:00:00+00","2020-01-13 01:00:00+00"}
 (1 row)
 
 --Testcase 105:
@@ -1582,7 +1582,7 @@ SELECT tags->>'t1' t1, (fields->>'c1')::bool c1, fields->>'c2' c2  FROM ( SELECT
 (2 rows)
 
 --Testcase 120:
-SELECT (fields->>'c1')::bool c1, fields->>'c2' c2, (fields->>'c4')::double precision c4 FROM ( SELECT * FROM sctbl3 WHERE (fields->>'c3')::bigint>-1000 AND (fields->>'c3')::bigint<1000 ) AS tb3 WHERE fields->>'c2'=ANY (ARRAY(SELECT fields->>'c2' FROM sctbl3 WHERE (fields->>'c3')::bigint%2=0)) ORDER BY tags->>'t1';
+SELECT (fields->>'c1')::bool c1, fields->>'c2' c2, (fields->>'c4')::double precision c4 FROM ( SELECT * FROM sctbl3 WHERE (fields->>'c3')::bigint>-1000 AND (fields->>'c3')::bigint<1000 ) AS tb3 WHERE fields->>'c2'=ANY (ARRAY(SELECT fields->>'c2' FROM sctbl3 WHERE (fields->>'c3')::bigint%2=0)) ORDER BY (tags->>'t1' COLLATE "en_US");
  c1 |                                  c2                                   |      c4       
 ----+-----------------------------------------------------------------------+---------------
  t  | Tôi không biết                                                        |         78.14
@@ -1714,7 +1714,7 @@ SELECT * FROM view_sctbl3 WHERE (fields->>'c3')::bigint NOT IN (-1,1,0,2,-2) ORD
 
 -- Select many target aggregate in one query and combine with (fields->>'c1')::bool
 --Testcase 136:
-SELECT upper(fields->>'c2'), lower(fields->>'c2'), lower(tags->>'t1') FROM sctbl3 ORDER BY 1 ASC,2 DESC,3;
+SELECT upper(fields->>'c2' COLLATE "en_US"), lower(fields->>'c2' COLLATE "en_US"), lower(tags->>'t1') FROM sctbl3 ORDER BY 1 ASC,2 DESC,3;
                                       upper                                       |                                      lower                                       |    lower    
 ----------------------------------------------------------------------------------+----------------------------------------------------------------------------------+-------------
  `~!@#$%^&*()_+=-{}[]|:;<>?/.                                                     | `~!@#$%^&*()_+=-{}[]|:;<>?/.                                                     | 
@@ -1747,7 +1747,7 @@ SELECT max(time), min((fields->>'c3')::bigint), sum((fields->>'c3')::bigint ORDE
 (2 rows)
 
 --Testcase 138:
-SELECT (fields->>'c3')::bigint*(random()<=1)::int, (random()<=1)::int*(25-10)+10 FROM sctbl3 ORDER BY tags->>'t1' ASC,fields->>'c1' DESC;
+SELECT (fields->>'c3')::bigint*(random()<=1)::int, (random()<=1)::int*(25-10)+10 FROM sctbl3 ORDER BY (tags->>'t1' COLLATE "en_US") ASC,fields->>'c1' DESC;
    ?column?   | ?column? 
 --------------+----------
            32 |       25
@@ -1856,7 +1856,7 @@ SELECT count((fields->>'c3')::bigint), max((fields->>'c3')::bigint), sum((fields
 SELECT array_agg((fields->>'c3')::bigint-(fields->>'c3')::bigint-(fields->>'c3')::bigint), array_agg((fields->>'c3')::bigint/(fields->>'c3')::bigint*(fields->>'c3')::bigint), array_agg(((fields->>'c3')::bigint+(fields->>'c3')::bigint/(fields->>'c3')::bigint)*-1000), array_agg((fields->>'c3')::bigint*(fields->>'c3')::bigint-(fields->>'c3')::bigint), array_agg(((fields->>'c3')::bigint-(fields->>'c3')::bigint+(fields->>'c3')::bigint)+9999999999999.998) from sctbl3 GROUP BY (fields->>'c3')::bigint, (fields->>'c3')::bigint ORDER BY 1, 2, 3, 4, 5;
 ERROR:  bigint out of range
 --Testcase 146:
-SELECT avg((fields->>'c3')::bigint-(fields->>'c3')::bigint-(fields->>'c3')::bigint)-0.567-avg((fields->>'c3')::bigint/3+(fields->>'c3')::bigint)+17.55435, avg((fields->>'c3')::bigint+(fields->>'c3')::bigint/((fields->>'c3')::bigint+45))- -9.5+2*avg((fields->>'c3')::bigint), avg((fields->>'c3')::bigint/((fields->>'c3')::bigint-10.2)*(fields->>'c3')::bigint)+0.567+avg((fields->>'c3')::bigint)*4.5+(fields->>'c3')::bigint, avg((fields->>'c3')::bigint+(fields->>'c3')::bigint/((fields->>'c3')::bigint+5.6))+100-(fields->>'c3')::bigint from sctbl3 WHERE fields->>'c2'<='$' AND (fields->>'c3')::bigint<>-5 AND (fields->>'c3')::bigint<>10.746  GROUP BY fields->>'c3', fields->>'c3' ORDER BY 1,2,3,4 limit 5;
+SELECT avg((fields->>'c3')::bigint-(fields->>'c3')::bigint-(fields->>'c3')::bigint)-0.567-avg((fields->>'c3')::bigint/3+(fields->>'c3')::bigint)+17.55435, avg((fields->>'c3')::bigint+(fields->>'c3')::bigint/((fields->>'c3')::bigint+45))- -9.5+2*avg((fields->>'c3')::bigint), avg((fields->>'c3')::bigint/((fields->>'c3')::bigint-10.2)*(fields->>'c3')::bigint)+0.567+avg((fields->>'c3')::bigint)*4.5+(fields->>'c3')::bigint, avg((fields->>'c3')::bigint+(fields->>'c3')::bigint/((fields->>'c3')::bigint+5.6))+100-(fields->>'c3')::bigint from sctbl3 WHERE fields->>'c2'<='$' COLLATE "en_US" AND (fields->>'c3')::bigint<>-5 AND (fields->>'c3')::bigint<>10.746  GROUP BY fields->>'c3', fields->>'c3' ORDER BY 1,2,3,4 limit 5;
        ?column?       |        ?column?        |              ?column?              |         ?column?         
 ----------------------+------------------------+------------------------------------+--------------------------
    5.9873500000000000 |    24.5000000000000000 |            23.25930769230769230770 | 100.47169811320754716981
@@ -2008,7 +2008,7 @@ SELECT max(tags->>'t4'), max(tags->>'t5'), max((fields->>'c3')::bigint), count(*
 (2 rows)
 
 --Testcase 156:
-SELECT max(fields->>'c2'), min((fields->>'c3')::bigint), max((fields->>'c3')::bigint), max((fields->>'c11')::bigint), max((fields->>'c6')::double precision), max((fields->>'c7')::double precision), max((fields->>'c8')::float), max (20) from sctbl3 GROUP BY fields->>'c3' ORDER BY (fields->>'c3')::bigint;
+SELECT max(fields->>'c2' COLLATE "en_US"), min((fields->>'c3')::bigint), max((fields->>'c3')::bigint), max((fields->>'c11')::bigint), max((fields->>'c6')::double precision), max((fields->>'c7')::double precision), max((fields->>'c8')::float), max (20) from sctbl3 GROUP BY fields->>'c3' ORDER BY (fields->>'c3')::bigint;
                                        max                                        |     min      |     max      | max  |     max     |       max       |      max      | max 
 ----------------------------------------------------------------------------------+--------------+--------------+------+-------------+-----------------+---------------+-----
  ^%(@#%^(@#%&@#)%^)!^%)!)%                                                        | -36854775808 | -36854775808 |      |             |                 |               |  20
@@ -2228,7 +2228,7 @@ SELECT time, fields->>'c2' c2, fields->>'c15' c15, tags->>'t1' t1, (tags->>'t3')
 (5 rows)
 
 --Testcase 172:
-SELECT max(time), max(7), max((fields->>'c7')::double precision)+17, max((fields->>'c11')::bigint)+10, max((fields->>'c3')::bigint), max((fields->>'c14')::bigint)/2 FROM ( SELECT * FROM sctbl3 WHERE (fields->>'c3')::bigint>-1000 AND (fields->>'c3')::bigint<1000 ) AS sctbl3 GROUP BY fields->>'c2' ORDER BY fields->>'c2';
+SELECT max(time), max(7), max((fields->>'c7')::double precision)+17, max((fields->>'c11')::bigint)+10, max((fields->>'c3')::bigint), max((fields->>'c14')::bigint)/2 FROM ( SELECT * FROM sctbl3 WHERE (fields->>'c3')::bigint>-1000 AND (fields->>'c3')::bigint<1000 ) AS sctbl3 GROUP BY (fields->>'c2' COLLATE "en_US") ORDER BY (fields->>'c2' COLLATE "en_US");
               max              | max |    ?column?     | ?column? | max | ?column? 
 -------------------------------+-----+-----------------+----------+-----+----------
  2020-01-06 01:00:00+00        |   7 |                 |          |  -2 |         
@@ -2283,7 +2283,7 @@ SELECT sqrt(abs((fields->>'c3')::bigint)), sqrt(abs((fields->>'c3')::bigint)), s
 (1 row)
 
 --Testcase 175:
-SELECT * FROM ( SELECT tags->>'t1' t1, (tags->>'t2')::int t2, (tags->>'t3')::double precision t3, tags->>'t4' t4, tags->>'t5' t5, fields->>'c2' c2, (fields->>'c3')::bigint c3 FROM sctbl3 WHERE (fields->>'c13')::int>-1000 OR (fields->>'c14')::bigint<1000 ) AS tb3 WHERE c3 <-1 AND c2 > 'KissMe' ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 5 OFFSET 0;
+SELECT * FROM ( SELECT tags->>'t1' t1, (tags->>'t2')::int t2, (tags->>'t3')::double precision t3, tags->>'t4' t4, tags->>'t5' t5, fields->>'c2' c2, (fields->>'c3')::bigint c3 FROM sctbl3 WHERE (fields->>'c13')::int>-1000 OR (fields->>'c14')::bigint<1000 ) AS tb3 WHERE c3 <-1 AND c2 > 'KissMe' ORDER BY t1 COLLATE "en_US" DESC,2 ASC,3 DESC,4,5 LIMIT 5 OFFSET 0;
    t1   | t2 |   t3    | t4  |       t5       |     c2     |     c3     
 --------+----+---------+-----+----------------+------------+------------
  'tag2' |  2 |  741.14 | 4i  | 'THisiSString' | wenzani    |        -98
@@ -2370,7 +2370,7 @@ SELECT bit_or((fields->>'c3')::bigint), bit_or((fields->>'c3')::bigint/2), (tags
 (2 rows)
 
 --Testcase 185:
-SELECT bool_and((fields->>'c11')::bigint>0), bool_and((fields->>'c13')::int<0), bool_and((fields->>'c3')::bigint<(fields->>'c3')::bigint), bool_and((fields->>'c7')::double precision>=(fields->>'c8')::float) FROM view_sctbl3 GROUP BY time, tags->>'t1', tags->>'t2',tags->>'t3' ORDER BY tags->>'t1' DESC,(tags->>'t2')::float, (tags->>'t3')::double precision;
+SELECT bool_and((fields->>'c11')::bigint>0), bool_and((fields->>'c13')::int<0), bool_and((fields->>'c3')::bigint<(fields->>'c3')::bigint), bool_and((fields->>'c7')::double precision>=(fields->>'c8')::float) FROM view_sctbl3 GROUP BY time, (tags->>'t1' COLLATE "en_US"), tags->>'t2',tags->>'t3' ORDER BY (tags->>'t1' COLLATE "en_US") DESC,(tags->>'t2')::float, (tags->>'t3')::double precision;
  bool_and | bool_and | bool_and | bool_and 
 ----------+----------+----------+----------
  t        | f        | f        | f
@@ -2422,7 +2422,7 @@ SELECT time,tags->>'t1' t1,(tags->>'t2')::int t2,(tags->>'t3')::double precision
 
 -- Select many target aggregate in one query and combine with condition
 --Testcase 191:
-SELECT count((fields->>'c1')::bool)+count(fields->>'c2')-2*count((fields->>'c3')::bigint), count((fields->>'c3')::bigint)/count((fields->>'c5')::bool)-(fields->>'c3')::bigint, count((fields->>'c11')::bigint-(fields->>'c14')::bigint), 2*count(*) from sctbl3 GROUP BY fields->>'c5', fields->>'c3', fields->>'c1', fields->>'c20', tags->>'t5' order by tags->>'t5', fields->>'c1', (fields->>'c20')::int limit 1;
+SELECT count((fields->>'c1')::bool)+count(fields->>'c2')-2*count((fields->>'c3')::bigint), count((fields->>'c3')::bigint)/count((fields->>'c5')::bool)-(fields->>'c3')::bigint, count((fields->>'c11')::bigint-(fields->>'c14')::bigint), 2*count(*) from sctbl3 GROUP BY fields->>'c5', fields->>'c3', fields->>'c1', fields->>'c20', (tags->>'t5' COLLATE "en_US") order by (tags->>'t5' COLLATE "en_US"), fields->>'c1', (fields->>'c20')::int limit 1;
  ?column? | ?column?  | count | ?column? 
 ----------+-----------+-------+----------
         0 | 368545808 |     1 |        2

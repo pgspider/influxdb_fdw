@@ -198,6 +198,7 @@ ALTER SERVER testserver1 OPTIONS (
 	--requirepeer 'value',
 	-- krbsrvname 'value',
 	-- gsslib 'value',
+	-- gssdelegation 'value'
 	--replication 'value'
 );
 
@@ -403,7 +404,7 @@ EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM ft1 t1 WHERE c8 = 'foo';  -- can't be
 EXPLAIN (VERBOSE, COSTS OFF)
   SELECT * FROM "S 1"."T 1" a, ft2 b WHERE a."C 1" = 47 AND b.c1 = a.c2;
 --Testcase 88:
-SELECT * FROM ft2 a, ft2 b WHERE a.c1 = 47 AND b.c1 = a.c2;
+SELECT * FROM "S 1"."T 1" a, ft2 b WHERE a."C 1" = 47 AND b.c1 = a.c2;
 
 -- check both safe and unsafe join conditions
 --Testcase 89:
@@ -537,12 +538,27 @@ SELECT * FROM ft1 WHERE CASE c3 WHEN c6 THEN true ELSE c3 < 'bar' END;
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT * FROM ft1 WHERE CASE c3 COLLATE "C" WHEN c6 THEN true ELSE c3 < 'bar' END;
 
--- check schema-qualification of regconfig constant
+-- a regconfig constant referring to this text search configuration
+-- is initially unshippable
+--Testcase 822:
 CREATE TEXT SEARCH CONFIGURATION public.custom_search
   (COPY = pg_catalog.english);
+--Testcase 823:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT c1, to_tsvector('custom_search'::regconfig, c3) FROM ft1
 WHERE c1 = 642 AND length(to_tsvector('custom_search'::regconfig, c3)) > 0;
+--Testcase 824:
+SELECT c1, to_tsvector('custom_search'::regconfig, c3) FROM ft1
+WHERE c1 = 642 AND length(to_tsvector('custom_search'::regconfig, c3)) > 0;
+-- but if it's in a shippable extension, it can be shipped
+ALTER EXTENSION influxdb_fdw ADD TEXT SEARCH CONFIGURATION public.custom_search;
+-- however, that doesn't flush the shippability cache, so do a quick reconnect
+\c -
+--Testcase 833:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT c1, to_tsvector('custom_search'::regconfig, c3) FROM ft1
+WHERE c1 = 642 AND length(to_tsvector('custom_search'::regconfig, c3)) > 0;
+--Testcase 834:
 SELECT c1, to_tsvector('custom_search'::regconfig, c3) FROM ft1
 WHERE c1 = 642 AND length(to_tsvector('custom_search'::regconfig, c3)) > 0;
 
@@ -799,6 +815,9 @@ EXPLAIN (VERBOSE, COSTS OFF)
 SELECT t1."C 1" FROM "S 1"."T 1" t1, LATERAL (SELECT DISTINCT t2.c1, t3.c1 FROM ft1 t2, ft2 t3 WHERE t2.c1 = t3.c1 AND t2.c2 = t1.c2) q ORDER BY t1."C 1" OFFSET 10 LIMIT 10;
 --Testcase 192:
 SELECT t1."C 1" FROM "S 1"."T 1" t1, LATERAL (SELECT DISTINCT t2.c1, t3.c1 FROM ft1 t2, ft2 t3 WHERE t2.c1 = t3.c1 AND t2.c2 = t1.c2) q ORDER BY t1."C 1" OFFSET 10 LIMIT 10;
+-- join with pseudoconstant quals, not pushed down.
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT t1.c1, t2.c1 FROM ft1 t1 JOIN ft2 t2 ON (t1.c1 = t2.c1 AND CURRENT_USER = SESSION_USER) ORDER BY t1.c3, t1.c1 OFFSET 100 LIMIT 10;
 
 -- non-Var items in targetlist of the nullable rel of a join preventing
 -- push-down in some cases
@@ -850,13 +869,15 @@ RESET enable_hashjoin;
 
 -- test that add_paths_with_pathkeys_for_rel() arranges for the epq_path to
 -- return columns needed by the parent ForeignScan node
+--Testcase 825:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT * FROM local_tbl LEFT JOIN (SELECT ft1.*, COALESCE(ft1.c3 || ft2.c3, 'foobar') FROM ft1 INNER JOIN ft2 ON (ft1.c1 = ft2.c1 AND ft1.c1 < 100)) ss ON (local_tbl.c1 = ss.c1) ORDER BY local_tbl.c1 FOR UPDATE OF local_tbl;
 
 -- ALTER SERVER loopback OPTIONS (DROP extensions);
 -- ALTER SERVER loopback OPTIONS (ADD fdw_startup_cost '10000.0');
+--Testcase 826:
 EXPLAIN (VERBOSE, COSTS OFF)
-SELECT * FROM local_tbl LEFT JOIN (SELECT ft1.* FROM ft1 INNER JOIN ft2 ON (ft1.c1 = ft2.c1 AND ft1.c1 < 100 AND ft1.c1 = influxdb_fdw_abs(ft2.c2))) ss ON (local_tbl.c3 = ss.c3) ORDER BY local_tbl.c1 FOR UPDATE OF local_tbl;
+SELECT * FROM local_tbl LEFT JOIN (SELECT ft1.* FROM ft1 INNER JOIN ft2 ON (ft1.c1 = ft2.c1 AND ft1.c1 < 100 AND (ft1.c1 - influxdb_fdw_abs(ft2.c2)) = 0)) ss ON (local_tbl.c3 = ss.c3) ORDER BY local_tbl.c1 FOR UPDATE OF local_tbl;
 -- ALTER SERVER loopback OPTIONS (DROP fdw_startup_cost);
 -- ALTER SERVER loopback OPTIONS (ADD extensions 'influxdb_fdw');
 
@@ -907,6 +928,29 @@ SELECT t1.c1, t2.c2 FROM v4 t1 LEFT JOIN ft5 t2 ON (t1.c1 = t2.c1) ORDER BY t1.c
 --Testcase 223:
 ALTER VIEW v4 OWNER TO regress_view_owner;
 
+-- ====================================================================
+-- Check that userid to use when querying the remote table is correctly
+-- propagated into foreign rels present in subqueries under an UNION ALL
+-- ====================================================================
+CREATE ROLE regress_view_owner_another;
+ALTER VIEW v4 OWNER TO regress_view_owner_another;
+GRANT SELECT ON ft4 TO regress_view_owner_another;
+-- ALTER FOREIGN TABLE ft4 OPTIONS (ADD use_remote_estimate 'true');
+-- The following should query the remote backing table of ft4 as user
+-- regress_view_owner_another, the view owner, though it fails as expected
+-- due to the lack of a user mapping for that user.
+EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM v4;
+-- Likewise, but with the query under an UNION ALL
+EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM (SELECT * FROM v4 UNION ALL SELECT * FROM v4);
+-- Should not get that error once a user mapping is created
+CREATE USER MAPPING FOR regress_view_owner_another SERVER influxdb_svr OPTIONS (:AUTHENTICATION);
+EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM v4;
+EXPLAIN (VERBOSE, COSTS OFF) SELECT * FROM (SELECT * FROM v4 UNION ALL SELECT * FROM v4);
+DROP USER MAPPING FOR regress_view_owner_another SERVER influxdb_svr;
+DROP OWNED BY regress_view_owner_another;
+DROP ROLE regress_view_owner_another;
+-- ALTER FOREIGN TABLE ft4 OPTIONS (SET use_remote_estimate 'false');
+
 -- cleanup
 --Testcase 224:
 DROP OWNED BY regress_view_owner;
@@ -956,11 +1000,13 @@ select c2/2, sum(c2) * (c2/2) from ft1 group by c2/2 order by c2/2;
 select c2/2, sum(c2) * (c2/2) from ft1 group by c2/2 order by c2/2;
 
 -- Aggregates in subquery are pushed down.
+set enable_incremental_sort = off;
 --Testcase 236:
 explain (verbose, costs off)
 select count(x.a), sum(x.a) from (select c2 a, sum(c1) b from ft1 group by c2, sqrt(c1) order by 1, 2) x;
 --Testcase 237:
 select count(x.a), sum(x.a) from (select c2 a, sum(c1) b from ft1 group by c2, sqrt(c1) order by 1, 2) x;
+reset enable_incremental_sort;
 
 -- Aggregate is still pushed down by taking unshippable expression out
 --Testcase 238:
@@ -1229,11 +1275,13 @@ alter extension influxdb_fdw add operator public.=^(int, int);
 alter extension influxdb_fdw add operator public.>^(int, int);
 
 -- Now this will be pushed as sort operator is part of the extension.
+-- alter server loopback options (add fdw_tuple_cost '0.5');
 --Testcase 305:
 explain (verbose, costs off)
 select array_agg(c1 order by c1 using operator(public.<^)) from ft2 where c2 = 6 and c1 < 100 group by c2;
 --Testcase 306:
 select array_agg(c1 order by c1 using operator(public.<^)) from ft2 where c2 = 6 and c1 < 100 group by c2;
+-- alter server loopback options (drop fdw_tuple_cost);
 
 -- This should be pushed too.
 -- Influx not support user-defined operator
@@ -2023,9 +2071,12 @@ SELECT * FROM foreign_tbl;
 
 -- We don't allow batch insert when there are any WCO constraints
 ALTER SERVER influxdb_svr OPTIONS (ADD batch_size '10');
+--Testcase 827:
 EXPLAIN (VERBOSE, COSTS OFF)
 INSERT INTO rw_view VALUES (0, 15), (0, 5);
+--Testcase 828:
 INSERT INTO rw_view VALUES (0, 15), (0, 5); -- should fail
+--Testcase 829:
 SELECT * FROM foreign_tbl;
 ALTER SERVER influxdb_svr OPTIONS (DROP batch_size);
 
@@ -2089,9 +2140,12 @@ SELECT * FROM foreign_tbl;
 
 -- We don't allow batch insert when there are any WCO constraints
 ALTER SERVER influxdb_svr OPTIONS (ADD batch_size '10');
+--Testcase 830:
 EXPLAIN (VERBOSE, COSTS OFF)
 INSERT INTO rw_view VALUES (0, 15), (0, 5);
+--Testcase 831:
 INSERT INTO rw_view VALUES (0, 15), (0, 5); -- should fail
+--Testcase 832:
 SELECT * FROM foreign_tbl;
 ALTER SERVER influxdb_svr OPTIONS (DROP batch_size);
 
@@ -2106,6 +2160,46 @@ DROP TABLE parent_tbl CASCADE;
 
 --Testcase 525:
 DROP FUNCTION row_before_insupd_trigfunc;
+
+-- Try a more complex permutation of WCO where there are multiple levels of
+-- partitioned tables with columns not all in the same order
+--Testcase 835:
+CREATE TABLE parent_tbl (a int, b text, c numeric) PARTITION BY RANGE(a);
+--Testcase 836:
+CREATE TABLE sub_parent (c numeric, a int, b text) PARTITION BY RANGE(a);
+ALTER TABLE parent_tbl ATTACH PARTITION sub_parent FOR VALUES FROM (1) TO (10);
+--Testcase 837:
+CREATE TABLE child_local (b text, c numeric, a int);
+--Testcase 838:
+CREATE FOREIGN TABLE child_foreign (b text, c numeric, a int)
+  SERVER influxdb_svr OPTIONS (table 'child_local');
+ALTER TABLE sub_parent ATTACH PARTITION child_foreign FOR VALUES FROM (1) TO (10);
+--Testcase 839:
+CREATE VIEW rw_view AS SELECT * FROM parent_tbl WHERE a < 5 WITH CHECK OPTION;
+
+-- Not support partition insert
+--Testcase 840:
+INSERT INTO parent_tbl (a) VALUES(1),(5);
+-- UPDATE is not supported
+--Testcase 841:
+EXPLAIN (VERBOSE, COSTS OFF)
+UPDATE rw_view SET b = 'text', c = 123.456;
+-- UPDATE is not supported
+--Testcase 842:
+UPDATE rw_view SET b = 'text', c = 123.456;
+--Testcase 843:
+SELECT * FROM parent_tbl ORDER BY a;
+
+--Testcase 844:
+DROP VIEW rw_view;
+--Testcase 845:
+DROP TABLE child_local;
+--Testcase 846:
+DROP FOREIGN TABLE child_foreign;
+--Testcase 847:
+DROP TABLE sub_parent;
+--Testcase 848:
+DROP TABLE parent_tbl;
 
 -- ===================================================================
 -- test serial columns (ie, sequence-based defaults)
@@ -2187,6 +2281,36 @@ select * from gloc1;
 select * from grem1;
 --Testcase 772:
 delete from grem1;
+-- batch insert with foreign partitions.
+-- This schema uses two partitions, one local and one remote with a modulo
+-- to loop across all of them in batches.
+--Testcase 849:
+create table tab_batch_local (id int, data text);
+--Testcase 850:
+insert into tab_batch_local select i, 'test'|| i from generate_series(1, 45) i;
+--Testcase 851:
+create table tab_batch_sharded (id int, data text) partition by hash(id);
+--Testcase 852:
+create table tab_batch_sharded_p0 partition of tab_batch_sharded
+  for values with (modulus 2, remainder 0);
+--Testcase 853:
+create table tab_batch_sharded_p1_remote (id int, data text);
+--Testcase 854:
+create foreign table tab_batch_sharded_p1 partition of tab_batch_sharded
+  for values with (modulus 2, remainder 1)
+  server influxdb_svr options (table 'tab_batch_sharded_p1_remote');
+-- Not support partition insert
+--Testcase 855:
+insert into tab_batch_sharded select * from tab_batch_local;
+--Testcase 856:
+select count(*) from tab_batch_sharded;
+--Testcase 857:
+drop table tab_batch_local;
+--Testcase 858:
+drop table tab_batch_sharded;
+--Testcase 859:
+drop table tab_batch_sharded_p1_remote;
+
 --Testcase 773:
 alter server influxdb_svr options (drop batch_size);
 
@@ -2204,10 +2328,10 @@ BEGIN
 END;$$;
 
 --Testcase 541:
-CREATE TRIGGER trig_stmt_before BEFORE DELETE OR INSERT OR UPDATE ON rem1
+CREATE TRIGGER trig_stmt_before BEFORE DELETE OR INSERT OR UPDATE OR TRUNCATE ON rem1
 	FOR EACH STATEMENT EXECUTE PROCEDURE trigger_func();
 --Testcase 542:
-CREATE TRIGGER trig_stmt_after AFTER DELETE OR INSERT OR UPDATE ON rem1
+CREATE TRIGGER trig_stmt_after AFTER DELETE OR INSERT OR UPDATE OR TRUNCATE ON rem1
 	FOR EACH STATEMENT EXECUTE PROCEDURE trigger_func();
 
 --Testcase 543:
@@ -2267,6 +2391,7 @@ delete from rem1;
 insert into rem1 values(1,'insert');
 --update rem1 set f2 = 'update' where f1 = 1;
 --update rem1 set f2 = f2 || f2;
+--truncate rem1;
 
 
 -- cleanup
@@ -2922,6 +3047,10 @@ select tableoid::regclass, * FROM remp2;
 
 delete from itrtest;
 
+-- MERGE ought to fail cleanly
+merge into itrtest using (select 1, 'foo') as source on (true)
+  when matched then do nothing;
+
 create unique index loct1_idx on loct1 (a);
 
 -- DO NOTHING without an inference specification is supported
@@ -3088,6 +3217,28 @@ copy remp1 from stdin;
 
 select tableoid::regclass, * FROM remp1;
 
+delete from ctrtest;
+
+-- Test copy tuple routing with the batch_size option enabled
+alter server loopback options (add batch_size '2');
+
+copy ctrtest from stdin;
+1	foo
+1	bar
+2	baz
+2	qux
+1	test1
+2	test2
+\.
+
+select tableoid::regclass, * FROM ctrtest;
+select tableoid::regclass, * FROM remp1;
+select tableoid::regclass, * FROM remp2;
+
+delete from ctrtest;
+
+alter server loopback options (drop batch_size);
+
 drop table ctrtest;
 drop table loct1;
 drop table loct2;
@@ -3241,6 +3392,86 @@ commit;
 select * from rem3;
 drop foreign table rem3;
 drop table loc3;
+
+-- Test COPY FROM with the batch_size option enabled
+alter server loopback options (add batch_size '2');
+
+-- Test basic functionality
+copy rem2 from stdin;
+1	foo
+2	bar
+3	baz
+\.
+select * from rem2;
+
+delete from rem2;
+
+-- Test check constraints
+alter table loc2 add constraint loc2_f1positive check (f1 >= 0);
+alter foreign table rem2 add constraint rem2_f1positive check (f1 >= 0);
+
+-- check constraint is enforced on the remote side, not locally
+copy rem2 from stdin;
+1	foo
+2	bar
+3	baz
+\.
+copy rem2 from stdin; -- ERROR
+-1	xyzzy
+\.
+select * from rem2;
+
+alter foreign table rem2 drop constraint rem2_f1positive;
+alter table loc2 drop constraint loc2_f1positive;
+
+delete from rem2;
+
+-- Test remote triggers
+create trigger trig_row_before_insert before insert on loc2
+	for each row execute procedure trig_row_before_insupdate();
+
+-- The new values are concatenated with ' triggered !'
+copy rem2 from stdin;
+1	foo
+2	bar
+3	baz
+\.
+select * from rem2;
+
+drop trigger trig_row_before_insert on loc2;
+
+delete from rem2;
+
+create trigger trig_null before insert on loc2
+	for each row execute procedure trig_null();
+
+-- Nothing happens
+copy rem2 from stdin;
+1	foo
+2	bar
+3	baz
+\.
+select * from rem2;
+
+drop trigger trig_null on loc2;
+
+delete from rem2;
+
+-- Check with zero-column foreign table; batch insert will be disabled
+alter table loc2 drop column f1;
+alter table loc2 drop column f2;
+alter table rem2 drop column f1;
+alter table rem2 drop column f2;
+copy rem2 from stdin;
+
+
+
+\.
+select * from rem2;
+
+delete from rem2;
+
+alter server loopback options (drop batch_size);
 */
 
 /*
@@ -3621,11 +3852,7 @@ SELECT 1 FROM ft1_nopw LIMIT 1;
 -- If we add a password to the connstr it'll fail, because we don't allow passwords
 -- in connstrs only in user mappings.
 
-DO $d$
-    BEGIN
-        EXECUTE $$ALTER SERVER loopback_nopw OPTIONS (ADD password 'dummypw')$$;
-    END;
-$d$;
+ALTER SERVER loopback_nopw OPTIONS (ADD password 'dummypw');
 
 -- If we add a password for our user mapping instead, we should get a different
 -- error because the password wasn't actually *used* when we run with trust auth.
@@ -3697,18 +3924,16 @@ SELECT count(*) FROM ft1;
 -- so that we can easily terminate the connection later.
 ALTER SERVER loopback OPTIONS (application_name 'fdw_retry_check');
 
--- If debug_discard_caches is active, it results in
--- dropping remote connections after every transaction, making it
--- impossible to test termination meaningfully.  So turn that off
--- for this test.
-SET debug_discard_caches = 0;
-
 -- Make sure we have a remote connection.
 SELECT 1 FROM ft1 LIMIT 1;
 
 -- Terminate the remote connection and wait for the termination to complete.
-SELECT pg_terminate_backend(pid, 180000) FROM pg_stat_activity
+-- (If a cache flush happens, the remote connection might have already been
+-- dropped; so code this step in a way that doesn't fail if no connection.)
+DO $$ BEGIN
+PERFORM pg_terminate_backend(pid, 180000) FROM pg_stat_activity
 	WHERE application_name = 'fdw_retry_check';
+END $$;
 
 -- This query should detect the broken connection when starting new remote
 -- transaction, reestablish new connection, and then succeed.
@@ -3718,16 +3943,16 @@ SELECT 1 FROM ft1 LIMIT 1;
 -- If we detect the broken connection when starting a new remote
 -- subtransaction, we should fail instead of establishing a new connection.
 -- Terminate the remote connection and wait for the termination to complete.
-SELECT pg_terminate_backend(pid, 180000) FROM pg_stat_activity
+DO $$ BEGIN
+PERFORM pg_terminate_backend(pid, 180000) FROM pg_stat_activity
 	WHERE application_name = 'fdw_retry_check';
+END $$;
 SAVEPOINT s;
 -- The text of the error might vary across platforms, so only show SQLSTATE.
 \set VERBOSITY sqlstate
 SELECT 1 FROM ft1 LIMIT 1;    -- should fail
 \set VERBOSITY default
 COMMIT;
-
-RESET debug_discard_caches;
 
 -- =============================================================================
 -- test connection invalidation cases and postgres_fdw_get_connections function
@@ -3912,18 +4137,6 @@ INSERT INTO ftable SELECT * FROM generate_series(11, 31) i;
 INSERT INTO ftable VALUES (32);
 --Testcase 715:
 INSERT INTO ftable VALUES (33), (34);
---Testcase 716:
-SELECT COUNT(*) FROM ftable;
---Testcase 717:
-DELETE FROM batch_table;
---Testcase 718:
-DROP FOREIGN TABLE ftable;
-
--- try if large batches exceed max number of bind parameters
---Testcase 719:
-CREATE FOREIGN TABLE ftable ( x int ) SERVER influxdb_svr OPTIONS ( table 'batch_table', batch_size '100000' );
---Testcase 720:
-INSERT INTO ftable SELECT * FROM generate_series(1, 70000) i;
 --Testcase 721:
 SELECT COUNT(*) FROM ftable;
 --Testcase 722:
@@ -3999,8 +4212,16 @@ INSERT INTO batch_table SELECT * FROM generate_series(1, 66) i;
 --Testcase 737:
 SELECT COUNT(*) FROM batch_table;
 
--- Check that enabling batched inserts doesn't interfere with cross-partition
--- updates
+-- Clean up
+--Testcase 860:
+DROP TABLE batch_table;
+--Testcase 861:
+DROP TABLE batch_table_p0;
+--Testcase 862:
+DROP TABLE batch_table_p1;
+
+-- Check that batched mode also works for some inserts made during
+-- cross-partition updates
 --Testcase 738:
 CREATE TABLE batch_cp_upd_test (a int) PARTITION BY LIST (a);
 --Testcase 739:
@@ -4012,20 +4233,66 @@ CREATE FOREIGN TABLE batch_cp_upd_test1_f
 	SERVER influxdb_svr
 	OPTIONS (table 'batch_cp_upd_test1', batch_size '10');
 --Testcase 741:
-CREATE TABLE batch_cp_up_test1 PARTITION OF batch_cp_upd_test
+CREATE TABLE batch_cp_upd_test2 PARTITION OF batch_cp_upd_test
 	FOR VALUES IN (2);
 --Testcase 742:
-INSERT INTO batch_cp_upd_test VALUES (1), (2);
+CREATE TABLE batch_cp_upd_test3 (LIKE batch_cp_upd_test);
+--Testcase 863:
+CREATE FOREIGN TABLE batch_cp_upd_test3_f
+	PARTITION OF batch_cp_upd_test
+	FOR VALUES IN (3)
+	SERVER influxdb_svr
+	OPTIONS (table 'batch_cp_upd_test3', batch_size '1');
 
--- The following moves a row from the local partition to the foreign one
--- influxdb_fdw does not support UPDATE
--- UPDATE batch_cp_upd_test t SET a = 1 FROM (VALUES (1), (2)) s(a) WHERE t.a = s.a;
---Testcase 743:
-SELECT tableoid::regclass, * FROM batch_cp_upd_test;
+-- Create statement triggers on remote tables that "log" any INSERTs
+-- performed on them.
+--Testcase 864:
+CREATE TABLE cmdlog (cmd text);
+--Testcase 865:
+CREATE FUNCTION log_stmt() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+	BEGIN INSERT INTO public.cmdlog VALUES (TG_OP || ' on ' || TG_RELNAME); RETURN NULL; END;
+$$;
+--Testcase 866:
+CREATE TRIGGER stmt_trig AFTER INSERT ON batch_cp_upd_test1
+	FOR EACH STATEMENT EXECUTE FUNCTION log_stmt();
+--Testcase 867:
+CREATE TRIGGER stmt_trig AFTER INSERT ON batch_cp_upd_test3
+	FOR EACH STATEMENT EXECUTE FUNCTION log_stmt();
+
+-- This update moves rows from the local partition 'batch_cp_upd_test2' to the
+-- foreign partition 'batch_cp_upd_test1', one that has insert batching
+-- enabled, so a single INSERT for both rows.
+--Testcase 868:
+INSERT INTO batch_cp_upd_test VALUES (2), (2);
+-- influxdb_fdw does not support update
+-- UPDATE batch_cp_upd_test t SET a = 1 FROM (VALUES (1), (2)) s(a) WHERE t.a = s.a AND s.a = 2;
+
+-- This one moves rows from the local partition 'batch_cp_upd_test2' to the
+-- foreign partition 'batch_cp_upd_test2', one that has insert batching
+-- disabled, so separate INSERTs for the two rows.
+--Testcase 869:
+INSERT INTO batch_cp_upd_test VALUES (2), (2);
+-- UPDATE batch_cp_upd_test t SET a = 3 FROM (VALUES (1), (2)) s(a) WHERE t.a = s.a AND s.a = 2;
+
+--Testcase 870:
+SELECT tableoid::regclass, * FROM batch_cp_upd_test ORDER BY 1;
+
+-- Should see 1 INSERT on batch_cp_upd_test1 and 2 on batch_cp_upd_test3 as
+-- described above.
+--Testcase 871:
+SELECT * FROM cmdlog ORDER BY 1;
 
 -- Clean up
---Testcase 744:
-DROP TABLE batch_table, batch_cp_upd_test, batch_table_p0, batch_table_p1 CASCADE;
+--Testcase 872:
+DROP TABLE batch_cp_upd_test;
+--Testcase 873:
+DROP TABLE batch_cp_upd_test1;
+--Testcase 874:
+DROP TABLE batch_cp_upd_test3;
+--Testcase 875:
+DROP TABLE cmdlog;
+--Testcase 876:
+DROP FUNCTION log_stmt();
 
 -- influxdb_fdw does not support partition insert
 -- Use partitioning
@@ -4064,12 +4331,133 @@ SELECT COUNT(*) FROM batch_table;
 --Testcase 755:
 SELECT * FROM batch_table ORDER BY x;
 
+-- Clean up
+--Testcase 877:
+DROP TABLE batch_table;
+--Testcase 878:
+DROP TABLE batch_table_p0;
+--Testcase 879:
+DROP TABLE batch_table_p1;
+
 --Testcase 756:
 ALTER SERVER influxdb_svr OPTIONS (DROP batch_size);
 
+-- Test that pending inserts are handled properly when needed
+--Testcase 880:
+CREATE TABLE batch_table (a text, b int);
+--Testcase 881:
+CREATE FOREIGN TABLE ftable (a text, b int)
+	SERVER influxdb_svr
+	OPTIONS (table 'batch_table', batch_size '2');
+--Testcase 882:
+CREATE TABLE ltable (a text, b int);
+--Testcase 883:
+CREATE FUNCTION ftable_rowcount_trigf() RETURNS trigger LANGUAGE plpgsql AS
+$$
+begin
+	raise notice '%: there are % rows in ftable',
+		TG_NAME, (SELECT count(*) FROM ftable);
+	if TG_OP = 'DELETE' then
+		return OLD;
+	else
+		return NEW;
+	end if;
+end;
+$$;
+--Testcase 884:
+CREATE TRIGGER ftable_rowcount_trigger
+BEFORE INSERT OR UPDATE OR DELETE ON ltable
+FOR EACH ROW EXECUTE PROCEDURE ftable_rowcount_trigf();
+
+--Testcase 885:
+WITH t AS (
+	INSERT INTO ltable VALUES ('AAA', 42), ('BBB', 42) RETURNING *
+)
+INSERT INTO ftable SELECT * FROM t;
+
+--Testcase 886:
+SELECT * FROM ltable;
+--Testcase 887:
+SELECT * FROM ftable;
+--Testcase 888:
+DELETE FROM ftable;
+
+--Testcase 889:
+WITH t AS (
+	UPDATE ltable SET b = b + 100 RETURNING *
+)
+INSERT INTO ftable SELECT * FROM t;
+
+--Testcase 890:
+SELECT * FROM ltable;
+--Testcase 891:
+SELECT * FROM ftable;
+--Testcase 892:
+DELETE FROM ftable;
+
+--Testcase 893:
+WITH t AS (
+	DELETE FROM ltable RETURNING *
+)
+INSERT INTO ftable SELECT * FROM t;
+
+--Testcase 894:
+SELECT * FROM ltable;
+--Testcase 895:
+SELECT * FROM ftable;
+--Testcase 896:
+DELETE FROM ftable;
+
 -- Clean up
---Testcase 757:
-DROP TABLE batch_table, batch_table_p0, batch_table_p1 CASCADE;
+--Testcase 897:
+DROP FOREIGN TABLE ftable;
+--Testcase 898:
+DROP TABLE batch_table;
+--Testcase 899:
+DROP TRIGGER ftable_rowcount_trigger ON ltable;
+--Testcase 900:
+DROP TABLE ltable;
+
+--Testcase 901:
+CREATE TABLE parent (a text, b int) PARTITION BY LIST (a);
+--Testcase 902:
+CREATE TABLE batch_table (a text, b int);
+--Testcase 903:
+CREATE FOREIGN TABLE ftable
+	PARTITION OF parent
+	FOR VALUES IN ('AAA')
+	SERVER influxdb_svr
+	OPTIONS (table 'batch_table', batch_size '2');
+--Testcase 904:
+CREATE TABLE ltable
+	PARTITION OF parent
+	FOR VALUES IN ('BBB');
+--Testcase 905:
+CREATE TRIGGER ftable_rowcount_trigger
+BEFORE INSERT ON ltable
+FOR EACH ROW EXECUTE PROCEDURE ftable_rowcount_trigf();
+
+-- Not support partition insert
+--Testcase 906:
+INSERT INTO parent VALUES ('AAA', 42), ('BBB', 42), ('AAA', 42), ('BBB', 42);
+
+--Testcase 907:
+SELECT tableoid::regclass, * FROM parent;
+
+-- Clean up
+--Testcase 908:
+DROP FOREIGN TABLE ftable;
+--Testcase 909:
+DROP TABLE batch_table;
+--Testcase 910:
+DROP TRIGGER ftable_rowcount_trigger ON ltable;
+--Testcase 911:
+DROP TABLE ltable;
+--Testcase 912:
+DROP TABLE parent;
+--Testcase 913:
+DROP FUNCTION ftable_rowcount_trigf;
+
 /* InfluxDB does not support partition table
 -- ===================================================================
 -- test asynchronous execution
@@ -4406,38 +4794,45 @@ ALTER FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (nonexistent 'fdw');
 -- so Influxdb_fdw not support application_name.
 -- test postgres_fdw.application_name GUC
 -- ===================================================================
---- Turn debug_discard_caches off for this test to make sure that
---- the remote connection is alive when checking its application_name.
-SET debug_discard_caches = 0;
+-- To avoid race conditions in checking the remote session's application_name,
+-- use this view to make the remote session itself read its application_name.
+CREATE VIEW my_application_name AS
+  SELECT application_name FROM pg_stat_activity WHERE pid = pg_backend_pid();
+
+CREATE FOREIGN TABLE remote_application_name (application_name text)
+  SERVER loopback2
+  OPTIONS (schema_name 'public', table_name 'my_application_name');
+
+SELECT count(*) FROM remote_application_name;
 
 -- Specify escape sequences in application_name option of a server
 -- object so as to test that they are replaced with status information
--- expectedly.
+-- expectedly.  Note that we are also relying on ALTER SERVER to force
+-- the remote session to be restarted with its new application name.
 --
 -- Since pg_stat_activity.application_name may be truncated to less than
 -- NAMEDATALEN characters, note that substring() needs to be used
 -- at the condition of test query to make sure that the string consisting
 -- of database name and process ID is also less than that.
 ALTER SERVER loopback2 OPTIONS (application_name 'fdw_%d%p');
-SELECT 1 FROM ft6 LIMIT 1;
-SELECT pg_terminate_backend(pid, 180000) FROM pg_stat_activity
+SELECT count(*) FROM remote_application_name
   WHERE application_name =
     substring('fdw_' || current_database() || pg_backend_pid() for
       current_setting('max_identifier_length')::int);
 
 -- postgres_fdw.application_name overrides application_name option
 -- of a server object if both settings are present.
+ALTER SERVER loopback2 OPTIONS (SET application_name 'fdw_wrong');
 SET postgres_fdw.application_name TO 'fdw_%a%u%%';
-SELECT 1 FROM ft6 LIMIT 1;
-SELECT pg_terminate_backend(pid, 180000) FROM pg_stat_activity
+SELECT count(*) FROM remote_application_name
   WHERE application_name =
     substring('fdw_' || current_setting('application_name') ||
       CURRENT_USER || '%' for current_setting('max_identifier_length')::int);
+RESET postgres_fdw.application_name;
 
 -- Test %c (session ID) and %C (cluster name) escape sequences.
-SET postgres_fdw.application_name TO 'fdw_%C%c';
-SELECT 1 FROM ft6 LIMIT 1;
-SELECT pg_terminate_backend(pid, 180000) FROM pg_stat_activity
+ALTER SERVER loopback2 OPTIONS (SET application_name 'fdw_%C%c');
+SELECT count(*) FROM remote_application_name
   WHERE application_name =
     substring('fdw_' || current_setting('cluster_name') ||
       to_hex(trunc(EXTRACT(EPOCH FROM (SELECT backend_start FROM
@@ -4445,15 +4840,17 @@ SELECT pg_terminate_backend(pid, 180000) FROM pg_stat_activity
       to_hex(pg_backend_pid())
       for current_setting('max_identifier_length')::int);
 
---Clean up
-RESET postgres_fdw.application_name;
-RESET debug_discard_caches;
+-- Clean up.
+DROP FOREIGN TABLE remote_application_name;
+DROP VIEW my_application_name;
 
 -- ===================================================================
--- test parallel commit
+-- test parallel commit and parallel abort
 -- ===================================================================
 ALTER SERVER loopback OPTIONS (ADD parallel_commit 'true');
+ALTER SERVER loopback OPTIONS (ADD parallel_abort 'true');
 ALTER SERVER loopback2 OPTIONS (ADD parallel_commit 'true');
+ALTER SERVER loopback2 OPTIONS (ADD parallel_abort 'true');
 
 CREATE TABLE ploc1 (f1 int, f2 text);
 CREATE FOREIGN TABLE prem1 (f1 int, f2 text)
@@ -4492,8 +4889,67 @@ COMMIT;
 SELECT * FROM prem1;
 SELECT * FROM prem2;
 
+BEGIN;
+INSERT INTO prem1 VALUES (105, 'test1');
+INSERT INTO prem2 VALUES (205, 'test2');
+ABORT;
+SELECT * FROM prem1;
+SELECT * FROM prem2;
+
+-- This tests executing DEALLOCATE ALL against foreign servers in parallel
+-- during post-abort
+BEGIN;
+SAVEPOINT s;
+INSERT INTO prem1 VALUES (105, 'test1');
+INSERT INTO prem2 VALUES (205, 'test2');
+ROLLBACK TO SAVEPOINT s;
+RELEASE SAVEPOINT s;
+INSERT INTO prem1 VALUES (105, 'test1');
+INSERT INTO prem2 VALUES (205, 'test2');
+ABORT;
+SELECT * FROM prem1;
+SELECT * FROM prem2;
+
 ALTER SERVER loopback OPTIONS (DROP parallel_commit);
+ALTER SERVER loopback OPTIONS (DROP parallel_abort);
 ALTER SERVER loopback2 OPTIONS (DROP parallel_commit);
+ALTER SERVER loopback2 OPTIONS (DROP parallel_abort);
+
+-- ===================================================================
+-- test for ANALYZE sampling
+-- ===================================================================
+
+CREATE TABLE analyze_table (id int, a text, b bigint);
+
+CREATE FOREIGN TABLE analyze_ftable (id int, a text, b bigint)
+       SERVER loopback OPTIONS (table_name 'analyze_rtable1');
+
+INSERT INTO analyze_table (SELECT x FROM generate_series(1,1000) x);
+ANALYZE analyze_table;
+
+SET default_statistics_target = 10;
+ANALYZE analyze_table;
+
+ALTER SERVER loopback OPTIONS (analyze_sampling 'invalid');
+
+ALTER SERVER loopback OPTIONS (analyze_sampling 'auto');
+ANALYZE analyze_table;
+
+ALTER SERVER loopback OPTIONS (SET analyze_sampling 'system');
+ANALYZE analyze_table;
+
+ALTER SERVER loopback OPTIONS (SET analyze_sampling 'bernoulli');
+ANALYZE analyze_table;
+
+ALTER SERVER loopback OPTIONS (SET analyze_sampling 'random');
+ANALYZE analyze_table;
+
+ALTER SERVER loopback OPTIONS (SET analyze_sampling 'off');
+ANALYZE analyze_table;
+
+-- cleanup
+DROP FOREIGN TABLE analyze_ftable;
+DROP TABLE analyze_table;
 */
 -- Clean-up
 --Testcase 786:
@@ -4549,8 +5005,6 @@ DROP SCHEMA IF EXISTS import_influx2 CASCADE;
 DROP SCHEMA IF EXISTS import_influx3 CASCADE;
 --Testcase 811:
 DROP SCHEMA IF EXISTS import_influx4 CASCADE;
---Testcase 812:
-DROP TABLE IF EXISTS batch_cp_upd_test1;
 
 --Testcase 758:
 DROP USER MAPPING FOR public SERVER testserver1;

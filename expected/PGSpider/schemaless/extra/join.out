@@ -71,6 +71,10 @@ INSERT INTO j2_tbl_nsc VALUES (0, NULL);
 --INSERT INTO J2_TBL VALUES (NULL, NULL);
 --Testcase 24:
 INSERT INTO j2_tbl_nsc VALUES (NULL, 0);
+--Testcase 560:
+CREATE FOREIGN TABLE onek (
+  fields jsonb OPTIONS (fields 'true')
+) SERVER influxdb_svr OPTIONS(schemaless 'true');
 --Testcase 25:
 CREATE FOREIGN TABLE tenk1 (
   fields jsonb OPTIONS (fields 'true')
@@ -1477,7 +1481,7 @@ SELECT * FROM ((SELECT (fields->>'i')::int i, (fields->>'j')::int j, fields->>'t
 ERROR:  invalid reference to FROM-clause entry for table "j1_tbl"
 LINE 1: ...::int k FROM J2_TBL) J2_TBL USING (i)) AS x WHERE J1_TBL.t =...
                                                              ^
-HINT:  There is an entry for table "j1_tbl", but it cannot be referenced from this part of the query.
+DETAIL:  There is an entry for table "j1_tbl", but it cannot be referenced from this part of the query.
 --Testcase 52:
 SELECT * FROM (SELECT (fields->>'i')::int i, (fields->>'j')::int j, fields->>'t' t FROM J1_TBL) J1_TBL JOIN (SELECT (fields->>'i')::int i, (fields->>'k')::int k FROM J2_TBL) J2_TBL USING (i) AS x WHERE x.i::int = 1;  -- ok
  i | j |  t  | k  
@@ -2239,8 +2243,8 @@ order by 1, 2;
 (5 rows)
 
 --
--- regression test: check a case where join_clause_is_movable_into() gives
--- an imprecise result, causing an assertion failure
+-- regression test: check a case where join_clause_is_movable_into()
+-- used to give an imprecise result, causing an assertion failure
 --
 --Testcase 130:
 select count(*)
@@ -2291,6 +2295,362 @@ where b.f1 = (t.fields->>'thousand')::int4 and a.f1 = b.f1 and (a.f1+b.f1+999) =
  f1 | f1 | thousand | tenthous 
 ----+----+----------+----------
 (0 rows)
+
+--
+-- checks for correct handling of quals in multiway outer joins
+--
+explain (costs off)
+select (t1.fields->>'f1')::int4 as f1
+from int4_tbl t1, int4_tbl t2
+  left join int4_tbl t3 on (t3.fields->>'f1')::int4 > 0
+  left join int4_tbl t4 on (t3.fields->>'f1')::int4 > 1
+where (t4.fields->>'f1')::int4 is null;
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ Nested Loop
+   ->  Nested Loop Left Join
+         Filter: (((t4.fields ->> 'f1'::text))::integer IS NULL)
+         ->  Foreign Scan on int4_tbl t2
+         ->  Materialize
+               ->  Nested Loop Left Join
+                     Join Filter: (((t3.fields ->> 'f1'::text))::integer > 1)
+                     ->  Foreign Scan on int4_tbl t3
+                     ->  Materialize
+                           ->  Foreign Scan on int4_tbl t4
+   ->  Materialize
+         ->  Foreign Scan on int4_tbl t1
+(12 rows)
+
+select (t1.fields->>'f1')::int4 as f1
+from int4_tbl t1, int4_tbl t2
+  left join int4_tbl t3 on (t3.fields->>'f1')::int4 > 0
+  left join int4_tbl t4 on (t3.fields->>'f1')::int4 > 1
+where (t4.fields->>'f1')::int4 is null;
+ f1 
+----
+(0 rows)
+
+explain (costs off)
+select *
+from int4_tbl t1 left join int4_tbl t2 on true
+  left join int4_tbl t3 on (t2.fields->>'f1')::int4 > 0
+  left join int4_tbl t4 on (t3.fields->>'f1')::int4 > 0;
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ Nested Loop Left Join
+   ->  Foreign Scan on int4_tbl t1
+   ->  Materialize
+         ->  Nested Loop Left Join
+               Join Filter: (((t3.fields ->> 'f1'::text))::integer > 0)
+               ->  Nested Loop Left Join
+                     Join Filter: (((t2.fields ->> 'f1'::text))::integer > 0)
+                     ->  Foreign Scan on int4_tbl t2
+                     ->  Materialize
+                           ->  Foreign Scan on int4_tbl t3
+               ->  Materialize
+                     ->  Foreign Scan on int4_tbl t4
+(12 rows)
+
+explain (costs off)
+select * from onek t1
+  left join onek t2 on (t1.fields->>'unique1')::int4 = (t2.fields->>'unique1')::int4
+  left join onek t3 on (t2.fields->>'unique1')::int4 != (t3.fields->>'unique1')::int4
+  left join onek t4 on (t3.fields->>'unique1')::int4 = (t4.fields->>'unique1')::int4;
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
+   Join Filter: (((t2.fields ->> 'unique1'::text))::integer <> ((t3.fields ->> 'unique1'::text))::integer)
+   ->  Merge Left Join
+         Merge Cond: ((((t1.fields ->> 'unique1'::text))::integer) = (((t2.fields ->> 'unique1'::text))::integer))
+         ->  Sort
+               Sort Key: (((t1.fields ->> 'unique1'::text))::integer)
+               ->  Foreign Scan on onek t1
+         ->  Sort
+               Sort Key: (((t2.fields ->> 'unique1'::text))::integer)
+               ->  Foreign Scan on onek t2
+   ->  Materialize
+         ->  Merge Left Join
+               Merge Cond: ((((t3.fields ->> 'unique1'::text))::integer) = (((t4.fields ->> 'unique1'::text))::integer))
+               ->  Sort
+                     Sort Key: (((t3.fields ->> 'unique1'::text))::integer)
+                     ->  Foreign Scan on onek t3
+               ->  Sort
+                     Sort Key: (((t4.fields ->> 'unique1'::text))::integer)
+                     ->  Foreign Scan on onek t4
+(19 rows)
+
+explain (costs off)
+select * from int4_tbl t1
+  left join (select now() from int4_tbl t2
+             left join int4_tbl t3 on (t2.fields->>'f1')::int4 = (t3.fields->>'f1')::int4
+             left join int4_tbl t4 on (t3.fields->>'f1')::int4 = (t4.fields->>'f1')::int4) s on true
+  inner join int4_tbl t5 on true;
+                                                        QUERY PLAN                                                         
+---------------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
+   ->  Nested Loop
+         ->  Foreign Scan on int4_tbl t5
+         ->  Materialize
+               ->  Foreign Scan on int4_tbl t1
+   ->  Materialize
+         ->  Merge Left Join
+               Merge Cond: ((((t2.fields ->> 'f1'::text))::integer) = ((t3.fields ->> 'f1'::text))::integer)
+               ->  Sort
+                     Sort Key: (((t2.fields ->> 'f1'::text))::integer)
+                     ->  Foreign Scan on int4_tbl t2
+               ->  Materialize
+                     ->  Merge Left Join
+                           Merge Cond: ((((t3.fields ->> 'f1'::text))::integer) = (((t4.fields ->> 'f1'::text))::integer))
+                           ->  Sort
+                                 Sort Key: (((t3.fields ->> 'f1'::text))::integer)
+                                 ->  Foreign Scan on int4_tbl t3
+                           ->  Sort
+                                 Sort Key: (((t4.fields ->> 'f1'::text))::integer)
+                                 ->  Foreign Scan on int4_tbl t4
+(20 rows)
+
+explain (costs off)
+select * from int4_tbl t1
+  left join int4_tbl t2 on true
+  left join int4_tbl t3 on true
+  left join int4_tbl t4 on (t2.fields->>'f1')::int4 = (t3.fields->>'f1')::int4;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
+   Join Filter: (((t2.fields ->> 'f1'::text))::integer = ((t3.fields ->> 'f1'::text))::integer)
+   ->  Nested Loop Left Join
+         ->  Nested Loop Left Join
+               ->  Foreign Scan on int4_tbl t1
+               ->  Materialize
+                     ->  Foreign Scan on int4_tbl t2
+         ->  Materialize
+               ->  Foreign Scan on int4_tbl t3
+   ->  Materialize
+         ->  Foreign Scan on int4_tbl t4
+(11 rows)
+
+explain (costs off)
+select * from int4_tbl t1
+  left join int4_tbl t2 on true
+  left join int4_tbl t3 on (t2.fields->>'f1')::int4 = (t3.fields->>'f1')::int4
+  left join int4_tbl t4 on (t3.fields->>'f1')::int4 != (t4.fields->>'f1')::int4;
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
+   ->  Foreign Scan on int4_tbl t1
+   ->  Materialize
+         ->  Nested Loop Left Join
+               Join Filter: (((t3.fields ->> 'f1'::text))::integer <> ((t4.fields ->> 'f1'::text))::integer)
+               ->  Merge Left Join
+                     Merge Cond: ((((t2.fields ->> 'f1'::text))::integer) = (((t3.fields ->> 'f1'::text))::integer))
+                     ->  Sort
+                           Sort Key: (((t2.fields ->> 'f1'::text))::integer)
+                           ->  Foreign Scan on int4_tbl t2
+                     ->  Sort
+                           Sort Key: (((t3.fields ->> 'f1'::text))::integer)
+                           ->  Foreign Scan on int4_tbl t3
+               ->  Materialize
+                     ->  Foreign Scan on int4_tbl t4
+(15 rows)
+
+explain (costs off)
+select * from int4_tbl t1
+  left join (int4_tbl t2 left join int4_tbl t3 on (t2.fields->>'f1')::int4 > 0) on (t2.fields->>'f1')::int4 > 1
+  left join int4_tbl t4 on (t2.fields->>'f1')::int4 > 2 and (t3.fields->>'f1')::int4 > 3
+where (t1.fields->>'f1')::int4 = coalesce((t2.fields->>'f1')::int4, 1);
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
+   Join Filter: ((((t2.fields ->> 'f1'::text))::integer > 2) AND (((t3.fields ->> 'f1'::text))::integer > 3))
+   ->  Nested Loop Left Join
+         Join Filter: (((t2.fields ->> 'f1'::text))::integer > 0)
+         ->  Nested Loop Left Join
+               Filter: (((t1.fields ->> 'f1'::text))::integer = COALESCE(((t2.fields ->> 'f1'::text))::integer, 1))
+               ->  Foreign Scan on int4_tbl t1
+               ->  Materialize
+                     ->  Foreign Scan on int4_tbl t2
+         ->  Materialize
+               ->  Foreign Scan on int4_tbl t3
+   ->  Materialize
+         ->  Foreign Scan on int4_tbl t4
+(13 rows)
+
+explain (costs off)
+select * from int4_tbl t1
+  left join ((select (t2.fields->>'f1')::int4 as f1 from int4_tbl t2
+                left join int4_tbl t3 on (t2.fields->>'f1')::int4 > 0
+                where (t3.fields->>'f1')::int4 is null) s
+             left join tenk1 t4 on s.f1 > 1)
+    on s.f1 = (t1.fields->>'f1')::int4;
+                                            QUERY PLAN                                             
+---------------------------------------------------------------------------------------------------
+ Merge Left Join
+   Merge Cond: ((((t1.fields ->> 'f1'::text))::integer) = (((t2.fields ->> 'f1'::text))::integer))
+   ->  Sort
+         Sort Key: (((t1.fields ->> 'f1'::text))::integer)
+         ->  Foreign Scan on int4_tbl t1
+   ->  Materialize
+         ->  Sort
+               Sort Key: (((t2.fields ->> 'f1'::text))::integer)
+               ->  Nested Loop Left Join
+                     Join Filter: (((t2.fields ->> 'f1'::text))::integer > 1)
+                     ->  Nested Loop Left Join
+                           Join Filter: (((t2.fields ->> 'f1'::text))::integer > 0)
+                           Filter: (((t3.fields ->> 'f1'::text))::integer IS NULL)
+                           ->  Foreign Scan on int4_tbl t2
+                           ->  Materialize
+                                 ->  Foreign Scan on int4_tbl t3
+                     ->  Materialize
+                           ->  Foreign Scan on tenk1 t4
+(18 rows)
+
+explain (costs off)
+select * from int4_tbl t1
+  left join ((select (t2.fields->>'f1')::int4 as f1 from int4_tbl t2
+                left join int4_tbl t3 on (t2.fields->>'f1')::int4 > 0
+                where (t2.fields->>'f1')::int4 <> coalesce((t3.fields->>'f1')::int4, -1)) s
+             left join tenk1 t4 on s.f1 > 1)
+    on s.f1 = (t1.fields->>'f1')::int4;
+                                                                 QUERY PLAN                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
+   Join Filter: (((t2.fields ->> 'f1'::text))::integer > 1)
+   ->  Merge Left Join
+         Merge Cond: ((((t1.fields ->> 'f1'::text))::integer) = (((t2.fields ->> 'f1'::text))::integer))
+         ->  Sort
+               Sort Key: (((t1.fields ->> 'f1'::text))::integer)
+               ->  Foreign Scan on int4_tbl t1
+         ->  Materialize
+               ->  Sort
+                     Sort Key: (((t2.fields ->> 'f1'::text))::integer)
+                     ->  Nested Loop Left Join
+                           Join Filter: (((t2.fields ->> 'f1'::text))::integer > 0)
+                           Filter: (((t2.fields ->> 'f1'::text))::integer <> COALESCE(((t3.fields ->> 'f1'::text))::integer, '-1'::integer))
+                           ->  Foreign Scan on int4_tbl t2
+                           ->  Materialize
+                                 ->  Foreign Scan on int4_tbl t3
+   ->  Materialize
+         ->  Foreign Scan on tenk1 t4
+(18 rows)
+
+explain (costs off)
+select * from onek t1
+    left join onek t2 on (t1.fields->>'unique1')::int4 = (t2.fields->>'unique1')::int4
+    left join onek t3 on (t2.fields->>'unique1')::int4 = (t3.fields->>'unique1')::int4
+    left join onek t4 on (t3.fields->>'unique1')::int4 = (t4.fields->>'unique1')::int4 and (t2.fields->>'unique2')::int4 = (t4.fields->>'unique2')::int4;
+                                                                                                   QUERY PLAN                                                                                                    
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Left Join
+   Merge Cond: (((((t3.fields ->> 'unique1'::text))::integer) = (((t4.fields ->> 'unique1'::text))::integer)) AND ((((t2.fields ->> 'unique2'::text))::integer) = (((t4.fields ->> 'unique2'::text))::integer)))
+   ->  Sort
+         Sort Key: (((t3.fields ->> 'unique1'::text))::integer), (((t2.fields ->> 'unique2'::text))::integer)
+         ->  Merge Left Join
+               Merge Cond: ((((t1.fields ->> 'unique1'::text))::integer) = ((t2.fields ->> 'unique1'::text))::integer)
+               ->  Sort
+                     Sort Key: (((t1.fields ->> 'unique1'::text))::integer)
+                     ->  Foreign Scan on onek t1
+               ->  Materialize
+                     ->  Merge Left Join
+                           Merge Cond: ((((t2.fields ->> 'unique1'::text))::integer) = (((t3.fields ->> 'unique1'::text))::integer))
+                           ->  Sort
+                                 Sort Key: (((t2.fields ->> 'unique1'::text))::integer)
+                                 ->  Foreign Scan on onek t2
+                           ->  Sort
+                                 Sort Key: (((t3.fields ->> 'unique1'::text))::integer)
+                                 ->  Foreign Scan on onek t3
+   ->  Sort
+         Sort Key: (((t4.fields ->> 'unique1'::text))::integer), (((t4.fields ->> 'unique2'::text))::integer)
+         ->  Foreign Scan on onek t4
+(21 rows)
+
+explain (costs off)
+select * from int8_tbl t1 left join
+    (int8_tbl t2 left join int8_tbl t3 full join int8_tbl t4 on false on false)
+    left join int8_tbl t5 on (t2.fields->>'q1')::int4 = (t5.fields->>'q1')::int4
+on (t2.fields->>'q2')::int4 = 123;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
+   ->  Foreign Scan on int8_tbl t1
+   ->  Materialize
+         ->  Hash Right Join
+               Hash Cond: (((t5.fields ->> 'q1'::text))::integer = ((t2.fields ->> 'q1'::text))::integer)
+               ->  Foreign Scan on int8_tbl t5
+               ->  Hash
+                     ->  Nested Loop Left Join
+                           Join Filter: false
+                           ->  Foreign Scan on int8_tbl t2
+                           ->  Result
+                                 One-Time Filter: false
+(12 rows)
+
+explain (costs off)
+select * from int8_tbl t1
+    left join int8_tbl t2 on true
+    left join lateral
+      (select * from int8_tbl t3 where (t3.fields->>'q1')::int4 = (t2.fields->>'q1')::int4 offset 0) s
+      on (t2.fields->>'q1')::int4 = 1;
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Nested Loop Left Join
+   ->  Foreign Scan on int8_tbl t1
+   ->  Materialize
+         ->  Nested Loop Left Join
+               Join Filter: (((t2.fields ->> 'q1'::text))::integer = 1)
+               ->  Foreign Scan on int8_tbl t2
+               ->  Foreign Scan on int8_tbl t3
+(7 rows)
+
+explain (costs off)
+select * from int8_tbl t1
+    left join int8_tbl t2 on true
+    left join lateral
+      (select * from generate_series((t2.fields->>'q1')::int4, 100)) s
+      on (t2.fields->>'q1')::int4 = 1;
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Nested Loop Left Join
+   ->  Foreign Scan on int8_tbl t1
+   ->  Materialize
+         ->  Nested Loop Left Join
+               Join Filter: (((t2.fields ->> 'q1'::text))::integer = 1)
+               ->  Foreign Scan on int8_tbl t2
+               ->  Function Scan on generate_series
+(7 rows)
+
+explain (costs off)
+select * from int8_tbl t1
+    left join int8_tbl t2 on true
+    left join lateral
+      (select (t2.fields->>'q1')::int4 from int8_tbl t3) s
+      on (t2.fields->>'q1')::int4 = 1;
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Nested Loop Left Join
+   ->  Foreign Scan on int8_tbl t1
+   ->  Materialize
+         ->  Nested Loop Left Join
+               Join Filter: (((t2.fields ->> 'q1'::text))::integer = 1)
+               ->  Foreign Scan on int8_tbl t2
+               ->  Foreign Scan on int8_tbl t3
+(7 rows)
+
+explain (costs off)
+select * from onek t1
+    left join onek t2 on true
+    left join lateral
+      (select * from onek t3 where (t3.fields->>'two')::int4 = (t2.fields->>'two')::int4 offset 0) s
+      on (t2.fields->>'unique1')::int4 = 1;
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Nested Loop Left Join
+   ->  Foreign Scan on onek t1
+   ->  Materialize
+         ->  Nested Loop Left Join
+               Join Filter: (((t2.fields ->> 'unique1'::text))::integer = 1)
+               ->  Foreign Scan on onek t2
+               ->  Foreign Scan on onek t3
+(7 rows)
 
 --
 -- check a case where we formerly got confused by conflicting sort orders
@@ -2381,6 +2741,38 @@ select count(*) from
  10000
 (1 row)
 
+set enable_hashjoin = 0;
+set enable_nestloop = 0;
+set enable_hashagg = 0;
+--
+-- Check that we use the pathkeys from a prefix of the group by / order by
+-- clause for the join pathkeys when that prefix covers all join quals.  We
+-- expect this to lead to an incremental sort for the group by / order by.
+--
+explain (costs off)
+select (x.fields->>'thousand')::int4 as thousand, (x.fields->>'twothousand')::int4 as twothousand, count(*)
+from tenk1 x inner join tenk1 y on (x.fields->>'thousand')::int4 = (y.fields->>'thousand')::int4
+group by (x.fields->>'thousand'), (x.fields->>'twothousand')
+order by (x.fields->>'thousand') desc, (x.fields->>'twothousand');
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate
+   Group Key: ((x.fields ->> 'thousand'::text)), ((x.fields ->> 'twothousand'::text))
+   ->  Sort
+         Sort Key: ((x.fields ->> 'thousand'::text)) DESC, ((x.fields ->> 'twothousand'::text))
+         ->  Merge Join
+               Merge Cond: ((((x.fields ->> 'thousand'::text))::integer) = (((y.fields ->> 'thousand'::text))::integer))
+               ->  Sort
+                     Sort Key: (((x.fields ->> 'thousand'::text))::integer)
+                     ->  Foreign Scan on tenk1 x
+               ->  Sort
+                     Sort Key: (((y.fields ->> 'thousand'::text))::integer)
+                     ->  Foreign Scan on tenk1 y
+(12 rows)
+
+reset enable_hashagg;
+reset enable_nestloop;
+reset enable_hashjoin;
 --
 -- Clean up
 --
@@ -2520,6 +2912,7 @@ LINE 1: select t1.x from (select (fields->>'a')::int a, (fields->>'b...
                ^
 HINT:  Perhaps you meant to reference the column "t3.x".
 -- Test matching of locking clause with wrong alias
+--Testcase 666:
 select t1.*, t2.*, unnamed_join.* from
   (select (fields->>'a')::int a, (fields->>'b')::int b from t1) t1 join (select (fields->>'a')::int a, (fields->>'b')::int b from t2) t2 on (t1.a::int = t2.a::int), t3 as unnamed_join
   for update of unnamed_join;
@@ -2527,6 +2920,7 @@ select t1.*, t2.*, unnamed_join.* from
 ---+---+---+---+--------+------
 (0 rows)
 
+--Testcase 667:
 select foo.*, unnamed_join.* from
   (select (fields->>'a')::int a, (fields->>'b')::int b from t1) t1 join (select (fields->>'a')::int a, (fields->>'b')::int b from t2) t2 using (a) as foo, t3 as unnamed_join
   for update of unnamed_join;
@@ -2534,18 +2928,21 @@ select foo.*, unnamed_join.* from
 ---+--------+------
 (0 rows)
 
+--Testcase 668:
 select foo.*, unnamed_join.* from
   (select (fields->>'a')::int a, (fields->>'b')::int b from t1) t1 join (select (fields->>'a')::int a, (fields->>'b')::int b from t2) t2 using (a) as foo, t3 as unnamed_join
   for update of foo;
 ERROR:  FOR UPDATE cannot be applied to a join
 LINE 3:   for update of foo;
                         ^
+--Testcase 669:
 select bar.*, unnamed_join.* from
   ((select (fields->>'a')::int a, (fields->>'b')::int b from t1) t1 join (select (fields->>'a')::int a, (fields->>'b')::int b from t2) t2 using (a) as foo) as bar, t3 as unnamed_join
   for update of foo;
 ERROR:  relation "foo" in FOR UPDATE clause not found in FROM clause
 LINE 3:   for update of foo;
                         ^
+--Testcase 670:
 select bar.*, unnamed_join.* from
   ((select (fields->>'a')::int a, (fields->>'b')::int b from t1) t1 join (select (fields->>'a')::int a, (fields->>'b')::int b from t2) t2 using (a) as foo) as bar, t3 as unnamed_join
   for update of bar;
@@ -2650,21 +3047,124 @@ create foreign table tt4(fields jsonb OPTIONS (fields 'true')) server influxdb_s
 create foreign table tt4_nsc(f1 int) server influxdb_svr OPTIONS (table 'tt4');
 --Testcase 192:
 insert into tt4_nsc values (0),(1),(9999);
---Testcase 193:
-SELECT (a.fields->>'f1')::int f1
+set enable_nestloop to off;
+EXPLAIN (COSTS OFF)
+SELECT (a.fields->>'f1')::int4 as f1
 FROM tt4 a
 LEFT JOIN (
-        SELECT (b.fields->>'f1')::int f1
-        FROM tt3 b LEFT JOIN tt3 c ON ((b.fields->>'f1')::int = (c.fields->>'f1')::int)
-        WHERE c.fields->>'f1' IS NULL
-) AS d ON ((a.fields->>'f1')::int = (d.f1)::int)
-WHERE d.f1 IS NULL;
+        SELECT (b.fields->>'f1')::int4 as f1
+        FROM tt3 b LEFT JOIN tt3 c ON ((b.fields->>'f1')::int4 = (c.fields->>'f1')::int4)
+        WHERE COALESCE((c.fields->>'f1')::int4, 0) = 0
+) AS d ON ((a.fields->>'f1')::int4 = d.f1)
+WHERE COALESCE(d.f1, 0) = 0
+ORDER BY 1;
+                                                 QUERY PLAN                                                  
+-------------------------------------------------------------------------------------------------------------
+ Merge Left Join
+   Merge Cond: ((((a.fields ->> 'f1'::text))::integer) = ((b.fields ->> 'f1'::text))::integer)
+   Filter: (COALESCE((((b.fields ->> 'f1'::text))::integer), 0) = 0)
+   ->  Sort
+         Sort Key: (((a.fields ->> 'f1'::text))::integer)
+         ->  Foreign Scan on tt4 a
+   ->  Materialize
+         ->  Merge Left Join
+               Merge Cond: ((((b.fields ->> 'f1'::text))::integer) = (((c.fields ->> 'f1'::text))::integer))
+               Filter: (COALESCE(((c.fields ->> 'f1'::text))::integer, 0) = 0)
+               ->  Sort
+                     Sort Key: (((b.fields ->> 'f1'::text))::integer)
+                     ->  Foreign Scan on tt3 b
+               ->  Sort
+                     Sort Key: (((c.fields ->> 'f1'::text))::integer)
+                     ->  Foreign Scan on tt3 c
+(16 rows)
+
+SELECT (a.fields->>'f1')::int4 as f1
+FROM tt4 a
+LEFT JOIN (
+        SELECT (b.fields->>'f1')::int4 as f1
+        FROM tt3 b LEFT JOIN tt3 c ON ((b.fields->>'f1')::int4 = (c.fields->>'f1')::int4)
+        WHERE COALESCE((c.fields->>'f1')::int4, 0) = 0
+) AS d ON ((a.fields->>'f1')::int4 = d.f1)
+WHERE COALESCE(d.f1, 0) = 0
+ORDER BY 1;
   f1  
 ------
     0
     1
  9999
 (3 rows)
+
+reset enable_nestloop;
+--
+-- basic semijoin and antijoin recognition tests
+--
+explain (costs off)
+select a.* from tenk1 a
+where (a.fields->>'unique1')::int4 in (select (b.fields->>'unique2')::int4 from tenk1 b);
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Hash Join
+   Hash Cond: (((a.fields ->> 'unique1'::text))::integer = ((b.fields ->> 'unique2'::text))::integer)
+   ->  Foreign Scan on tenk1 a
+   ->  Hash
+         ->  HashAggregate
+               Group Key: ((b.fields ->> 'unique2'::text))::integer
+               ->  Foreign Scan on tenk1 b
+(7 rows)
+
+-- sadly, this is not an antijoin
+explain (costs off)
+select a.* from tenk1 a
+where (a.fields->>'unique1')::int4 not in (select (b.fields->>'unique2')::int4 from tenk1 b);
+             QUERY PLAN             
+------------------------------------
+ Foreign Scan on tenk1 a
+   Filter: (NOT (hashed SubPlan 1))
+   SubPlan 1
+     ->  Foreign Scan on tenk1 b
+(4 rows)
+
+explain (costs off)
+select a.* from tenk1 a
+where exists (select 1 from tenk1 b where (a.fields->>'unique1')::int4 = (b.fields->>'unique2')::int4);
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Hash Join
+   Hash Cond: (((a.fields ->> 'unique1'::text))::integer = ((b.fields ->> 'unique2'::text))::integer)
+   ->  Foreign Scan on tenk1 a
+   ->  Hash
+         ->  HashAggregate
+               Group Key: ((b.fields ->> 'unique2'::text))::integer
+               ->  Foreign Scan on tenk1 b
+(7 rows)
+
+explain (costs off)
+select a.* from tenk1 a
+where not exists (select 1 from tenk1 b where (a.fields->>'unique1')::int4 = (b.fields->>'unique2')::int4);
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Hash Anti Join
+   Hash Cond: (((a.fields ->> 'unique1'::text))::integer = ((b.fields ->> 'unique2'::text))::integer)
+   ->  Foreign Scan on tenk1 a
+   ->  Hash
+         ->  Foreign Scan on tenk1 b
+(5 rows)
+
+explain (costs off)
+select a.* from tenk1 a left join tenk1 b on (a.fields->>'unique1')::int4 = (b.fields->>'unique2')::int4
+where (b.fields->>'unique2')::int4 is null;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Merge Left Join
+   Merge Cond: ((((a.fields ->> 'unique1'::text))::integer) = (((b.fields ->> 'unique2'::text))::integer))
+   Filter: (((b.fields ->> 'unique2'::text))::integer IS NULL)
+   ->  Sort
+         Sort Key: (((a.fields ->> 'unique1'::text))::integer)
+         ->  Foreign Scan on tenk1 a
+   ->  Sort
+         Sort Key: (((b.fields ->> 'unique2'::text))::integer)
+         ->  Foreign Scan on tenk1 b
+(9 rows)
 
 --
 -- regression test for proper handling of outer joins within antijoins
@@ -3322,13 +3822,13 @@ select * from
       right join (select (fields->>'f1')::int4 f1 from INT4_TBL i43) as i43 on (i43.f1 > 1)
       where ss1.loc = ss1.lat) as ss2
 where i41.f1 > 0;
-                                                  QUERY PLAN                                                  
---------------------------------------------------------------------------------------------------------------
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
  Nested Loop
    ->  Nested Loop
          ->  Foreign Scan on int4_tbl i41
          ->  Nested Loop
-               Join Filter: (((i41.fields ->> 'f1'::text))::integer = ((i42.fields ->> 'f1'::text))::integer)
+               Join Filter: ((((i42.fields ->> 'f1'::text))::integer) = ((i41.fields ->> 'f1'::text))::integer)
                ->  Foreign Scan on int8_tbl i81
                ->  Materialize
                      ->  Foreign Scan on int4_tbl i42
@@ -3691,6 +4191,63 @@ where b;
  0 | t | t
  0 | t | t
 (2 rows)
+
+-- Test PHV in a semijoin qual, which confused useless-RTE removal (bug #17700)
+explain (verbose, costs off)
+with ctetable as not materialized ( select 1 as f1 )
+select * from ctetable c1
+where f1 in ( select c3.f1 from ctetable c2 full join ctetable c3 on true );
+         QUERY PLAN         
+----------------------------
+ Result
+   Output: 1
+   One-Time Filter: (1 = 1)
+(3 rows)
+
+with ctetable as not materialized ( select 1 as f1 )
+select * from ctetable c1
+where f1 in ( select c3.f1 from ctetable c2 full join ctetable c3 on true );
+ f1 
+----
+  1
+(1 row)
+
+-- Test PHV that winds up in a Result node, despite having nonempty nullingrels
+explain (verbose, costs off)
+select table_catalog, table_name
+from int4_tbl t1
+  inner join (int8_tbl t2
+              left join information_schema.column_udt_usage on null)
+  on null;
+                                                    QUERY PLAN                                                     
+-------------------------------------------------------------------------------------------------------------------
+ Result
+   Output: (current_database())::information_schema.sql_identifier, (c.relname)::information_schema.sql_identifier
+   One-Time Filter: false
+(3 rows)
+
+-- Test handling of qual pushdown to appendrel members with non-Var outputs
+explain (verbose, costs off)
+select * from int4_tbl left join (
+  select text 'foo' union all select text 'bar'
+) ss(x) on true
+where ss.x is null;
+                    QUERY PLAN                    
+--------------------------------------------------
+ Nested Loop Left Join
+   Output: int4_tbl.fields, ('foo'::text)
+   Filter: (('foo'::text) IS NULL)
+   ->  Foreign Scan on public.int4_tbl
+         Output: int4_tbl.fields
+         InfluxDB query: SELECT * FROM "int4_tbl"
+   ->  Materialize
+         Output: ('foo'::text)
+         ->  Append
+               ->  Result
+                     Output: 'foo'::text
+               ->  Result
+                     Output: 'bar'::text
+(13 rows)
 
 --
 -- test inlining of immutable functions
@@ -4085,17 +4642,17 @@ select * from
 ) ss
 where fault = 122
 order by fault;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
- Merge Left Join
-   Merge Cond: ((((int8_tbl.fields ->> 'q2'::text))::bigint) = (((tenk1.fields ->> 'unique2'::text))::integer))
-   Filter: ((COALESCE(((tenk1.fields ->> 'unique1'::text))::integer, '-1'::integer) + ((int8_tbl.fields ->> 'q1'::text))::bigint) = 122)
-   ->  Sort
-         Sort Key: (((int8_tbl.fields ->> 'q2'::text))::bigint)
-         ->  Foreign Scan on int8_tbl
+                                                                QUERY PLAN                                                                 
+-------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Right Join
+   Merge Cond: ((((tenk1.fields ->> 'unique2'::text))::integer) = (((int8_tbl.fields ->> 'q2'::text))::bigint))
+   Filter: ((COALESCE((((tenk1.fields ->> 'unique1'::text))::integer), '-1'::integer) + ((int8_tbl.fields ->> 'q1'::text))::bigint) = 122)
    ->  Sort
          Sort Key: (((tenk1.fields ->> 'unique2'::text))::integer)
          ->  Foreign Scan on tenk1
+   ->  Sort
+         Sort Key: (((int8_tbl.fields ->> 'q2'::text))::bigint)
+         ->  Foreign Scan on int8_tbl
 (9 rows)
 
 --Testcase 329:
@@ -4148,17 +4705,17 @@ explain (costs off)
 select q1, unique2, thousand, hundred
   from (select (fields->>'q1')::int8 q1, (fields->>'q2')::int8 q2 from INT8_TBL a) a left join (select (fields->>'unique1')::int4 unique1, (fields->>'unique2')::int4 unique2, (fields->>'two')::int4 two, (fields->>'four')::int4 four, (fields->>'ten')::int4 ten, (fields->>'twenty')::int4 twenty, (fields->>'hundred')::int4 hundred, (fields->>'thousand')::int4 thousand, (fields->>'twothousand')::int4 twothousand, (fields->>'fivethous')::int4 fivethous, (fields->>'tenthous')::int4 tenthous, (fields->>'odd')::int4 odd, (fields->>'even')::int4 even, (fields->>'stringu1')::name stringu1, (fields->>'stringu2')::name stringu2, (fields->>'string4')::name string4 from tenk1 b) b on (q1)::int8 = (unique2)::int4
   where coalesce((thousand)::int4,123) = (q1)::int8 and (q1)::int8 = coalesce((hundred)::int4,123);
-                                                                                                       QUERY PLAN                                                                                                       
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Merge Left Join
-   Merge Cond: ((((a.fields ->> 'q1'::text))::bigint) = (((b.fields ->> 'unique2'::text))::integer))
-   Filter: ((COALESCE(((b.fields ->> 'thousand'::text))::integer, 123) = (((a.fields ->> 'q1'::text))::bigint)) AND ((((a.fields ->> 'q1'::text))::bigint) = COALESCE(((b.fields ->> 'hundred'::text))::integer, 123)))
-   ->  Sort
-         Sort Key: (((a.fields ->> 'q1'::text))::bigint)
-         ->  Foreign Scan on int8_tbl a
+                                                                                                                   QUERY PLAN                                                                                                                    
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Right Join
+   Merge Cond: ((((b.fields ->> 'unique2'::text))::integer) = (((a.fields ->> 'q1'::text))::bigint))
+   Filter: ((COALESCE((((b.fields ->> 'thousand'::text))::integer), 123) = COALESCE((((b.fields ->> 'hundred'::text))::integer), 123)) AND ((((a.fields ->> 'q1'::text))::bigint) = COALESCE((((b.fields ->> 'hundred'::text))::integer), 123)))
    ->  Sort
          Sort Key: (((b.fields ->> 'unique2'::text))::integer)
          ->  Foreign Scan on tenk1 b
+   ->  Sort
+         Sort Key: (((a.fields ->> 'q1'::text))::bigint)
+         ->  Foreign Scan on int8_tbl a
 (9 rows)
 
 --Testcase 333:
@@ -4174,17 +4731,17 @@ explain (costs off)
 select f1, unique2, case when (unique2)::int4 is null then (f1)::int4 else 0 end
   from (select (fields->>'f1')::int4 f1 from INT4_TBL a) a left join (select (fields->>'unique1')::int4 unique1, (fields->>'unique2')::int4 unique2, (fields->>'two')::int4 two, (fields->>'four')::int4 four, (fields->>'ten')::int4 ten, (fields->>'twenty')::int4 twenty, (fields->>'hundred')::int4 hundred, (fields->>'thousand')::int4 thousand, (fields->>'twothousand')::int4 twothousand, (fields->>'fivethous')::int4 fivethous, (fields->>'tenthous')::int4 tenthous, (fields->>'odd')::int4 odd, (fields->>'even')::int4 even, (fields->>'stringu1')::name stringu1, (fields->>'stringu2')::name stringu2, (fields->>'string4')::name string4 from tenk1 b) b on (f1)::int4 = (unique2)::int4
   where (case when (unique2)::int4 is null then (f1)::int4 else 0 end) = 0;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
- Merge Left Join
-   Merge Cond: ((((a.fields ->> 'f1'::text))::integer) = (((b.fields ->> 'unique2'::text))::integer))
-   Filter: (CASE WHEN (((b.fields ->> 'unique2'::text))::integer IS NULL) THEN (((a.fields ->> 'f1'::text))::integer) ELSE 0 END = 0)
-   ->  Sort
-         Sort Key: (((a.fields ->> 'f1'::text))::integer)
-         ->  Foreign Scan on int4_tbl a
+                                                               QUERY PLAN                                                               
+----------------------------------------------------------------------------------------------------------------------------------------
+ Merge Right Join
+   Merge Cond: ((((b.fields ->> 'unique2'::text))::integer) = (((a.fields ->> 'f1'::text))::integer))
+   Filter: (CASE WHEN ((((b.fields ->> 'unique2'::text))::integer) IS NULL) THEN (((a.fields ->> 'f1'::text))::integer) ELSE 0 END = 0)
    ->  Sort
          Sort Key: (((b.fields ->> 'unique2'::text))::integer)
          ->  Foreign Scan on tenk1 b
+   ->  Sort
+         Sort Key: (((a.fields ->> 'f1'::text))::integer)
+         ->  Foreign Scan on int4_tbl a
 (9 rows)
 
 --Testcase 335:
@@ -4204,10 +4761,9 @@ explain (costs off)
 select (a.fields->>'unique1')::int4 unique1, (b.fields->>'unique1')::int4 unique1, (c.fields->>'unique1')::int4 unique1, coalesce((b.fields->>'twothousand')::int4, (a.fields->>'twothousand')::int4)
   from tenk1 a left join tenk1 b on (b.fields->>'thousand')::int4 = (a.fields->>'unique1')::int4                        left join tenk1 c on (c.fields->>'unique2')::int4 = coalesce((b.fields->>'twothousand')::int4, (a.fields->>'twothousand')::int4)
   where (a.fields->>'unique2')::int4 < 10 and coalesce((b.fields->>'twothousand')::int4, (a.fields->>'twothousand')::int4) = 44;
-                                                                            QUERY PLAN                                                                             
--------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Hash Left Join
-   Hash Cond: (COALESCE(((b.fields ->> 'twothousand'::text))::integer, ((a.fields ->> 'twothousand'::text))::integer) = ((c.fields ->> 'unique2'::text))::integer)
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
    ->  Merge Left Join
          Merge Cond: ((((a.fields ->> 'unique1'::text))::integer) = (((b.fields ->> 'thousand'::text))::integer))
          Filter: (COALESCE(((b.fields ->> 'twothousand'::text))::integer, ((a.fields ->> 'twothousand'::text))::integer) = 44)
@@ -4217,9 +4773,9 @@ select (a.fields->>'unique1')::int4 unique1, (b.fields->>'unique1')::int4 unique
          ->  Sort
                Sort Key: (((b.fields ->> 'thousand'::text))::integer)
                ->  Foreign Scan on tenk1 b
-   ->  Hash
+   ->  Materialize
          ->  Foreign Scan on tenk1 c
-(13 rows)
+(12 rows)
 
 --Testcase 337:
 select (a.fields->>'unique1')::int4 unique1, (b.fields->>'unique1')::int4 unique1, (c.fields->>'unique1')::int4 unique1, coalesce((b.fields->>'twothousand')::int4, (a.fields->>'twothousand')::int4)
@@ -4228,6 +4784,42 @@ select (a.fields->>'unique1')::int4 unique1, (b.fields->>'unique1')::int4 unique
  unique1 | unique1 | unique1 | coalesce 
 ---------+---------+---------+----------
 (0 rows)
+
+-- related case
+explain (costs off)
+select * from int8_tbl t1 left join int8_tbl t2 on (t1.fields->>'q2')::int8 = (t2.fields->>'q1')::int8,
+  lateral (select * from int8_tbl t3 where (t2.fields->>'q1')::int8 = (t2.fields->>'q2')::int8) ss;
+                                                 QUERY PLAN                                                  
+-------------------------------------------------------------------------------------------------------------
+ Nested Loop
+   ->  Foreign Scan on int8_tbl t3
+   ->  Materialize
+         ->  Merge Left Join
+               Merge Cond: ((((t1.fields ->> 'q2'::text))::bigint) = (((t2.fields ->> 'q1'::text))::bigint))
+               Filter: (((t2.fields ->> 'q1'::text))::bigint = ((t2.fields ->> 'q2'::text))::bigint)
+               ->  Sort
+                     Sort Key: (((t1.fields ->> 'q2'::text))::bigint)
+                     ->  Foreign Scan on int8_tbl t1
+               ->  Sort
+                     Sort Key: (((t2.fields ->> 'q1'::text))::bigint)
+                     ->  Foreign Scan on int8_tbl t2
+(12 rows)
+
+select * from int8_tbl t1 left join int8_tbl t2 on (t1.fields->>'q2')::int8 = (t2.fields->>'q1')::int8,
+  lateral (select * from int8_tbl t3 where (t2.fields->>'q1')::int8 = (t2.fields->>'q2')::int8) ss;
+                        fields                        |                        fields                        |                        fields                         
+------------------------------------------------------+------------------------------------------------------+-------------------------------------------------------
+ {"q1": "123", "q2": "4567890123456789"}              | {"q1": "4567890123456789", "q2": "4567890123456789"} | {"q1": "123", "q2": "456"}
+ {"q1": "4567890123456789", "q2": "4567890123456789"} | {"q1": "4567890123456789", "q2": "4567890123456789"} | {"q1": "123", "q2": "456"}
+ {"q1": "123", "q2": "4567890123456789"}              | {"q1": "4567890123456789", "q2": "4567890123456789"} | {"q1": "123", "q2": "4567890123456789"}
+ {"q1": "4567890123456789", "q2": "4567890123456789"} | {"q1": "4567890123456789", "q2": "4567890123456789"} | {"q1": "123", "q2": "4567890123456789"}
+ {"q1": "123", "q2": "4567890123456789"}              | {"q1": "4567890123456789", "q2": "4567890123456789"} | {"q1": "4567890123456789", "q2": "123"}
+ {"q1": "4567890123456789", "q2": "4567890123456789"} | {"q1": "4567890123456789", "q2": "4567890123456789"} | {"q1": "4567890123456789", "q2": "123"}
+ {"q1": "123", "q2": "4567890123456789"}              | {"q1": "4567890123456789", "q2": "4567890123456789"} | {"q1": "4567890123456789", "q2": "4567890123456789"}
+ {"q1": "4567890123456789", "q2": "4567890123456789"} | {"q1": "4567890123456789", "q2": "4567890123456789"} | {"q1": "4567890123456789", "q2": "4567890123456789"}
+ {"q1": "123", "q2": "4567890123456789"}              | {"q1": "4567890123456789", "q2": "4567890123456789"} | {"q1": "4567890123456789", "q2": "-4567890123456789"}
+ {"q1": "4567890123456789", "q2": "4567890123456789"} | {"q1": "4567890123456789", "q2": "4567890123456789"} | {"q1": "4567890123456789", "q2": "-4567890123456789"}
+(10 rows)
 
 --
 -- check handling of join aliases when flattening multiple levels of subquery
@@ -4246,19 +4838,19 @@ left join
    using (join_key)
   ) foo3
 using (join_key);
-                                                  QUERY PLAN                                                  
---------------------------------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
  Hash Right Join
-   Output: "*VALUES*".column1, ((i1.fields ->> 'f1'::text))::integer, (666)
+   Output: "*VALUES*".column1, (((i1.fields ->> 'f1'::text))::integer), (666)
    Hash Cond: (((i1.fields ->> 'f1'::text))::integer = "*VALUES*".column1)
    ->  Merge Left Join
-         Output: i1.fields, 666
+         Output: i1.fields, (((i1.fields ->> 'f1'::text))::integer), 666
          Merge Cond: ((((i1.fields ->> 'f1'::text))::integer) = (((i2.fields ->> 'unique2'::text))::integer))
          ->  Sort
-               Output: i1.fields, (((i1.fields ->> 'f1'::text))::integer)
+               Output: i1.fields, (((i1.fields ->> 'f1'::text))::integer), (((i1.fields ->> 'f1'::text))::integer)
                Sort Key: (((i1.fields ->> 'f1'::text))::integer)
                ->  Foreign Scan on public.int4_tbl i1
-                     Output: i1.fields, ((i1.fields ->> 'f1'::text))::integer
+                     Output: i1.fields, ((i1.fields ->> 'f1'::text))::integer, ((i1.fields ->> 'f1'::text))::integer
                      InfluxDB query: SELECT * FROM "int4_tbl"
          ->  Sort
                Output: i2.fields, (((i2.fields ->> 'unique2'::text))::integer)
@@ -4290,6 +4882,67 @@ using (join_key);
        0 |       0 |       666
        1 |         |          
 (2 rows)
+
+--
+-- check handling of a variable-free join alias
+--
+explain (verbose, costs off)
+select * from
+int4_tbl i0 left join
+( (select (fields->>'f1')::int4 f1, 123 as x from int4_tbl i1) ss1
+  left join
+  (select (fields->>'q1') q1, (fields->>'q2') q2, (fields->>'q2')::int4 as x from int8_tbl i2) ss2
+  using (x)
+) ss0
+on ((i0.fields->>'f1')::int4 = ss0.f1)
+order by (i0.fields->>'f1')::int4, x;
+                                                                                        QUERY PLAN                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Incremental Sort
+   Output: i0.fields, (123), (((i1.fields ->> 'f1'::text))::integer), ((i2.fields ->> 'q1'::text)), ((i2.fields ->> 'q2'::text)), (((i0.fields ->> 'f1'::text))::integer)
+   Sort Key: (((i0.fields ->> 'f1'::text))::integer), (123)
+   Presorted Key: (((i0.fields ->> 'f1'::text))::integer)
+   ->  Merge Left Join
+         Output: i0.fields, (123), (((i1.fields ->> 'f1'::text))::integer), ((i2.fields ->> 'q1'::text)), ((i2.fields ->> 'q2'::text)), (((i0.fields ->> 'f1'::text))::integer)
+         Merge Cond: ((((i0.fields ->> 'f1'::text))::integer) = (((i1.fields ->> 'f1'::text))::integer))
+         ->  Sort
+               Output: i0.fields, (((i0.fields ->> 'f1'::text))::integer)
+               Sort Key: (((i0.fields ->> 'f1'::text))::integer)
+               ->  Foreign Scan on public.int4_tbl i0
+                     Output: i0.fields, ((i0.fields ->> 'f1'::text))::integer
+                     InfluxDB query: SELECT * FROM "int4_tbl"
+         ->  Sort
+               Output: i1.fields, (123), (((i1.fields ->> 'f1'::text))::integer), ((i2.fields ->> 'q1'::text)), ((i2.fields ->> 'q2'::text)), (((i1.fields ->> 'f1'::text))::integer)
+               Sort Key: (((i1.fields ->> 'f1'::text))::integer)
+               ->  Nested Loop Left Join
+                     Output: i1.fields, (123), (((i1.fields ->> 'f1'::text))::integer), ((i2.fields ->> 'q1'::text)), ((i2.fields ->> 'q2'::text)), ((i1.fields ->> 'f1'::text))::integer
+                     ->  Foreign Scan on public.int4_tbl i1
+                           Output: i1.fields, 123, ((i1.fields ->> 'f1'::text))::integer
+                           InfluxDB query: SELECT * FROM "int4_tbl"
+                     ->  Materialize
+                           Output: ((i2.fields ->> 'q1'::text)), ((i2.fields ->> 'q2'::text))
+                           ->  Foreign Scan on public.int8_tbl i2
+                                 Output: (i2.fields ->> 'q1'::text), (i2.fields ->> 'q2'::text)
+                                 InfluxDB query: SELECT "q1", "q2" FROM "int8_tbl" WHERE ((123 = "q2"))
+(26 rows)
+
+select * from
+int4_tbl i0 left join
+( (select (fields->>'f1')::int4 f1, 123 as x from int4_tbl i1) ss1
+  left join
+  (select (fields->>'q1') q1, (fields->>'q2') q2, (fields->>'q2')::int4 as x from int8_tbl i2) ss2
+  using (x)
+) ss0
+on ((i0.fields->>'f1')::int4 = ss0.f1)
+order by (i0.fields->>'f1')::int4, x;
+        fields         |  x  |     f1      |        q1        | q2  
+-----------------------+-----+-------------+------------------+-----
+ {"f1": "-2147483647"} | 123 | -2147483647 | 4567890123456789 | 123
+ {"f1": "-123456"}     | 123 |     -123456 | 4567890123456789 | 123
+ {"f1": "0"}           | 123 |           0 | 4567890123456789 | 123
+ {"f1": "123456"}      | 123 |      123456 | 4567890123456789 | 123
+ {"f1": "2147483647"}  | 123 |  2147483647 | 4567890123456789 | 123
+(5 rows)
 
 --
 -- test successful handling of nested outer joins with degenerate join quals
@@ -4390,8 +5043,8 @@ select t1.* from
   on (t1.f1 = b1.d1)
   left join (select (fields->>'f1')::int4 f1 from INT4_TBL i4) i4
   on ((i8.q2)::int8 = (i4.f1)::int4);
-                                                                    QUERY PLAN                                                                     
----------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                         QUERY PLAN                                                                          
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
  Merge Right Join
    Output: (t1.fields ->> 'f1'::text)
    Merge Cond: ((((i4.fields ->> 'f1'::text))::integer) = (((i8.fields ->> 'q2'::text))::bigint))
@@ -4402,20 +5055,20 @@ select t1.* from
                Output: i4.fields, ((i4.fields ->> 'f1'::text))::integer
                InfluxDB query: SELECT * FROM "int4_tbl"
    ->  Materialize
-         Output: t1.fields, i8.fields, (((i8.fields ->> 'q2'::text))::bigint)
+         Output: t1.fields, (((i8.fields ->> 'q2'::text))::bigint)
          ->  Sort
-               Output: t1.fields, i8.fields, (((i8.fields ->> 'q2'::text))::bigint)
+               Output: t1.fields, (((i8.fields ->> 'q2'::text))::bigint)
                Sort Key: (((i8.fields ->> 'q2'::text))::bigint)
                ->  Nested Loop Left Join
-                     Output: t1.fields, i8.fields, ((i8.fields ->> 'q2'::text))::bigint
+                     Output: t1.fields, (((i8.fields ->> 'q2'::text))::bigint)
                      Join Filter: ((t1.fields ->> 'f1'::text) = '***'::text)
                      ->  Foreign Scan on public.text_tbl t1
                            Output: t1.fields
                            InfluxDB query: SELECT * FROM "text_tbl"
                      ->  Materialize
-                           Output: i8.fields
+                           Output: (((i8.fields ->> 'q2'::text))::bigint)
                            ->  Merge Left Join
-                                 Output: i8.fields
+                                 Output: (((i8.fields ->> 'q2'::text))::bigint)
                                  Merge Cond: ((((i8b1.fields ->> 'q2'::text))::bigint) = (((NULL::integer))::bigint))
                                  ->  Sort
                                        Output: i8b1.fields, (((i8b1.fields ->> 'q2'::text))::bigint)
@@ -4424,18 +5077,18 @@ select t1.* from
                                              Output: i8b1.fields, ((i8b1.fields ->> 'q2'::text))::bigint
                                              InfluxDB query: SELECT * FROM "int8_tbl"
                                  ->  Materialize
-                                       Output: i8.fields, (NULL::integer), (((NULL::integer))::bigint)
+                                       Output: (((i8.fields ->> 'q2'::text))::bigint), (NULL::integer), (((NULL::integer))::bigint)
                                        ->  Sort
-                                             Output: i8.fields, (NULL::integer), (((NULL::integer))::bigint)
+                                             Output: (((i8.fields ->> 'q2'::text))::bigint), (NULL::integer), (((NULL::integer))::bigint)
                                              Sort Key: (((NULL::integer))::bigint)
                                              ->  Merge Left Join
-                                                   Output: i8.fields, (NULL::integer), ((NULL::integer))::bigint
+                                                   Output: (((i8.fields ->> 'q2'::text))::bigint), (NULL::integer), ((NULL::integer))::bigint
                                                    Merge Cond: ((((i8.fields ->> 'q1'::text))::bigint) = (((i8b2.fields ->> 'q1'::text))::bigint))
                                                    ->  Sort
-                                                         Output: i8.fields, (((i8.fields ->> 'q1'::text))::bigint)
+                                                         Output: i8.fields, (((i8.fields ->> 'q2'::text))::bigint), (((i8.fields ->> 'q1'::text))::bigint)
                                                          Sort Key: (((i8.fields ->> 'q1'::text))::bigint)
                                                          ->  Foreign Scan on public.int8_tbl i8
-                                                               Output: i8.fields, ((i8.fields ->> 'q1'::text))::bigint
+                                                               Output: i8.fields, ((i8.fields ->> 'q2'::text))::bigint, ((i8.fields ->> 'q1'::text))::bigint
                                                                InfluxDB query: SELECT * FROM "int8_tbl"
                                                    ->  Materialize
                                                          Output: i8b2.fields, (NULL::integer), (((i8b2.fields ->> 'q1'::text))::bigint)
@@ -4483,8 +5136,8 @@ select t1.* from
   on (t1.f1 = b1.d1)
   left join (select (fields->>'f1')::int4 f1 from INT4_TBL i4) i4
   on ((i8.q2)::int8 = (i4.f1)::int4);
-                                                                                 QUERY PLAN                                                                                 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                              QUERY PLAN                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Merge Right Join
    Output: (t1.fields ->> 'f1'::text)
    Merge Cond: ((((i4.fields ->> 'f1'::text))::integer) = (((i8.fields ->> 'q2'::text))::bigint))
@@ -4495,20 +5148,20 @@ select t1.* from
                Output: i4.fields, ((i4.fields ->> 'f1'::text))::integer
                InfluxDB query: SELECT * FROM "int4_tbl"
    ->  Materialize
-         Output: t1.fields, i8.fields, (((i8.fields ->> 'q2'::text))::bigint)
+         Output: t1.fields, (((i8.fields ->> 'q2'::text))::bigint)
          ->  Sort
-               Output: t1.fields, i8.fields, (((i8.fields ->> 'q2'::text))::bigint)
+               Output: t1.fields, (((i8.fields ->> 'q2'::text))::bigint)
                Sort Key: (((i8.fields ->> 'q2'::text))::bigint)
                ->  Nested Loop Left Join
-                     Output: t1.fields, i8.fields, ((i8.fields ->> 'q2'::text))::bigint
+                     Output: t1.fields, (((i8.fields ->> 'q2'::text))::bigint)
                      Join Filter: ((t1.fields ->> 'f1'::text) = '***'::text)
                      ->  Foreign Scan on public.text_tbl t1
                            Output: t1.fields
                            InfluxDB query: SELECT * FROM "text_tbl"
                      ->  Materialize
-                           Output: i8.fields
+                           Output: (((i8.fields ->> 'q2'::text))::bigint)
                            ->  Merge Left Join
-                                 Output: i8.fields
+                                 Output: (((i8.fields ->> 'q2'::text))::bigint)
                                  Merge Cond: ((((i8b1.fields ->> 'q2'::text))::bigint) = (((NULL::integer))::bigint))
                                  ->  Sort
                                        Output: i8b1.fields, (((i8b1.fields ->> 'q2'::text))::bigint)
@@ -4516,38 +5169,36 @@ select t1.* from
                                        ->  Foreign Scan on public.int8_tbl i8b1
                                              Output: i8b1.fields, ((i8b1.fields ->> 'q2'::text))::bigint
                                              InfluxDB query: SELECT * FROM "int8_tbl"
-                                 ->  Materialize
-                                       Output: i8.fields, (NULL::integer), (((NULL::integer))::bigint)
-                                       ->  Sort
-                                             Output: i8.fields, (NULL::integer), (((NULL::integer))::bigint)
-                                             Sort Key: (((NULL::integer))::bigint)
-                                             ->  Merge Left Join
-                                                   Output: i8.fields, (NULL::integer), ((NULL::integer))::bigint
-                                                   Merge Cond: ((((i8.fields ->> 'q1'::text))::bigint) = ((i8b2.fields ->> 'q1'::text))::bigint)
-                                                   ->  Sort
-                                                         Output: i8.fields, (((i8.fields ->> 'q1'::text))::bigint)
-                                                         Sort Key: (((i8.fields ->> 'q1'::text))::bigint)
-                                                         ->  Foreign Scan on public.int8_tbl i8
-                                                               Output: i8.fields, ((i8.fields ->> 'q1'::text))::bigint
-                                                               InfluxDB query: SELECT * FROM "int8_tbl"
-                                                   ->  Materialize
-                                                         Output: i8b2.fields, (NULL::integer)
-                                                         ->  Merge Join
-                                                               Output: i8b2.fields, NULL::integer
-                                                               Merge Cond: ((((i8b2.fields ->> 'q1'::text))::bigint) = ((((i4b2.fields ->> 'f1'::text))::integer)::bigint))
-                                                               ->  Sort
-                                                                     Output: i8b2.fields, (((i8b2.fields ->> 'q1'::text))::bigint)
-                                                                     Sort Key: (((i8b2.fields ->> 'q1'::text))::bigint)
-                                                                     ->  Foreign Scan on public.int8_tbl i8b2
-                                                                           Output: i8b2.fields, ((i8b2.fields ->> 'q1'::text))::bigint
-                                                                           InfluxDB query: SELECT * FROM "int8_tbl"
-                                                               ->  Sort
-                                                                     Output: i4b2.fields, ((((i4b2.fields ->> 'f1'::text))::integer)::bigint)
-                                                                     Sort Key: ((((i4b2.fields ->> 'f1'::text))::integer)::bigint)
-                                                                     ->  Foreign Scan on public.int4_tbl i4b2
-                                                                           Output: i4b2.fields, (((i4b2.fields ->> 'f1'::text))::integer)::bigint
-                                                                           InfluxDB query: SELECT * FROM "int4_tbl"
-(62 rows)
+                                 ->  Sort
+                                       Output: (((i8.fields ->> 'q2'::text))::bigint), (NULL::integer), (((NULL::integer))::bigint)
+                                       Sort Key: (((NULL::integer))::bigint)
+                                       ->  Merge Left Join
+                                             Output: (((i8.fields ->> 'q2'::text))::bigint), (NULL::integer), ((NULL::integer))::bigint
+                                             Merge Cond: ((((i8.fields ->> 'q1'::text))::bigint) = ((i8b2.fields ->> 'q1'::text))::bigint)
+                                             ->  Sort
+                                                   Output: i8.fields, (((i8.fields ->> 'q2'::text))::bigint), (((i8.fields ->> 'q1'::text))::bigint)
+                                                   Sort Key: (((i8.fields ->> 'q1'::text))::bigint)
+                                                   ->  Foreign Scan on public.int8_tbl i8
+                                                         Output: i8.fields, ((i8.fields ->> 'q2'::text))::bigint, ((i8.fields ->> 'q1'::text))::bigint
+                                                         InfluxDB query: SELECT * FROM "int8_tbl"
+                                             ->  Materialize
+                                                   Output: i8b2.fields, (NULL::integer)
+                                                   ->  Merge Join
+                                                         Output: i8b2.fields, NULL::integer
+                                                         Merge Cond: ((((i8b2.fields ->> 'q1'::text))::bigint) = ((((i4b2.fields ->> 'f1'::text))::integer)::bigint))
+                                                         ->  Sort
+                                                               Output: i8b2.fields, (((i8b2.fields ->> 'q1'::text))::bigint)
+                                                               Sort Key: (((i8b2.fields ->> 'q1'::text))::bigint)
+                                                               ->  Foreign Scan on public.int8_tbl i8b2
+                                                                     Output: i8b2.fields, ((i8b2.fields ->> 'q1'::text))::bigint
+                                                                     InfluxDB query: SELECT * FROM "int8_tbl"
+                                                         ->  Sort
+                                                               Output: i4b2.fields, ((((i4b2.fields ->> 'f1'::text))::integer)::bigint)
+                                                               Sort Key: ((((i4b2.fields ->> 'f1'::text))::integer)::bigint)
+                                                               ->  Foreign Scan on public.int4_tbl i4b2
+                                                                     Output: i4b2.fields, (((i4b2.fields ->> 'f1'::text))::integer)::bigint
+                                                                     InfluxDB query: SELECT * FROM "int4_tbl"
+(60 rows)
 
 --Testcase 346:
 select t1.* from
@@ -4577,33 +5228,33 @@ select * from
   on t1.f1 = 'doh!'
   left join (select (fields->>'f1')::int4 f1 from INT4_TBL i4) i4
   on i8.q1 = i4.f1;
-                                                                                QUERY PLAN                                                                                 
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                    QUERY PLAN                                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop Left Join
-   Output: (t1.fields ->> 'f1'::text), ((i8.fields ->> 'q1'::text))::bigint, (i8.fields ->> 'q2'::text), (t2.fields ->> 'f1'::text), ((i4.fields ->> 'f1'::text))::integer
+   Output: ((t1.fields ->> 'f1'::text)), (((i8.fields ->> 'q1'::text))::bigint), ((i8.fields ->> 'q2'::text)), (t2.fields ->> 'f1'::text), (((i4.fields ->> 'f1'::text))::integer)
    ->  Foreign Scan on public.text_tbl t2
          Output: t2.fields
          InfluxDB query: SELECT * FROM "text_tbl"
    ->  Materialize
-         Output: i8.fields, i4.fields, t1.fields
+         Output: (((i8.fields ->> 'q1'::text))::bigint), ((i8.fields ->> 'q2'::text)), (((i4.fields ->> 'f1'::text))::integer), ((t1.fields ->> 'f1'::text))
          ->  Nested Loop
-               Output: i8.fields, i4.fields, t1.fields
+               Output: (((i8.fields ->> 'q1'::text))::bigint), ((i8.fields ->> 'q2'::text)), (((i4.fields ->> 'f1'::text))::integer), ((t1.fields ->> 'f1'::text))
                ->  Hash Right Join
-                     Output: i8.fields, i4.fields
-                     Hash Cond: (((i4.fields ->> 'f1'::text))::integer = ((i8.fields ->> 'q1'::text))::bigint)
+                     Output: (((i8.fields ->> 'q1'::text))::bigint), ((i8.fields ->> 'q2'::text)), (((i4.fields ->> 'f1'::text))::integer)
+                     Hash Cond: (((i4.fields ->> 'f1'::text))::integer = (((i8.fields ->> 'q1'::text))::bigint))
                      ->  Foreign Scan on public.int4_tbl i4
-                           Output: i4.fields
+                           Output: i4.fields, ((i4.fields ->> 'f1'::text))::integer
                            InfluxDB query: SELECT * FROM "int4_tbl"
                      ->  Hash
-                           Output: i8.fields
+                           Output: (((i8.fields ->> 'q1'::text))::bigint), ((i8.fields ->> 'q2'::text))
                            ->  Foreign Scan on public.int8_tbl i8
-                                 Output: i8.fields
-                                 InfluxDB query: SELECT * FROM "int8_tbl" WHERE (("q2" = 456))
+                                 Output: ((i8.fields ->> 'q1'::text))::bigint, (i8.fields ->> 'q2'::text)
+                                 InfluxDB query: SELECT "q1", "q2" FROM "int8_tbl" WHERE (("q2" = 456))
                ->  Materialize
-                     Output: t1.fields
+                     Output: ((t1.fields ->> 'f1'::text))
                      ->  Foreign Scan on public.text_tbl t1
-                           Output: t1.fields
-                           InfluxDB query: SELECT * FROM "text_tbl" WHERE (("f1" = 'doh!'))
+                           Output: (t1.fields ->> 'f1'::text)
+                           InfluxDB query: SELECT "f1" FROM "text_tbl" WHERE (("f1" = 'doh!'))
 (25 rows)
 
 --Testcase 348:
@@ -4621,6 +5272,53 @@ select * from
  doh! | 123 | 456 | hi de ho neighbor |   
 (2 rows)
 
+-- check handling of a variable-free qual for a non-commutable outer join
+explain (costs off)
+select nspname
+from (select 1 as x) ss1
+left join
+( select n.nspname, c.relname
+  from pg_class c left join pg_namespace n on n.oid = c.relnamespace
+  where c.relkind = 'r'
+) ss2 on false;
+           QUERY PLAN           
+--------------------------------
+ Nested Loop Left Join
+   Join Filter: false
+   ->  Result
+   ->  Result
+         One-Time Filter: false
+(5 rows)
+
+-- check handling of apparently-commutable outer joins with non-commutable
+-- joins between them
+explain (costs off)
+select 1 from
+  int4_tbl i4
+  left join int8_tbl i8 on (i4.fields->>'f1')::int4 is not null
+  left join (select 1 as a) ss1 on null
+  join int4_tbl i42 on ss1.a is null or (i8.fields->>'q1')::int8 <> (i8.fields->>'q2')::int8
+  right join (select 2 as b) ss2
+  on ss2.b < (i4.fields->>'f1')::int4;
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
+   ->  Result
+   ->  Nested Loop
+         ->  Nested Loop Left Join
+               Join Filter: NULL::boolean
+               Filter: (((1) IS NULL) OR (((i8.fields ->> 'q1'::text))::bigint <> ((i8.fields ->> 'q2'::text))::bigint))
+               ->  Nested Loop Left Join
+                     Join Filter: (((i4.fields ->> 'f1'::text))::integer IS NOT NULL)
+                     ->  Foreign Scan on int4_tbl i4
+                     ->  Materialize
+                           ->  Foreign Scan on int8_tbl i8
+               ->  Result
+                     One-Time Filter: false
+         ->  Materialize
+               ->  Foreign Scan on int4_tbl i42
+(15 rows)
+
 --
 -- test for appropriate join order in the presence of lateral references
 --
@@ -4632,23 +5330,23 @@ select * from
   on (i8.q2)::int8 = 123,
   lateral (select i8.q1, t2.fields->>'f1' f1 from text_tbl t2 limit 1) as ss
 where t1.f1 = ss.f1;
-                                                                                       QUERY PLAN                                                                                       
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                          QUERY PLAN                                                                                          
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop
-   Output: (t1.fields ->> 'f1'::text), ((i8.fields ->> 'q1'::text))::bigint, ((i8.fields ->> 'q2'::text))::bigint, (((i8.fields ->> 'q1'::text))::bigint), ((t2.fields ->> 'f1'::text))
+   Output: (t1.fields ->> 'f1'::text), (((i8.fields ->> 'q1'::text))::bigint), (((i8.fields ->> 'q2'::text))::bigint), ((((i8.fields ->> 'q1'::text))::bigint)), ((t2.fields ->> 'f1'::text))
    Join Filter: ((t1.fields ->> 'f1'::text) = ((t2.fields ->> 'f1'::text)))
    ->  Nested Loop Left Join
-         Output: t1.fields, i8.fields
+         Output: t1.fields, (((i8.fields ->> 'q1'::text))::bigint), (((i8.fields ->> 'q2'::text))::bigint)
          ->  Foreign Scan on public.text_tbl t1
                Output: t1.fields
                InfluxDB query: SELECT * FROM "text_tbl"
          ->  Materialize
-               Output: i8.fields
+               Output: (((i8.fields ->> 'q1'::text))::bigint), (((i8.fields ->> 'q2'::text))::bigint)
                ->  Foreign Scan on public.int8_tbl i8
-                     Output: i8.fields
-                     InfluxDB query: SELECT * FROM "int8_tbl" WHERE (("q2" = 123))
+                     Output: ((i8.fields ->> 'q1'::text))::bigint, ((i8.fields ->> 'q2'::text))::bigint
+                     InfluxDB query: SELECT "q1", "q2" FROM "int8_tbl" WHERE (("q2" = 123))
    ->  Foreign Scan on public.text_tbl t2
-         Output: ((i8.fields ->> 'q1'::text))::bigint, (t2.fields ->> 'f1'::text)
+         Output: (((i8.fields ->> 'q1'::text))::bigint), (t2.fields ->> 'f1'::text)
          InfluxDB query: SELECT "f1" FROM "text_tbl" LIMIT 1
 (16 rows)
 
@@ -4673,28 +5371,28 @@ select * from
   lateral (select i8.q1, t2.fields->>'f1' f1 from text_tbl t2 limit 1) as ss1,
   lateral (select ss1.* from text_tbl t3 limit 1) as ss2
 where t1.f1 = ss2.f1;
-                                                                                                                            QUERY PLAN                                                                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                QUERY PLAN                                                                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop
-   Output: (t1.fields ->> 'f1'::text), ((i8.fields ->> 'q1'::text))::bigint, ((i8.fields ->> 'q2'::text))::bigint, (((i8.fields ->> 'q1'::text))::bigint), ((t2.fields ->> 'f1'::text)), ((((i8.fields ->> 'q1'::text))::bigint)), (((t2.fields ->> 'f1'::text)))
+   Output: (t1.fields ->> 'f1'::text), (((i8.fields ->> 'q1'::text))::bigint), (((i8.fields ->> 'q2'::text))::bigint), ((((i8.fields ->> 'q1'::text))::bigint)), ((t2.fields ->> 'f1'::text)), (((((i8.fields ->> 'q1'::text))::bigint))), (((t2.fields ->> 'f1'::text)))
    Join Filter: ((t1.fields ->> 'f1'::text) = (((t2.fields ->> 'f1'::text))))
    ->  Nested Loop
-         Output: t1.fields, i8.fields, (((i8.fields ->> 'q1'::text))::bigint), ((t2.fields ->> 'f1'::text))
+         Output: t1.fields, (((i8.fields ->> 'q1'::text))::bigint), (((i8.fields ->> 'q2'::text))::bigint), ((((i8.fields ->> 'q1'::text))::bigint)), ((t2.fields ->> 'f1'::text))
          ->  Nested Loop Left Join
-               Output: t1.fields, i8.fields
+               Output: t1.fields, (((i8.fields ->> 'q1'::text))::bigint), (((i8.fields ->> 'q2'::text))::bigint)
                ->  Foreign Scan on public.text_tbl t1
                      Output: t1.fields
                      InfluxDB query: SELECT * FROM "text_tbl"
                ->  Materialize
-                     Output: i8.fields
+                     Output: (((i8.fields ->> 'q1'::text))::bigint), (((i8.fields ->> 'q2'::text))::bigint)
                      ->  Foreign Scan on public.int8_tbl i8
-                           Output: i8.fields
-                           InfluxDB query: SELECT * FROM "int8_tbl" WHERE (("q2" = 123))
+                           Output: ((i8.fields ->> 'q1'::text))::bigint, ((i8.fields ->> 'q2'::text))::bigint
+                           InfluxDB query: SELECT "q1", "q2" FROM "int8_tbl" WHERE (("q2" = 123))
          ->  Foreign Scan on public.text_tbl t2
-               Output: ((i8.fields ->> 'q1'::text))::bigint, (t2.fields ->> 'f1'::text)
+               Output: (((i8.fields ->> 'q1'::text))::bigint), (t2.fields ->> 'f1'::text)
                InfluxDB query: SELECT "f1" FROM "text_tbl" LIMIT 1
    ->  Foreign Scan on public.text_tbl t3
-         Output: (((i8.fields ->> 'q1'::text))::bigint), ((t2.fields ->> 'f1'::text))
+         Output: ((((i8.fields ->> 'q1'::text))::bigint)), ((t2.fields ->> 'f1'::text))
          InfluxDB query: SELECT * FROM "text_tbl" LIMIT 1
 (21 rows)
 
@@ -4720,39 +5418,41 @@ select 1 from
   left join text_tbl as tt4 on (tt3.fields->>'f1' = tt4.fields->>'f1'),
   lateral (select tt4.fields->>'f1' as c0 from text_tbl as tt5 limit 1) as ss1
 where tt1.fields->>'f1' = ss1.c0;
-                                        QUERY PLAN                                         
--------------------------------------------------------------------------------------------
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
  Nested Loop
    Output: 1
-   ->  Nested Loop Left Join
+   ->  Hash Left Join
          Output: tt1.fields, tt4.fields
-         ->  Nested Loop
-               Output: tt1.fields
-               ->  Foreign Scan on public.text_tbl tt2
-                     InfluxDB query: SELECT * FROM "text_tbl"
-               ->  Materialize
+         Hash Cond: ((tt3.fields ->> 'f1'::text) = (tt4.fields ->> 'f1'::text))
+         ->  Nested Loop Left Join
+               Output: tt1.fields, tt3.fields
+               ->  Nested Loop
                      Output: tt1.fields
-                     ->  Foreign Scan on public.text_tbl tt1
+                     ->  Foreign Scan on public.text_tbl tt2
+                           InfluxDB query: SELECT * FROM "text_tbl"
+                     ->  Materialize
                            Output: tt1.fields
-                           InfluxDB query: SELECT * FROM "text_tbl" WHERE (("f1" = 'foo'))
-         ->  Hash Left Join
-               Output: tt4.fields
-               Hash Cond: ((tt3.fields ->> 'f1'::text) = (tt4.fields ->> 'f1'::text))
-               ->  Foreign Scan on public.text_tbl tt3
+                           ->  Foreign Scan on public.text_tbl tt1
+                                 Output: tt1.fields
+                                 InfluxDB query: SELECT * FROM "text_tbl" WHERE (("f1" = 'foo'))
+               ->  Materialize
                      Output: tt3.fields
-                     InfluxDB query: SELECT * FROM "text_tbl" WHERE (("f1" = 'foo'))
-               ->  Hash
-                     Output: tt4.fields
-                     ->  Foreign Scan on public.text_tbl tt4
-                           Output: tt4.fields
+                     ->  Foreign Scan on public.text_tbl tt3
+                           Output: tt3.fields
                            InfluxDB query: SELECT * FROM "text_tbl" WHERE (("f1" = 'foo'))
+         ->  Hash
+               Output: tt4.fields
+               ->  Foreign Scan on public.text_tbl tt4
+                     Output: tt4.fields
+                     InfluxDB query: SELECT * FROM "text_tbl" WHERE (("f1" = 'foo'))
    ->  Subquery Scan on ss1
          Output: ss1.c0
          Filter: (ss1.c0 = 'foo'::text)
          ->  Foreign Scan on public.text_tbl tt5
                Output: (tt4.fields ->> 'f1'::text)
                InfluxDB query: SELECT * FROM "text_tbl" LIMIT 1
-(30 rows)
+(32 rows)
 
 --Testcase 354:
 select 1 from
@@ -4766,6 +5466,55 @@ where tt1.fields->>'f1' = ss1.c0;
 ----------
 (0 rows)
 
+explain (verbose, costs off)
+select 1 from
+  int4_tbl as i4
+  inner join
+    ((select 42 as n from int4_tbl x1 left join int8_tbl x2 on (x1.fields->>'f1')::int4 = (x2.fields->>'q1')::int8) as ss1
+     right join (select 1 as z) as ss2 on true)
+  on false,
+  lateral (select (i4.fields->>'f1')::int4 f1, ss1.n from int8_tbl as i8 limit 1) as ss3;
+        QUERY PLAN        
+--------------------------
+ Result
+   Output: 1
+   One-Time Filter: false
+(3 rows)
+
+select 1 from
+  int4_tbl as i4
+  inner join
+    ((select 42 as n from int4_tbl x1 left join int8_tbl x2 on (x1.fields->>'f1')::int4 = (x2.fields->>'q1')::int8) as ss1
+     right join (select 1 as z) as ss2 on true)
+  on false,
+  lateral (select (i4.fields->>'f1')::int4 f1, ss1.n from int8_tbl as i8 limit 1) as ss3;
+ ?column? 
+----------
+(0 rows)
+
+--
+-- check a case where we formerly generated invalid parameterized paths
+--
+begin;
+CREATE FOREIGN TABLE temp_t (fields jsonb OPTIONS (fields 'true')) SERVER influxdb_svr OPTIONS(schemaless 'true');
+explain (costs off)
+select 1 from (select (temp_t.fields->>'a')::int4 a FROM temp_t) t1
+  join lateral (select t1.a from (select 1) foo offset 0) as s1 on true
+  join
+    (select 1 from (select (temp_t.fields->>'a')::int4 a FROM temp_t) t2
+       inner join ((select (temp_t.fields->>'a')::int4 a FROM temp_t) t3
+                   left join ((select (temp_t.fields->>'a')::int4 a FROM temp_t) t4 left join (select (temp_t.fields->>'a')::int4 a FROM temp_t) t5 on t4.a = 1)
+                   on t3.a = t4.a)
+       on false
+     where t3.a = coalesce(t5.a,1)) as s2
+  on true;
+        QUERY PLAN        
+--------------------------
+ Result
+   One-Time Filter: false
+(2 rows)
+
+rollback;
 --
 -- check a case in which a PlaceHolderVar forces join order
 --
@@ -4780,43 +5529,45 @@ select ss2.* from
   on (i41.f1)::int4 = (ss1.c1)::int4,
   lateral (select i41.*, i8.*, ss1.* from text_tbl limit 1) ss2
 where (ss1.c2)::int8 = 0;
-                                                                                                        QUERY PLAN                                                                                                         
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                  QUERY PLAN                                                                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop
-   Output: (((int4_tbl.fields ->> 'f1'::text))::integer), (((int8_tbl.fields ->> 'q1'::text))::bigint), (((int8_tbl.fields ->> 'q2'::text))::bigint), ((i42.fields ->> 'f1'::text)), ((i43.fields ->> 'f1'::text)), ((42))
-   ->  Nested Loop
-         Output: int4_tbl.fields, i42.fields, int8_tbl.fields, i43.fields, 42
-         ->  Nested Loop
-               Output: int4_tbl.fields, i42.fields, int8_tbl.fields
-               ->  Merge Join
-                     Output: int4_tbl.fields, i42.fields
-                     Merge Cond: ((((int4_tbl.fields ->> 'f1'::text))::integer) = (((i42.fields ->> 'f1'::text))::integer))
-                     ->  Sort
-                           Output: int4_tbl.fields, (((int4_tbl.fields ->> 'f1'::text))::integer)
-                           Sort Key: (((int4_tbl.fields ->> 'f1'::text))::integer)
-                           ->  Foreign Scan on public.int4_tbl
-                                 Output: int4_tbl.fields, ((int4_tbl.fields ->> 'f1'::text))::integer
-                                 InfluxDB query: SELECT * FROM "int4_tbl"
-                     ->  Sort
-                           Output: i42.fields, (((i42.fields ->> 'f1'::text))::integer)
-                           Sort Key: (((i42.fields ->> 'f1'::text))::integer)
-                           ->  Foreign Scan on public.int4_tbl i42
-                                 Output: i42.fields, ((i42.fields ->> 'f1'::text))::integer
-                                 InfluxDB query: SELECT * FROM "int4_tbl"
-               ->  Materialize
-                     Output: int8_tbl.fields
-                     ->  Foreign Scan on public.int8_tbl
-                           Output: int8_tbl.fields
-                           InfluxDB query: SELECT * FROM "int8_tbl" WHERE (("q1" = 0))
-         ->  Materialize
-               Output: i43.fields
-               ->  Foreign Scan on public.int4_tbl i43
-                     Output: i43.fields
-                     InfluxDB query: SELECT * FROM "int4_tbl" WHERE (("f1" = 0))
+   Output: (((int4_tbl.fields ->> 'f1'::text))::integer), ((((int8_tbl.fields ->> 'q1'::text))::bigint)), ((((int8_tbl.fields ->> 'q2'::text))::bigint)), (((i42.fields ->> 'f1'::text))), (((i43.fields ->> 'f1'::text))), ((42))
+   ->  Merge Join
+         Output: int4_tbl.fields, ((i42.fields ->> 'f1'::text)), (((int8_tbl.fields ->> 'q1'::text))::bigint), (((int8_tbl.fields ->> 'q2'::text))::bigint), ((i43.fields ->> 'f1'::text)), (42)
+         Merge Cond: ((((int4_tbl.fields ->> 'f1'::text))::integer) = (((i42.fields ->> 'f1'::text))::integer))
+         ->  Sort
+               Output: int4_tbl.fields, (((int4_tbl.fields ->> 'f1'::text))::integer)
+               Sort Key: (((int4_tbl.fields ->> 'f1'::text))::integer)
+               ->  Foreign Scan on public.int4_tbl
+                     Output: int4_tbl.fields, ((int4_tbl.fields ->> 'f1'::text))::integer
+                     InfluxDB query: SELECT * FROM "int4_tbl"
+         ->  Sort
+               Output: (((int8_tbl.fields ->> 'q1'::text))::bigint), (((int8_tbl.fields ->> 'q2'::text))::bigint), ((i43.fields ->> 'f1'::text)), i42.fields, ((i42.fields ->> 'f1'::text)), (42), (((i42.fields ->> 'f1'::text))::integer)
+               Sort Key: (((i42.fields ->> 'f1'::text))::integer)
+               ->  Nested Loop
+                     Output: (((int8_tbl.fields ->> 'q1'::text))::bigint), (((int8_tbl.fields ->> 'q2'::text))::bigint), ((i43.fields ->> 'f1'::text)), i42.fields, ((i42.fields ->> 'f1'::text)), 42, ((i42.fields ->> 'f1'::text))::integer
+                     ->  Foreign Scan on public.int4_tbl i42
+                           Output: i42.fields, (i42.fields ->> 'f1'::text)
+                           InfluxDB query: SELECT * FROM "int4_tbl"
+                     ->  Materialize
+                           Output: (((int8_tbl.fields ->> 'q1'::text))::bigint), (((int8_tbl.fields ->> 'q2'::text))::bigint), ((i43.fields ->> 'f1'::text))
+                           ->  Hash Join
+                                 Output: (((int8_tbl.fields ->> 'q1'::text))::bigint), (((int8_tbl.fields ->> 'q2'::text))::bigint), ((i43.fields ->> 'f1'::text))
+                                 Hash Cond: (((int8_tbl.fields ->> 'q1'::text))::bigint = ((i43.fields ->> 'f1'::text))::bigint)
+                                 ->  Foreign Scan on public.int8_tbl
+                                       Output: int8_tbl.fields, ((int8_tbl.fields ->> 'q1'::text))::bigint, ((int8_tbl.fields ->> 'q2'::text))::bigint
+                                       InfluxDB query: SELECT * FROM "int8_tbl"
+                                 ->  Hash
+                                       Output: i43.fields, ((i43.fields ->> 'f1'::text))
+                                       ->  Foreign Scan on public.int4_tbl i43
+                                             Output: i43.fields, (i43.fields ->> 'f1'::text)
+                                             Filter: (((i43.fields ->> 'f1'::text))::bigint = 0)
+                                             InfluxDB query: SELECT * FROM "int4_tbl"
    ->  Foreign Scan on public.text_tbl
-         Output: ((int4_tbl.fields ->> 'f1'::text))::integer, ((int8_tbl.fields ->> 'q1'::text))::bigint, ((int8_tbl.fields ->> 'q2'::text))::bigint, (i42.fields ->> 'f1'::text), (i43.fields ->> 'f1'::text), (42)
+         Output: ((int4_tbl.fields ->> 'f1'::text))::integer, (((int8_tbl.fields ->> 'q1'::text))::bigint), (((int8_tbl.fields ->> 'q2'::text))::bigint), ((i42.fields ->> 'f1'::text)), ((i43.fields ->> 'f1'::text)), (42)
          InfluxDB query: SELECT * FROM "text_tbl" LIMIT 1
-(34 rows)
+(36 rows)
 
 --Testcase 356:
 select ss2.* from
@@ -4842,12 +5593,12 @@ select * from
   left join
     ((select (fields->>'unique1')::int4 unique1, (fields->>'unique2')::int4 unique2, (fields->>'two')::int4 two, (fields->>'four')::int4 four, (fields->>'ten')::int4 ten, (fields->>'twenty')::int4 twenty, (fields->>'hundred')::int4 hundred, (fields->>'thousand')::int4 thousand, (fields->>'twothousand')::int4 twothousand, (fields->>'fivethous')::int4 fivethous, (fields->>'tenthous')::int4 tenthous, (fields->>'odd')::int4 odd, (fields->>'even')::int4 even, (fields->>'stringu1')::name stringu1, (fields->>'stringu2')::name stringu2, (fields->>'string4')::name string4 from tenk1 a1) as a1 full join (select 1 as id) as yy on ((a1.unique1)::int4 = yy.id))
   on (xx.id = coalesce(yy.id));
-                              QUERY PLAN                               
------------------------------------------------------------------------
+                               QUERY PLAN                                
+-------------------------------------------------------------------------
  Nested Loop Left Join
    ->  Result
    ->  Hash Full Join
-         Hash Cond: (((a1.fields ->> 'unique1'::text))::integer = (1))
+         Hash Cond: ((((a1.fields ->> 'unique1'::text))::integer) = (1))
          Filter: (1 = COALESCE((1)))
          ->  Foreign Scan on tenk1 a1
          ->  Hash
@@ -4871,26 +5622,26 @@ select * from
 --Testcase 359:
 explain (costs off)
   select * from (select (fields->>'f1')::int4 f1 from INT4_TBL a) a left join (select (fields->>'unique1')::int4 unique1, (fields->>'unique2')::int4 unique2, (fields->>'two')::int4 two, (fields->>'four')::int4 four, (fields->>'ten')::int4 ten, (fields->>'twenty')::int4 twenty, (fields->>'hundred')::int4 hundred, (fields->>'thousand')::int4 thousand, (fields->>'twothousand')::int4 twothousand, (fields->>'fivethous')::int4 fivethous, (fields->>'tenthous')::int4 tenthous, (fields->>'odd')::int4 odd, (fields->>'even')::int4 even, (fields->>'stringu1')::name stringu1, (fields->>'stringu2')::name stringu2, (fields->>'string4')::name string4 from tenk1 b) b on (f1)::int4 = (unique2)::int4 where (f1)::int4 = 0;
-                                           QUERY PLAN                                            
--------------------------------------------------------------------------------------------------
- Hash Left Join
-   Hash Cond: (((a.fields ->> 'f1'::text))::integer = ((b.fields ->> 'unique2'::text))::integer)
+             QUERY PLAN              
+-------------------------------------
+ Nested Loop Left Join
    ->  Foreign Scan on int4_tbl a
-   ->  Hash
+   ->  Materialize
          ->  Foreign Scan on tenk1 b
-(5 rows)
+(4 rows)
 
 --Testcase 360:
 explain (costs off)
   select * from (select (fields->>'unique1')::int4 unique1, (fields->>'unique2')::int4 unique2, (fields->>'two')::int4 two, (fields->>'four')::int4 four, (fields->>'ten')::int4 ten, (fields->>'twenty')::int4 twenty, (fields->>'hundred')::int4 hundred, (fields->>'thousand')::int4 thousand, (fields->>'twothousand')::int4 twothousand, (fields->>'fivethous')::int4 fivethous, (fields->>'tenthous')::int4 tenthous, (fields->>'odd')::int4 odd, (fields->>'even')::int4 even, (fields->>'stringu1')::name stringu1, (fields->>'stringu2')::name stringu2, (fields->>'string4')::name string4 from tenk1 a) a full join (select (fields->>'unique1')::int4 unique1, (fields->>'unique2')::int4 unique2, (fields->>'two')::int4 two, (fields->>'four')::int4 four, (fields->>'ten')::int4 ten, (fields->>'twenty')::int4 twenty, (fields->>'hundred')::int4 hundred, (fields->>'thousand')::int4 thousand, (fields->>'twothousand')::int4 twothousand, (fields->>'fivethous')::int4 fivethous, (fields->>'tenthous')::int4 tenthous, (fields->>'odd')::int4 odd, (fields->>'even')::int4 even, (fields->>'stringu1')::name stringu1, (fields->>'stringu2')::name stringu2, (fields->>'string4')::name string4 from tenk1 b) b using(unique2) where (unique2)::int4 = 42;
-                                              QUERY PLAN                                              
-------------------------------------------------------------------------------------------------------
- Hash Full Join
-   Hash Cond: (((a.fields ->> 'unique2'::text))::integer = ((b.fields ->> 'unique2'::text))::integer)
+                              QUERY PLAN                              
+----------------------------------------------------------------------
+ Merge Full Join
    ->  Foreign Scan on tenk1 a
-   ->  Hash
+         Filter: (((fields ->> 'unique2'::text))::integer = 42)
+   ->  Materialize
          ->  Foreign Scan on tenk1 b
-(5 rows)
+               Filter: (((fields ->> 'unique2'::text))::integer = 42)
+(6 rows)
 
 --
 -- test that quals attached to an outer join have correct semantics,
@@ -4948,6 +5699,126 @@ select (a.fields->>'q2')::int8 q2, (b.fields->>'q1')::int8 q1
 reset enable_hashjoin;
 --Testcase 366:
 reset enable_nestloop;
+--
+-- test join strength reduction with a SubPlan providing the proof
+--
+explain (costs off)
+select (a.fields->>'unique1') unique1, (b.fields->>'unique2') unique2
+  from onek a left join onek b on (a.fields->>'unique1')::int4 = (b.fields->>'unique2')::int4
+  where (b.fields->>'unique2')::int4 = any (select (fields->>'q1')::int8 from int8_tbl c where (c.fields->>'q1')::int8 < (b.fields->>'unique1')::int4);
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: ((((b.fields ->> 'unique2'::text))::integer) = (((a.fields ->> 'unique1'::text))::integer))
+   ->  Sort
+         Sort Key: (((b.fields ->> 'unique2'::text))::integer)
+         ->  Foreign Scan on onek b
+               Filter: (SubPlan 1)
+               SubPlan 1
+                 ->  Foreign Scan on int8_tbl c
+   ->  Sort
+         Sort Key: (((a.fields ->> 'unique1'::text))::integer)
+         ->  Foreign Scan on onek a
+(11 rows)
+
+select (a.fields->>'unique1') unique1, (b.fields->>'unique2') unique2
+  from onek a left join onek b on (a.fields->>'unique1')::int4 = (b.fields->>'unique2')::int4
+  where (b.fields->>'unique2')::int4 = any (select (fields->>'q1')::int8 from int8_tbl c where (c.fields->>'q1')::int8 < (b.fields->>'unique1')::int4);
+ unique1 | unique2 
+---------+---------
+ 123     | 123
+(1 row)
+
+--
+-- test full-join strength reduction
+--
+explain (costs off)
+select a.fields->>'unique1' unique1, b.fields->>'unique2' unique2
+  from onek a full join onek b on (a.fields->>'unique1')::int4 = (b.fields->>'unique2')::int4
+  where (a.fields->>'unique1')::int4 = 42;
+             QUERY PLAN             
+------------------------------------
+ Nested Loop Left Join
+   ->  Foreign Scan on onek a
+   ->  Materialize
+         ->  Foreign Scan on onek b
+(4 rows)
+
+select a.fields->>'unique1' unique1, b.fields->>'unique2' unique2
+  from onek a full join onek b on (a.fields->>'unique1')::int4 = (b.fields->>'unique2')::int4
+  where (a.fields->>'unique1')::int4 = 42;
+ unique1 | unique2 
+---------+---------
+ 42      | 42
+(1 row)
+
+explain (costs off)
+select a.fields->>'unique1' unique1, b.fields->>'unique2' unique2
+  from onek a full join onek b on (a.fields->>'unique1')::int4 = (b.fields->>'unique2')::int4
+  where (b.fields->>'unique2')::int4 = 43;
+             QUERY PLAN             
+------------------------------------
+ Nested Loop Left Join
+   ->  Foreign Scan on onek b
+   ->  Materialize
+         ->  Foreign Scan on onek a
+(4 rows)
+
+select a.fields->>'unique1' unique1, b.fields->>'unique2' unique2
+  from onek a full join onek b on (a.fields->>'unique1')::int4 = (b.fields->>'unique2')::int4
+  where (b.fields->>'unique2')::int4 = 43;
+ unique1 | unique2 
+---------+---------
+ 43      | 43
+(1 row)
+
+explain (costs off)
+select a.fields->>'unique1', b.fields->>'unique2'
+  from onek a full join onek b on (a.fields->>'unique1')::int4 = (b.fields->>'unique2')::int4
+  where (a.fields->>'unique1')::int4 = 42 and (b.fields->>'unique2')::int4 = 42;
+             QUERY PLAN             
+------------------------------------
+ Nested Loop
+   ->  Foreign Scan on onek a
+   ->  Materialize
+         ->  Foreign Scan on onek b
+(4 rows)
+
+select a.fields->>'unique1', b.fields->>'unique2'
+  from onek a full join onek b on (a.fields->>'unique1')::int4 = (b.fields->>'unique2')::int4
+  where (a.fields->>'unique1')::int4 = 42 and (b.fields->>'unique2')::int4 = 42;
+ ?column? | ?column? 
+----------+----------
+ 42       | 42
+(1 row)
+
+--
+-- test result-RTE removal underneath a full join
+--
+explain (costs off)
+select * from
+  (select * from int8_tbl i81 join (values(123,2)) v(v1,v2) on (i81.fields->>'q2')::int8=v1) ss1
+full join
+  (select * from (values(456,2)) w(v1,v2) join int8_tbl i82 on (i82.fields->>'q2')::int8=v1) ss2
+on true;
+                QUERY PLAN                
+------------------------------------------
+ Merge Full Join
+   ->  Foreign Scan on int8_tbl i81
+   ->  Materialize
+         ->  Foreign Scan on int8_tbl i82
+(4 rows)
+
+select * from
+  (select * from int8_tbl i81 join (values(123,2)) v(v1,v2) on (i81.fields->>'q2')::int8=v1) ss1
+full join
+  (select * from (values(456,2)) w(v1,v2) join int8_tbl i82 on (i82.fields->>'q2')::int8=v1) ss2
+on true;
+                 fields                  | v1  | v2 | v1  | v2 |           fields           
+-----------------------------------------+-----+----+-----+----+----------------------------
+ {"q1": "4567890123456789", "q2": "123"} | 123 |  2 | 456 |  2 | {"q1": "123", "q2": "456"}
+(1 row)
+
 --
 -- test join removal
 --
@@ -5060,6 +5931,245 @@ select (fields->>'id')::int id from a where (fields->>'id')::int in (
                            ->  Foreign Scan on c
 (14 rows)
 
+-- check optimization with oddly-nested outer joins
+explain (costs off)
+select a1.fields->>'id' id from
+  (a a1 left join a a2 on true)
+  left join
+  (a a3 left join a a4 on (a3.fields->>'id')::int = (a4.fields->>'id')::int)
+  on (a2.fields->>'id')::int = (a3.fields->>'id')::int;
+                                                        QUERY PLAN                                                         
+---------------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
+   ->  Foreign Scan on a a1
+   ->  Materialize
+         ->  Merge Left Join
+               Merge Cond: ((((a2.fields ->> 'id'::text))::integer) = ((a3.fields ->> 'id'::text))::integer)
+               ->  Sort
+                     Sort Key: (((a2.fields ->> 'id'::text))::integer)
+                     ->  Foreign Scan on a a2
+               ->  Materialize
+                     ->  Merge Left Join
+                           Merge Cond: ((((a3.fields ->> 'id'::text))::integer) = (((a4.fields ->> 'id'::text))::integer))
+                           ->  Sort
+                                 Sort Key: (((a3.fields ->> 'id'::text))::integer)
+                                 ->  Foreign Scan on a a3
+                           ->  Sort
+                                 Sort Key: (((a4.fields ->> 'id'::text))::integer)
+                                 ->  Foreign Scan on a a4
+(17 rows)
+
+explain (costs off)
+select a1.fields->>'id' id from
+  (a a1 left join a a2 on (a1.fields->>'id')::int = (a2.fields->>'id')::int)
+  left join
+  (a a3 left join a a4 on (a3.fields->>'id')::int = (a4.fields->>'id')::int)
+  on (a2.fields->>'id')::int = (a3.fields->>'id')::int;
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
+ Merge Right Join
+   Merge Cond: (((a3.fields ->> 'id'::text))::integer = (((a2.fields ->> 'id'::text))::integer))
+   ->  Merge Left Join
+         Merge Cond: ((((a3.fields ->> 'id'::text))::integer) = (((a4.fields ->> 'id'::text))::integer))
+         ->  Sort
+               Sort Key: (((a3.fields ->> 'id'::text))::integer)
+               ->  Foreign Scan on a a3
+         ->  Sort
+               Sort Key: (((a4.fields ->> 'id'::text))::integer)
+               ->  Foreign Scan on a a4
+   ->  Sort
+         Sort Key: (((a2.fields ->> 'id'::text))::integer)
+         ->  Merge Left Join
+               Merge Cond: ((((a1.fields ->> 'id'::text))::integer) = (((a2.fields ->> 'id'::text))::integer))
+               ->  Sort
+                     Sort Key: (((a1.fields ->> 'id'::text))::integer)
+                     ->  Foreign Scan on a a1
+               ->  Sort
+                     Sort Key: (((a2.fields ->> 'id'::text))::integer)
+                     ->  Foreign Scan on a a2
+(20 rows)
+
+explain (costs off)
+select 1 from a t1
+    left join a t2 on true
+   inner join a t3 on true
+    left join a t4 on (t2.fields->>'id')::int = (t4.fields->>'id')::int and (t2.fields->>'id')::int = (t3.fields->>'id')::int;
+                                            QUERY PLAN                                             
+---------------------------------------------------------------------------------------------------
+ Merge Left Join
+   Merge Cond: ((((t2.fields ->> 'id'::text))::integer) = (((t4.fields ->> 'id'::text))::integer))
+   Join Filter: ((((t2.fields ->> 'id'::text))::integer) = ((t3.fields ->> 'id'::text))::integer)
+   ->  Sort
+         Sort Key: (((t2.fields ->> 'id'::text))::integer)
+         ->  Nested Loop
+               ->  Nested Loop Left Join
+                     ->  Foreign Scan on a t1
+                     ->  Materialize
+                           ->  Foreign Scan on a t2
+               ->  Materialize
+                     ->  Foreign Scan on a t3
+   ->  Sort
+         Sort Key: (((t4.fields ->> 'id'::text))::integer)
+         ->  Foreign Scan on a t4
+(15 rows)
+
+-- another example (bug #17781)
+explain (costs off)
+select ss1.f1
+from int4_tbl as t1
+  left join (int4_tbl as t2
+             right join int4_tbl as t3 on null
+             left join (int4_tbl as t4
+                        right join int8_tbl as t5 on null)
+               on (t2.fields->>'f1')::int = (t4.fields->>'f1')::int
+             left join ((select null as f1 from int4_tbl as t6) as ss1
+                        inner join int8_tbl as t7 on null)
+               on (t5.fields->>'q1')::int = (t7.fields->>'q2')::int)
+    on false;
+            QUERY PLAN             
+-----------------------------------
+ Nested Loop Left Join
+   Join Filter: false
+   ->  Foreign Scan on int4_tbl t1
+   ->  Result
+         One-Time Filter: false
+(5 rows)
+
+-- variant with Var rather than PHV coming from t6
+explain (costs off)
+select ss1.f1
+from int4_tbl as t1
+  left join (int4_tbl as t2
+             right join int4_tbl as t3 on null
+             left join (int4_tbl as t4
+                        right join int8_tbl as t5 on null)
+               on (t2.fields->>'f1')::int = (t4.fields->>'f1')::int
+             left join ((select t6.fields->>'f1' f1 from int4_tbl as t6) as ss1
+                        inner join int8_tbl as t7 on null)
+               on (t5.fields->>'q1')::int = (t7.fields->>'q2')::int)
+    on false;
+            QUERY PLAN             
+-----------------------------------
+ Nested Loop Left Join
+   Join Filter: false
+   ->  Foreign Scan on int4_tbl t1
+   ->  Result
+         One-Time Filter: false
+(5 rows)
+
+-- per further discussion of bug #17781
+explain (costs off)
+select ss1.x
+from (select (i4.fields->>'f1')::int4/2 as x from int4_tbl i4 left join a on (a.fields->>'id')::int4 = (i4.fields->>'f1')::int4) ss1
+     right join int8_tbl i8 on true
+where current_user is not null;  -- this is to add a Result node
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
+ Result
+   One-Time Filter: (CURRENT_USER IS NOT NULL)
+   ->  Nested Loop Left Join
+         ->  Foreign Scan on int8_tbl i8
+         ->  Materialize
+               ->  Merge Left Join
+                     Merge Cond: ((((i4.fields ->> 'f1'::text))::integer) = (((a.fields ->> 'id'::text))::integer))
+                     ->  Sort
+                           Sort Key: (((i4.fields ->> 'f1'::text))::integer)
+                           ->  Foreign Scan on int4_tbl i4
+                     ->  Sort
+                           Sort Key: (((a.fields ->> 'id'::text))::integer)
+                           ->  Foreign Scan on a
+(13 rows)
+
+-- and further discussion of bug #17781
+explain (costs off)
+select *
+from int8_tbl t1
+  left join (int8_tbl t2 left join onek t3 on (t2.fields->>'q1')::int8 > (t3.fields->>'unique1')::int8)
+    on (t1.fields->>'q2')::int8 = (t2.fields->>'q2')::int8
+  left join onek t4
+    on (t2.fields->>'q2')::int8 < (t3.fields->>'unique2')::int8;
+                                                        QUERY PLAN                                                         
+---------------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
+   Join Filter: (((t2.fields ->> 'q2'::text))::bigint < ((t3.fields ->> 'unique2'::text))::bigint)
+   ->  Merge Left Join
+         Merge Cond: ((((t1.fields ->> 'q2'::text))::bigint) = (((t2.fields ->> 'q2'::text))::bigint))
+         ->  Sort
+               Sort Key: (((t1.fields ->> 'q2'::text))::bigint)
+               ->  Foreign Scan on int8_tbl t1
+         ->  Materialize
+               ->  Sort
+                     Sort Key: (((t2.fields ->> 'q2'::text))::bigint)
+                     ->  Nested Loop Left Join
+                           Join Filter: (((t2.fields ->> 'q1'::text))::bigint > ((t3.fields ->> 'unique1'::text))::bigint)
+                           ->  Foreign Scan on int8_tbl t2
+                           ->  Materialize
+                                 ->  Foreign Scan on onek t3
+   ->  Materialize
+         ->  Foreign Scan on onek t4
+(17 rows)
+
+-- More tests of correct placement of pseudoconstant quals
+-- simple constant-false condition
+explain (costs off)
+select * from int8_tbl t1 left join
+  (int8_tbl t2 inner join int8_tbl t3 on false
+   left join int8_tbl t4 on (t2.fields->>'q2')::int8 = (t4.fields->>'q2')::int8)
+on (t1.fields->>'q1')::int8 = (t2.fields->>'q1')::int8;
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Hash Left Join
+   Hash Cond: (((t1.fields ->> 'q1'::text))::bigint = ((fields ->> 'q1'::text))::bigint)
+   ->  Foreign Scan on int8_tbl t1
+   ->  Hash
+         ->  Result
+               One-Time Filter: false
+(6 rows)
+
+-- deduce constant-false from an EquivalenceClass
+explain (costs off)
+select * from int8_tbl t1 left join
+  (int8_tbl t2 inner join int8_tbl t3 on ((t2.fields->>'q1')::int8-(t3.fields->>'q2')::int8) = 0 and ((t2.fields->>'q1')::int8-(t3.fields->>'q2')::int8) = 1
+   left join int8_tbl t4 on (t2.fields->>'q2')::int8 = (t4.fields->>'q2')::int8)
+on (t1.fields->>'q1')::int8 = (t2.fields->>'q1')::int8;
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Hash Left Join
+   Hash Cond: (((t1.fields ->> 'q1'::text))::bigint = ((fields ->> 'q1'::text))::bigint)
+   ->  Foreign Scan on int8_tbl t1
+   ->  Hash
+         ->  Result
+               One-Time Filter: false
+(6 rows)
+
+-- pseudoconstant based on an outer-level Param
+explain (costs off)
+select exists(
+  select * from int8_tbl t1 left join
+    (int8_tbl t2 inner join int8_tbl t3 on (x0.fields->>'f1')::int4 = 1
+     left join int8_tbl t4 on (t2.fields->>'q2')::int8 = (t4.fields->>'q2')::int8)
+  on (t1.fields->>'q1')::int8 = (t2.fields->>'q1')::int8
+) from int4_tbl x0;
+                                                 QUERY PLAN                                                 
+------------------------------------------------------------------------------------------------------------
+ Foreign Scan on int4_tbl x0
+   SubPlan 1
+     ->  Nested Loop Left Join
+           Join Filter: (((t2.fields ->> 'q2'::text))::bigint = ((t4.fields ->> 'q2'::text))::bigint)
+           ->  Nested Loop Left Join
+                 Join Filter: (((t1.fields ->> 'q1'::text))::bigint = ((t2.fields ->> 'q1'::text))::bigint)
+                 ->  Foreign Scan on int8_tbl t1
+                 ->  Materialize
+                       ->  Result
+                             One-Time Filter: (((x0.fields ->> 'f1'::text))::integer = 1)
+                             ->  Nested Loop
+                                   ->  Foreign Scan on int8_tbl t3
+                                   ->  Materialize
+                                         ->  Foreign Scan on int8_tbl t2
+           ->  Materialize
+                 ->  Foreign Scan on int8_tbl t4
+(16 rows)
+
 -- check that join removal works for a left join when joining a subquery
 -- that is guaranteed to be unique by its GROUP BY clause
 --Testcase 379:
@@ -5124,6 +6234,22 @@ select d.* from (select (fields->>'a')::int a, (fields->>'b')::int b from d) d l
          ->  Foreign Scan on d
 (11 rows)
 
+-- join removal is not possible here
+explain (costs off)
+select 1 from a t1
+  left join (a t2 left join a t3 on (t2.fields->>'id')::int = 1) on (t2.fields->>'id')::int = 1;
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Nested Loop Left Join
+   ->  Foreign Scan on a t1
+   ->  Materialize
+         ->  Nested Loop Left Join
+               Join Filter: (((t2.fields ->> 'id'::text))::integer = 1)
+               ->  Foreign Scan on a t2
+               ->  Materialize
+                     ->  Foreign Scan on a t3
+(8 rows)
+
 -- check join removal works when uniqueness of the join condition is enforced
 -- by a UNION
 --Testcase 383:
@@ -5164,6 +6290,41 @@ select 1 from (select (a.fields->>'id')::int id FROM a left join b on (a.fields-
                ->  Function Scan on generate_series gs
                      Filter: (((a.fields ->> 'id'::text))::integer = i)
 (11 rows)
+
+-- check join removal within RHS of an outer join
+explain (costs off)
+select c.fields->>'id', ss.a from c
+  left join (select d.fields->>'a' a from onerow, d left join b on (d.fields->>'a')::int = (b.fields->>'id')::int) ss
+  on (c.fields->>'id')::int = ss.a::int;
+                                                 QUERY PLAN                                                 
+------------------------------------------------------------------------------------------------------------
+ Merge Left Join
+   Merge Cond: ((((c.fields ->> 'id'::text))::integer) = ((d.fields ->> 'a'::text))::integer)
+   ->  Sort
+         Sort Key: (((c.fields ->> 'id'::text))::integer)
+         ->  Foreign Scan on c
+   ->  Materialize
+         ->  Merge Left Join
+               Merge Cond: ((((d.fields ->> 'a'::text))::integer) = (((b.fields ->> 'id'::text))::integer))
+               ->  Sort
+                     Sort Key: (((d.fields ->> 'a'::text))::integer)
+                     ->  Nested Loop
+                           ->  Seq Scan on onerow
+                           ->  Foreign Scan on d
+               ->  Sort
+                     Sort Key: (((b.fields ->> 'id'::text))::integer)
+                     ->  Foreign Scan on b
+(16 rows)
+
+CREATE TEMP TABLE parted_b (id int PRIMARY KEY) partition by range(id);
+CREATE TEMP TABLE parted_b1 partition of parted_b for values from (0) to (10);
+-- test join removals on a partitioned table
+explain (costs off)
+select a.* from a left join parted_b pb on (a.fields->>'b_id')::int = pb.id;
+    QUERY PLAN     
+-------------------
+ Foreign Scan on a
+(1 row)
 
 --Testcase 386:
 DELETE FROM a_nsc;
@@ -5378,6 +6539,65 @@ SELECT * FROM
  1 | 4567890123456789 |  4567890123456789 | 4567890123456789
 (5 rows)
 
+-- join removal bug #17769: can't remove if there's a pushed-down reference
+EXPLAIN (COSTS OFF)
+SELECT q2 FROM
+  (SELECT (int8_tbl.fields->>'q1')::int8 q1, (int8_tbl.fields->>'q2')::int8 q2, (innertab.fields->>'id')::int id, (innertab.fields->>'dat1')::int dat1
+   FROM int8_tbl LEFT JOIN innertab ON (int8_tbl.fields->>'q2')::int8 = (innertab.fields->>'id')::int) ss
+ WHERE COALESCE(dat1, 0) = q1;
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Merge Left Join
+   Merge Cond: ((((int8_tbl.fields ->> 'q2'::text))::bigint) = (((innertab.fields ->> 'id'::text))::integer))
+   Filter: (COALESCE(((innertab.fields ->> 'dat1'::text))::integer, 0) = ((int8_tbl.fields ->> 'q1'::text))::bigint)
+   ->  Sort
+         Sort Key: (((int8_tbl.fields ->> 'q2'::text))::bigint)
+         ->  Foreign Scan on int8_tbl
+   ->  Sort
+         Sort Key: (((innertab.fields ->> 'id'::text))::integer)
+         ->  Foreign Scan on innertab
+(9 rows)
+
+-- join removal bug #17773: otherwise-removable PHV appears in a qual condition
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT q2 FROM
+  (SELECT (int8_tbl.fields->>'q2')::int8 q2, 'constant'::text AS x
+   FROM int8_tbl LEFT JOIN innertab ON (int8_tbl.fields->>'q2')::int8 = (innertab.fields->>'id')::int) ss
+  RIGHT JOIN int4_tbl ON NULL
+ WHERE x >= x;
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Nested Loop Left Join
+   Output: (((fields ->> 'q2'::text))::bigint)
+   Join Filter: NULL::boolean
+   Filter: (('constant'::text) >= ('constant'::text))
+   ->  Foreign Scan on public.int4_tbl
+         InfluxDB query: SELECT * FROM "int4_tbl"
+   ->  Result
+         Output: ((fields ->> 'q2'::text))::bigint, 'constant'::text
+         One-Time Filter: false
+(9 rows)
+
+-- join removal bug #17786: check that OR conditions are cleaned up
+EXPLAIN (COSTS OFF)
+SELECT (int4_tbl.fields->>'f1'), x
+FROM int4_tbl
+     JOIN ((SELECT 42 AS x FROM int8_tbl LEFT JOIN innertab ON (int8_tbl.fields->>'q1')::int8 = (innertab.fields->>'id')::int) AS ss1
+           RIGHT JOIN tenk1 ON NULL)
+        ON (tenk1.fields->>'unique1')::int = ss1.x OR (tenk1.fields->>'unique2')::int = ss1.x;
+                                                                QUERY PLAN                                                                
+------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop
+   ->  Foreign Scan on int4_tbl
+   ->  Materialize
+         ->  Nested Loop Left Join
+               Join Filter: NULL::boolean
+               Filter: ((((tenk1.fields ->> 'unique1'::text))::integer = (42)) OR (((tenk1.fields ->> 'unique2'::text))::integer = (42)))
+               ->  Foreign Scan on tenk1
+               ->  Result
+                     One-Time Filter: false
+(9 rows)
+
 -- Clean up
 --Testcase 630:
 DELETE FROM innertab_nsc;
@@ -5478,6 +6698,121 @@ where ss.stringu2 !~* ss.case1;
 (1 row)
 
 rollback;
+-- another join removal bug: we must clean up EquivalenceClasses too
+begin;
+create foreign table t (fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS (table 't1_eq_class', schemaless 'true');
+create foreign table t_tmp (a int) server influxdb_svr OPTIONS (table 't1_eq_class');
+insert into t_tmp values (1);
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
+explain (costs off)
+select 1
+from (select (fields->>'a')::int as a from t) t1
+  left join (select 2 as c
+             from (select (fields->>'a')::int as a from t) t2 left join (select (fields->>'a')::int as a from t) t3 on t2.a = t3.a) s
+    on true
+where t1.a = s.c;
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
+   Filter: (((t.fields ->> 'a'::text))::integer = (2))
+   ->  Foreign Scan on t
+   ->  Materialize
+         ->  Merge Left Join
+               Merge Cond: ((((t_1.fields ->> 'a'::text))::integer) = (((t_2.fields ->> 'a'::text))::integer))
+               ->  Sort
+                     Sort Key: (((t_1.fields ->> 'a'::text))::integer)
+                     ->  Foreign Scan on t t_1
+               ->  Sort
+                     Sort Key: (((t_2.fields ->> 'a'::text))::integer)
+                     ->  Foreign Scan on t t_2
+(12 rows)
+
+select 1
+from (select (fields->>'a')::int as a from t) t1
+  left join (select 2 as c
+             from (select (fields->>'a')::int as a from t) t2 left join (select (fields->>'a')::int as a from t) t3 on t2.a = t3.a) s
+    on true
+where t1.a = s.c;
+ ?column? 
+----------
+(0 rows)
+
+rollback;
+-- test cases where we can remove a join, but not a PHV computed at it
+begin;
+create foreign table t (fields jsonb OPTIONS (fields 'true')) server influxdb_svr OPTIONS (table 't2_eq_class', schemaless 'true');
+create foreign table t_tmp (a int, b int) server influxdb_svr OPTIONS (table 't2_eq_class');
+insert into t_tmp values (1,1), (2,2);
+WARNING:  Modification query is executing in non-autocommit mode.
+Multitenant table can not read un-commited data.
+explain (costs off)
+select 1
+from (select (fields->>'a')::int as a, (fields->>'b')::int as b from t) t1
+  left join (select t2.a, 1 as c
+             from (select (fields->>'a')::int as a, (fields->>'b')::int as b from t) t2 left join (select (fields->>'a')::int as a, (fields->>'b')::int as b from t) t3 on t2.a = t3.a) s
+  on true
+  left join (select (fields->>'a')::int as a, (fields->>'b')::int as b from t) t4 on true
+where s.a < s.c;
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
+   ->  Nested Loop
+         ->  Foreign Scan on t
+         ->  Materialize
+               ->  Merge Left Join
+                     Merge Cond: ((((t_1.fields ->> 'a'::text))::integer) = (((t_2.fields ->> 'a'::text))::integer))
+                     Filter: ((((t_1.fields ->> 'a'::text))::integer) < 1)
+                     ->  Sort
+                           Sort Key: (((t_1.fields ->> 'a'::text))::integer)
+                           ->  Foreign Scan on t t_1
+                     ->  Sort
+                           Sort Key: (((t_2.fields ->> 'a'::text))::integer)
+                           ->  Foreign Scan on t t_2
+   ->  Materialize
+         ->  Foreign Scan on t t_3
+(15 rows)
+
+explain (costs off)
+select t1.a, s.*
+from (select (fields->>'a')::int as a, (fields->>'b')::int as b from t) t1
+  left join lateral (select t2.a, coalesce(t1.a, 1) as c
+                     from (select (fields->>'a')::int as a, (fields->>'b')::int as b from t) t2 left join (select (fields->>'a')::int as a, (fields->>'b')::int as b from t) t3 on t2.a = t3.a) s
+  on true
+  left join (select (fields->>'a')::int as a, (fields->>'b')::int as b from t) t4 on true
+where s.a < s.c;
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
+   ->  Nested Loop
+         ->  Foreign Scan on t
+         ->  Merge Left Join
+               Merge Cond: ((((t_1.fields ->> 'a'::text))::integer) = (((t_2.fields ->> 'a'::text))::integer))
+               Filter: ((((t_1.fields ->> 'a'::text))::integer) < COALESCE(((t.fields ->> 'a'::text))::integer, 1))
+               ->  Sort
+                     Sort Key: (((t_1.fields ->> 'a'::text))::integer)
+                     ->  Foreign Scan on t t_1
+               ->  Sort
+                     Sort Key: (((t_2.fields ->> 'a'::text))::integer)
+                     ->  Foreign Scan on t t_2
+   ->  Materialize
+         ->  Foreign Scan on t t_3
+(14 rows)
+
+select t1.a, s.*
+from (select (fields->>'a')::int as a, (fields->>'b')::int as b from t) t1
+  left join lateral (select t2.a, coalesce(t1.a, 1) as c
+                     from (select (fields->>'a')::int as a, (fields->>'b')::int as b from t) t2 left join (select (fields->>'a')::int as a, (fields->>'b')::int as b from t) t3 on t2.a = t3.a) s
+  on true
+  left join (select (fields->>'a')::int as a, (fields->>'b')::int as b from t) t4 on true
+where s.a < s.c;
+ a | a | c 
+---+---+---
+ 2 | 1 | 2
+ 2 | 1 | 2
+(2 rows)
+
+rollback;
 -- test case to expose miscomputation of required relid set for a PHV
 --Testcase 423:
 explain (verbose, costs off)
@@ -5568,7 +6903,7 @@ select * from
 ERROR:  invalid reference to FROM-clause entry for table "y"
 LINE 2: ...t (fields->>'f1')::int4 f1 from INT4_TBL) y) j on q1 = y.f1;
                                                                   ^
-HINT:  There is an entry for table "y", but it cannot be referenced from this part of the query.
+DETAIL:  There is an entry for table "y", but it cannot be referenced from this part of the query.
 --Testcase 427:
 select * from
   (select (fields->>'q1')::int8 q1, (fields->>'q2')::int8 q2 from INT8_TBL) x join ((select (fields->>'f1')::int4 f1 from INT4_TBL) x cross join (select (fields->>'f1')::int4 f1 from INT4_TBL) y(ff)) j on q1 = f1; -- ok
@@ -5600,6 +6935,12 @@ ERROR:  column "ffields" does not exist
 LINE 1: select (ffields->>'unique1')::int4 unique1 from
                 ^
 HINT:  Perhaps you meant to reference the column "t1.fields" or the column "t2.fields".
+select (ffields->>'ctid')::int4 ctid from
+  tenk1 t1 join tenk2 t2 on (t1.fields->>'two')::int4 = (t2.fields->>'two')::int4; -- error, need qualification
+ERROR:  column "ffields" does not exist
+LINE 1: select (ffields->>'ctid')::int4 ctid from
+                ^
+HINT:  Perhaps you meant to reference the column "t1.fields" or the column "t2.fields".
 --
 -- Take care to reference the correct RTE
 --
@@ -5612,6 +6953,18 @@ select atts.relid::regclass, s.* from pg_stats s join
 ERROR:  column atts.relid does not exist
 LINE 1: select atts.relid::regclass, s.* from pg_stats s join
                ^
+-- Test bug in rangetable flattening
+explain (verbose, costs off)
+select 1 from
+  (select * from int8_tbl where (int8_tbl.fields->>'q1')::int8 <> (select 42) offset 0) ss
+where false;
+        QUERY PLAN        
+--------------------------
+ Result
+   Output: 1
+   One-Time Filter: false
+(3 rows)
+
 --
 -- Test LATERAL
 --
@@ -5697,14 +7050,14 @@ explain (costs off)
   from (select (fields->>'f1')::int4 f1 from INT4_TBL x) x left join lateral (select (fields->>'unique1')::int4 unique1, (fields->>'unique2')::int4 unique2 from tenk1 where f1 = (fields->>'unique1')::int4) ss on true;
                                                 QUERY PLAN                                                
 ----------------------------------------------------------------------------------------------------------
- Merge Left Join
-   Merge Cond: ((((x.fields ->> 'f1'::text))::integer) = (((tenk1.fields ->> 'unique1'::text))::integer))
-   ->  Sort
-         Sort Key: (((x.fields ->> 'f1'::text))::integer)
-         ->  Foreign Scan on int4_tbl x
+ Merge Right Join
+   Merge Cond: ((((tenk1.fields ->> 'unique1'::text))::integer) = (((x.fields ->> 'f1'::text))::integer))
    ->  Sort
          Sort Key: (((tenk1.fields ->> 'unique1'::text))::integer)
          ->  Foreign Scan on tenk1
+   ->  Sort
+         Sort Key: (((x.fields ->> 'f1'::text))::integer)
+         ->  Foreign Scan on int4_tbl x
 (8 rows)
 
 -- check scoping of lateral versus parent references
@@ -6181,15 +7534,15 @@ explain (verbose, costs off)
 select * from
   (select (fields->>'q1')::int8 q1, (fields->>'q2')::int8 q2 from INT8_TBL a) a left join
   lateral (select *, a.q2 as x from (select (fields->>'q1')::int8 q1, (fields->>'q2')::int8 q2 from INT8_TBL b) b) ss on a.q2 = ss.q1;
-                                                                                             QUERY PLAN                                                                                              
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                               QUERY PLAN                                                                                                
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop Left Join
-   Output: ((a.fields ->> 'q1'::text))::bigint, ((a.fields ->> 'q2'::text))::bigint, ((b.fields ->> 'q1'::text))::bigint, ((b.fields ->> 'q2'::text))::bigint, (((a.fields ->> 'q2'::text))::bigint)
+   Output: ((a.fields ->> 'q1'::text))::bigint, ((a.fields ->> 'q2'::text))::bigint, (((b.fields ->> 'q1'::text))::bigint), (((b.fields ->> 'q2'::text))::bigint), (((a.fields ->> 'q2'::text))::bigint)
    ->  Foreign Scan on public.int8_tbl a
          Output: a.fields
          InfluxDB query: SELECT * FROM "int8_tbl"
    ->  Foreign Scan on public.int8_tbl b
-         Output: b.fields, ((a.fields ->> 'q2'::text))::bigint
+         Output: b.fields, ((b.fields ->> 'q1'::text))::bigint, ((b.fields ->> 'q2'::text))::bigint, ((a.fields ->> 'q2'::text))::bigint
          InfluxDB query: SELECT * FROM "int8_tbl" WHERE (($1 = "q1"))
 (8 rows)
 
@@ -6216,15 +7569,15 @@ explain (verbose, costs off)
 select * from
   (select (fields->>'q1')::int8 q1, (fields->>'q2')::int8 q2 from INT8_TBL a) a left join
   lateral (select *, coalesce((a.q2)::int8, 42) as x from (select (fields->>'q1')::int8 q1, (fields->>'q2')::int8 q2 from INT8_TBL b) b) ss on a.q2 = ss.q1;
-                                                                                                         QUERY PLAN                                                                                                          
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                           QUERY PLAN                                                                                                            
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop Left Join
-   Output: ((a.fields ->> 'q1'::text))::bigint, ((a.fields ->> 'q2'::text))::bigint, ((b.fields ->> 'q1'::text))::bigint, ((b.fields ->> 'q2'::text))::bigint, (COALESCE(((a.fields ->> 'q2'::text))::bigint, '42'::bigint))
+   Output: ((a.fields ->> 'q1'::text))::bigint, ((a.fields ->> 'q2'::text))::bigint, (((b.fields ->> 'q1'::text))::bigint), (((b.fields ->> 'q2'::text))::bigint), (COALESCE(((a.fields ->> 'q2'::text))::bigint, '42'::bigint))
    ->  Foreign Scan on public.int8_tbl a
          Output: a.fields
          InfluxDB query: SELECT * FROM "int8_tbl"
    ->  Foreign Scan on public.int8_tbl b
-         Output: b.fields, COALESCE(((a.fields ->> 'q2'::text))::bigint, '42'::bigint)
+         Output: b.fields, ((b.fields ->> 'q1'::text))::bigint, ((b.fields ->> 'q2'::text))::bigint, COALESCE(((a.fields ->> 'q2'::text))::bigint, '42'::bigint)
          InfluxDB query: SELECT * FROM "int8_tbl" WHERE (($1 = "q1"))
 (8 rows)
 
@@ -6252,23 +7605,23 @@ select * from
 explain (verbose, costs off)
 select * from (select (fields->>'f1')::int4 f1 from INT4_TBL i) i left join
   lateral (select * from (select (fields->>'f1')::int2 f1 from INT2_TBL j) j where i.f1 = j.f1) k on true;
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
- Merge Left Join
-   Output: (((i.fields ->> 'f1'::text))::integer), ((j.fields ->> 'f1'::text))::smallint
-   Merge Cond: ((((i.fields ->> 'f1'::text))::integer) = (((j.fields ->> 'f1'::text))::smallint))
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Merge Right Join
+   Output: (((i.fields ->> 'f1'::text))::integer), (((j.fields ->> 'f1'::text))::smallint)
+   Merge Cond: ((((j.fields ->> 'f1'::text))::smallint) = (((i.fields ->> 'f1'::text))::integer))
+   ->  Sort
+         Output: j.fields, (((j.fields ->> 'f1'::text))::smallint), (((j.fields ->> 'f1'::text))::smallint)
+         Sort Key: (((j.fields ->> 'f1'::text))::smallint)
+         ->  Foreign Scan on public.int2_tbl j
+               Output: j.fields, ((j.fields ->> 'f1'::text))::smallint, ((j.fields ->> 'f1'::text))::smallint
+               InfluxDB query: SELECT * FROM "int2_tbl"
    ->  Sort
          Output: i.fields, (((i.fields ->> 'f1'::text))::integer)
          Sort Key: (((i.fields ->> 'f1'::text))::integer)
          ->  Foreign Scan on public.int4_tbl i
                Output: i.fields, ((i.fields ->> 'f1'::text))::integer
                InfluxDB query: SELECT * FROM "int4_tbl"
-   ->  Sort
-         Output: j.fields, (((j.fields ->> 'f1'::text))::smallint)
-         Sort Key: (((j.fields ->> 'f1'::text))::smallint)
-         ->  Foreign Scan on public.int2_tbl j
-               Output: j.fields, ((j.fields ->> 'f1'::text))::smallint
-               InfluxDB query: SELECT * FROM "int2_tbl"
 (15 rows)
 
 --Testcase 471:
@@ -6325,15 +7678,15 @@ select * from (select (fields->>'f1')::int4 f1 from INT4_TBL a) a,
          Output: a.fields
          InfluxDB query: SELECT * FROM "int4_tbl"
    ->  Hash Left Join
-         Output: ((b.fields ->> 'f1'::text))::integer, ((c.fields ->> 'q1'::text))::bigint, ((c.fields ->> 'q2'::text))::bigint
+         Output: ((b.fields ->> 'f1'::text))::integer, (((c.fields ->> 'q1'::text))::bigint), (((c.fields ->> 'q2'::text))::bigint)
          Hash Cond: (((b.fields ->> 'f1'::text))::integer = ((c.fields ->> 'q1'::text))::bigint)
          ->  Foreign Scan on public.int4_tbl b
                Output: b.fields
                InfluxDB query: SELECT * FROM "int4_tbl"
          ->  Hash
-               Output: c.fields
+               Output: c.fields, (((c.fields ->> 'q1'::text))::bigint), (((c.fields ->> 'q2'::text))::bigint)
                ->  Foreign Scan on public.int8_tbl c
-                     Output: c.fields
+                     Output: c.fields, ((c.fields ->> 'q1'::text))::bigint, ((c.fields ->> 'q2'::text))::bigint
                      InfluxDB query: SELECT * FROM "int8_tbl" WHERE (($1 = "q2"))
 (16 rows)
 
@@ -6379,22 +7732,22 @@ select * from
   (select (b.fields->>'q1')::int8 as bq1,  (c.fields->>'q1')::int8 as cq1, least(a.q1,(b.fields->>'q1')::int8,(c.fields->>'q1')::int8) from
    int8_tbl b cross join int8_tbl c) ss
   on a.q2 = ss.bq1;
-                                                                                                                                                QUERY PLAN                                                                                                                                                 
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                  QUERY PLAN                                                                                                                                                   
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop Left Join
-   Output: ((int8_tbl.fields ->> 'q1'::text))::bigint, ((int8_tbl.fields ->> 'q2'::text))::bigint, ((b.fields ->> 'q1'::text))::bigint, ((c.fields ->> 'q1'::text))::bigint, (LEAST(((int8_tbl.fields ->> 'q1'::text))::bigint, ((b.fields ->> 'q1'::text))::bigint, ((c.fields ->> 'q1'::text))::bigint))
+   Output: ((int8_tbl.fields ->> 'q1'::text))::bigint, ((int8_tbl.fields ->> 'q2'::text))::bigint, (((b.fields ->> 'q1'::text))::bigint), (((c.fields ->> 'q1'::text))::bigint), (LEAST(((int8_tbl.fields ->> 'q1'::text))::bigint, ((b.fields ->> 'q1'::text))::bigint, ((c.fields ->> 'q1'::text))::bigint))
    ->  Foreign Scan on public.int8_tbl
          Output: int8_tbl.fields
          InfluxDB query: SELECT * FROM "int8_tbl"
    ->  Nested Loop
-         Output: b.fields, c.fields, LEAST(((int8_tbl.fields ->> 'q1'::text))::bigint, ((b.fields ->> 'q1'::text))::bigint, ((c.fields ->> 'q1'::text))::bigint)
+         Output: b.fields, (((b.fields ->> 'q1'::text))::bigint), (((c.fields ->> 'q1'::text))::bigint), LEAST(((int8_tbl.fields ->> 'q1'::text))::bigint, ((b.fields ->> 'q1'::text))::bigint, ((c.fields ->> 'q1'::text))::bigint)
          ->  Foreign Scan on public.int8_tbl b
-               Output: b.fields
+               Output: b.fields, ((b.fields ->> 'q1'::text))::bigint
                InfluxDB query: SELECT * FROM "int8_tbl" WHERE (($1 = "q1"))
          ->  Materialize
-               Output: c.fields
+               Output: c.fields, (((c.fields ->> 'q1'::text))::bigint)
                ->  Foreign Scan on public.int8_tbl c
-                     Output: c.fields
+                     Output: c.fields, ((c.fields ->> 'q1'::text))::bigint
                      InfluxDB query: SELECT * FROM "int8_tbl"
 (15 rows)
 
@@ -6461,12 +7814,12 @@ select * from
     lateral (select (fields->>'q1')::int8 q1, coalesce(ss1.x,(fields->>'q2')::int8) as y from int8_tbl d) ss2
   ) on c.q2 = ss2.q1,
   lateral (select ss2.y offset 0) ss3;
-                                                                                                                                                                                                                                                               QUERY PLAN                                                                                                                                                                                                                                                                
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                                                                                                                   QUERY PLAN                                                                                                                                                                                                                                                                    
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop
-   Output: ((c.fields ->> 'q1'::text))::bigint, ((c.fields ->> 'q2'::text))::bigint, ((a.fields ->> 'q1'::text))::bigint, ((a.fields ->> 'q2'::text))::bigint, ((b.fields ->> 'q1'::text))::bigint, (COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), ((d.fields ->> 'q1'::text))::bigint, (COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), ((d.fields ->> 'q2'::text))::bigint)), ((COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), ((d.fields ->> 'q2'::text))::bigint)))
+   Output: ((c.fields ->> 'q1'::text))::bigint, ((c.fields ->> 'q2'::text))::bigint, (((a.fields ->> 'q1'::text))::bigint), (((a.fields ->> 'q2'::text))::bigint), (((b.fields ->> 'q1'::text))::bigint), (COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), (((d.fields ->> 'q1'::text))::bigint), (COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), ((d.fields ->> 'q2'::text))::bigint)), ((COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), ((d.fields ->> 'q2'::text))::bigint)))
    ->  Merge Left Join
-         Output: c.fields, a.fields, b.fields, d.fields, (COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), (COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), ((d.fields ->> 'q2'::text))::bigint))
+         Output: c.fields, (((a.fields ->> 'q1'::text))::bigint), (((a.fields ->> 'q2'::text))::bigint), (((b.fields ->> 'q1'::text))::bigint), (COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), (((d.fields ->> 'q1'::text))::bigint), (COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), ((d.fields ->> 'q2'::text))::bigint))
          Merge Cond: ((((c.fields ->> 'q2'::text))::bigint) = (((d.fields ->> 'q1'::text))::bigint))
          ->  Sort
                Output: c.fields, (((c.fields ->> 'q2'::text))::bigint)
@@ -6475,29 +7828,29 @@ select * from
                      Output: c.fields, ((c.fields ->> 'q2'::text))::bigint
                      InfluxDB query: SELECT * FROM "int8_tbl"
          ->  Materialize
-               Output: a.fields, b.fields, d.fields, (COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), (COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), ((d.fields ->> 'q2'::text))::bigint)), (((d.fields ->> 'q1'::text))::bigint)
+               Output: (((a.fields ->> 'q1'::text))::bigint), (((a.fields ->> 'q2'::text))::bigint), (((b.fields ->> 'q1'::text))::bigint), (COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), d.fields, (((d.fields ->> 'q1'::text))::bigint), (COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), ((d.fields ->> 'q2'::text))::bigint)), (((d.fields ->> 'q1'::text))::bigint)
                ->  Sort
-                     Output: a.fields, b.fields, d.fields, (COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), (COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), ((d.fields ->> 'q2'::text))::bigint)), (((d.fields ->> 'q1'::text))::bigint)
+                     Output: (((a.fields ->> 'q1'::text))::bigint), (((a.fields ->> 'q2'::text))::bigint), (((b.fields ->> 'q1'::text))::bigint), (COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), d.fields, (((d.fields ->> 'q1'::text))::bigint), (COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), ((d.fields ->> 'q2'::text))::bigint)), (((d.fields ->> 'q1'::text))::bigint)
                      Sort Key: (((d.fields ->> 'q1'::text))::bigint)
                      ->  Nested Loop
-                           Output: a.fields, b.fields, d.fields, (COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), (COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), ((d.fields ->> 'q2'::text))::bigint)), ((d.fields ->> 'q1'::text))::bigint
-                           ->  Merge Right Join
-                                 Output: a.fields, b.fields, (COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint))
-                                 Merge Cond: ((((b.fields ->> 'q1'::text))::bigint) = (((a.fields ->> 'q2'::text))::bigint))
+                           Output: (((a.fields ->> 'q1'::text))::bigint), (((a.fields ->> 'q2'::text))::bigint), (((b.fields ->> 'q1'::text))::bigint), (COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), d.fields, (((d.fields ->> 'q1'::text))::bigint), (COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), ((d.fields ->> 'q2'::text))::bigint)), ((d.fields ->> 'q1'::text))::bigint
+                           ->  Merge Left Join
+                                 Output: (((a.fields ->> 'q1'::text))::bigint), (((a.fields ->> 'q2'::text))::bigint), (((b.fields ->> 'q1'::text))::bigint), (COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint))
+                                 Merge Cond: ((((a.fields ->> 'q2'::text))::bigint) = (((b.fields ->> 'q1'::text))::bigint))
                                  ->  Sort
-                                       Output: b.fields, (COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), (((b.fields ->> 'q1'::text))::bigint)
-                                       Sort Key: (((b.fields ->> 'q1'::text))::bigint)
-                                       ->  Foreign Scan on public.int8_tbl b
-                                             Output: b.fields, COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint), ((b.fields ->> 'q1'::text))::bigint
-                                             InfluxDB query: SELECT * FROM "int8_tbl"
-                                 ->  Sort
-                                       Output: a.fields, (((a.fields ->> 'q2'::text))::bigint)
+                                       Output: a.fields, (((a.fields ->> 'q1'::text))::bigint), (((a.fields ->> 'q2'::text))::bigint), (((a.fields ->> 'q2'::text))::bigint)
                                        Sort Key: (((a.fields ->> 'q2'::text))::bigint)
                                        ->  Foreign Scan on public.int8_tbl a
-                                             Output: a.fields, ((a.fields ->> 'q2'::text))::bigint
+                                             Output: a.fields, ((a.fields ->> 'q1'::text))::bigint, ((a.fields ->> 'q2'::text))::bigint, ((a.fields ->> 'q2'::text))::bigint
+                                             InfluxDB query: SELECT * FROM "int8_tbl"
+                                 ->  Sort
+                                       Output: b.fields, (((b.fields ->> 'q1'::text))::bigint), (COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), (((b.fields ->> 'q1'::text))::bigint)
+                                       Sort Key: (((b.fields ->> 'q1'::text))::bigint)
+                                       ->  Foreign Scan on public.int8_tbl b
+                                             Output: b.fields, ((b.fields ->> 'q1'::text))::bigint, COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint), ((b.fields ->> 'q1'::text))::bigint
                                              InfluxDB query: SELECT * FROM "int8_tbl"
                            ->  Foreign Scan on public.int8_tbl d
-                                 Output: d.fields, COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), ((d.fields ->> 'q2'::text))::bigint)
+                                 Output: d.fields, ((d.fields ->> 'q1'::text))::bigint, COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), ((d.fields ->> 'q2'::text))::bigint)
                                  InfluxDB query: SELECT * FROM "int8_tbl"
    ->  Result
          Output: (COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, '42'::bigint)), ((d.fields ->> 'q2'::text))::bigint))
@@ -6516,13 +7869,13 @@ select c.*,a.*,ss1.q1,ss2.q1,ss3.* from
     lateral (select (fields->>'q1')::int8 q1, coalesce(ss1.x,(fields->>'q2')::int8) as y from int8_tbl d) ss2
   ) on c.q2 = ss2.q1,
   lateral (select * from (select (fields->>'f1')::int4 f1 from INT4_TBL i) i where (ss2.y)::int8 > (f1)::int4) ss3;
-                                                                                                                                  QUERY PLAN                                                                                                                                  
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                                           QUERY PLAN                                                                                                                                                                                           
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop
-   Output: ((c.fields ->> 'q1'::text))::bigint, ((c.fields ->> 'q2'::text))::bigint, ((a.fields ->> 'q1'::text))::bigint, ((a.fields ->> 'q2'::text))::bigint, ((b.fields ->> 'q1'::text))::bigint, ((d.fields ->> 'q1'::text))::bigint, ((i.fields ->> 'f1'::text))::integer
+   Output: ((c.fields ->> 'q1'::text))::bigint, ((c.fields ->> 'q2'::text))::bigint, (((a.fields ->> 'q1'::text))::bigint), (((a.fields ->> 'q2'::text))::bigint), (((b.fields ->> 'q1'::text))::bigint), (((d.fields ->> 'q1'::text))::bigint), ((i.fields ->> 'f1'::text))::integer
    Join Filter: ((COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, (((b2.fields ->> 'f1'::text))::integer)::bigint)), ((d.fields ->> 'q2'::text))::bigint)) > ((i.fields ->> 'f1'::text))::integer)
    ->  Merge Left Join
-         Output: c.fields, a.fields, b.fields, d.fields, (COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, (((b2.fields ->> 'f1'::text))::integer)::bigint)), ((d.fields ->> 'q2'::text))::bigint))
+         Output: c.fields, (((a.fields ->> 'q1'::text))::bigint), (((a.fields ->> 'q2'::text))::bigint), (((b.fields ->> 'q1'::text))::bigint), (((d.fields ->> 'q1'::text))::bigint), (COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, (((b2.fields ->> 'f1'::text))::integer)::bigint)), ((d.fields ->> 'q2'::text))::bigint))
          Merge Cond: ((((c.fields ->> 'q2'::text))::bigint) = (((d.fields ->> 'q1'::text))::bigint))
          ->  Sort
                Output: c.fields, (((c.fields ->> 'q2'::text))::bigint)
@@ -6531,39 +7884,39 @@ select c.*,a.*,ss1.q1,ss2.q1,ss3.* from
                      Output: c.fields, ((c.fields ->> 'q2'::text))::bigint
                      InfluxDB query: SELECT * FROM "int8_tbl"
          ->  Materialize
-               Output: a.fields, b.fields, d.fields, (COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, (((b2.fields ->> 'f1'::text))::integer)::bigint)), ((d.fields ->> 'q2'::text))::bigint)), (((d.fields ->> 'q1'::text))::bigint)
+               Output: (((a.fields ->> 'q1'::text))::bigint), (((a.fields ->> 'q2'::text))::bigint), (((b.fields ->> 'q1'::text))::bigint), d.fields, (((d.fields ->> 'q1'::text))::bigint), (COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, (((b2.fields ->> 'f1'::text))::integer)::bigint)), ((d.fields ->> 'q2'::text))::bigint)), (((d.fields ->> 'q1'::text))::bigint)
                ->  Sort
-                     Output: a.fields, b.fields, d.fields, (COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, (((b2.fields ->> 'f1'::text))::integer)::bigint)), ((d.fields ->> 'q2'::text))::bigint)), (((d.fields ->> 'q1'::text))::bigint)
+                     Output: (((a.fields ->> 'q1'::text))::bigint), (((a.fields ->> 'q2'::text))::bigint), (((b.fields ->> 'q1'::text))::bigint), d.fields, (((d.fields ->> 'q1'::text))::bigint), (COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, (((b2.fields ->> 'f1'::text))::integer)::bigint)), ((d.fields ->> 'q2'::text))::bigint)), (((d.fields ->> 'q1'::text))::bigint)
                      Sort Key: (((d.fields ->> 'q1'::text))::bigint)
                      ->  Nested Loop
-                           Output: a.fields, b.fields, d.fields, (COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, (((b2.fields ->> 'f1'::text))::integer)::bigint)), ((d.fields ->> 'q2'::text))::bigint)), ((d.fields ->> 'q1'::text))::bigint
+                           Output: (((a.fields ->> 'q1'::text))::bigint), (((a.fields ->> 'q2'::text))::bigint), (((b.fields ->> 'q1'::text))::bigint), d.fields, (((d.fields ->> 'q1'::text))::bigint), (COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, (((b2.fields ->> 'f1'::text))::integer)::bigint)), ((d.fields ->> 'q2'::text))::bigint)), ((d.fields ->> 'q1'::text))::bigint
                            ->  Merge Left Join
-                                 Output: a.fields, b.fields, (COALESCE(((b.fields ->> 'q2'::text))::bigint, (((b2.fields ->> 'f1'::text))::integer)::bigint))
+                                 Output: (((a.fields ->> 'q1'::text))::bigint), (((a.fields ->> 'q2'::text))::bigint), (((b.fields ->> 'q1'::text))::bigint), (COALESCE(((b.fields ->> 'q2'::text))::bigint, (((b2.fields ->> 'f1'::text))::integer)::bigint))
                                  Merge Cond: ((((a.fields ->> 'q2'::text))::bigint) = (((b.fields ->> 'q1'::text))::bigint))
                                  ->  Sort
-                                       Output: a.fields, (((a.fields ->> 'q2'::text))::bigint)
+                                       Output: a.fields, (((a.fields ->> 'q1'::text))::bigint), (((a.fields ->> 'q2'::text))::bigint), (((a.fields ->> 'q2'::text))::bigint)
                                        Sort Key: (((a.fields ->> 'q2'::text))::bigint)
                                        ->  Foreign Scan on public.int8_tbl a
-                                             Output: a.fields, ((a.fields ->> 'q2'::text))::bigint
+                                             Output: a.fields, ((a.fields ->> 'q1'::text))::bigint, ((a.fields ->> 'q2'::text))::bigint, ((a.fields ->> 'q2'::text))::bigint
                                              InfluxDB query: SELECT * FROM "int8_tbl"
                                  ->  Materialize
-                                       Output: b.fields, (COALESCE(((b.fields ->> 'q2'::text))::bigint, (((b2.fields ->> 'f1'::text))::integer)::bigint)), (((b.fields ->> 'q1'::text))::bigint)
+                                       Output: b.fields, (((b.fields ->> 'q1'::text))::bigint), (COALESCE(((b.fields ->> 'q2'::text))::bigint, (((b2.fields ->> 'f1'::text))::integer)::bigint)), (((b.fields ->> 'q1'::text))::bigint)
                                        ->  Sort
-                                             Output: b.fields, (COALESCE(((b.fields ->> 'q2'::text))::bigint, (((b2.fields ->> 'f1'::text))::integer)::bigint)), (((b.fields ->> 'q1'::text))::bigint)
+                                             Output: b.fields, (((b.fields ->> 'q1'::text))::bigint), (COALESCE(((b.fields ->> 'q2'::text))::bigint, (((b2.fields ->> 'f1'::text))::integer)::bigint)), (((b.fields ->> 'q1'::text))::bigint)
                                              Sort Key: (((b.fields ->> 'q1'::text))::bigint)
                                              ->  Nested Loop
-                                                   Output: b.fields, COALESCE(((b.fields ->> 'q2'::text))::bigint, (((b2.fields ->> 'f1'::text))::integer)::bigint), ((b.fields ->> 'q1'::text))::bigint
+                                                   Output: b.fields, (((b.fields ->> 'q1'::text))::bigint), COALESCE(((b.fields ->> 'q2'::text))::bigint, (((b2.fields ->> 'f1'::text))::integer)::bigint), ((b.fields ->> 'q1'::text))::bigint
                                                    Join Filter: (((b.fields ->> 'q1'::text))::bigint < ((b2.fields ->> 'f1'::text))::integer)
-                                                   ->  Foreign Scan on public.int8_tbl b
-                                                         Output: b.fields
-                                                         InfluxDB query: SELECT * FROM "int8_tbl"
-                                                   ->  Materialize
+                                                   ->  Foreign Scan on public.int4_tbl b2
                                                          Output: b2.fields
-                                                         ->  Foreign Scan on public.int4_tbl b2
-                                                               Output: b2.fields
-                                                               InfluxDB query: SELECT * FROM "int4_tbl"
+                                                         InfluxDB query: SELECT * FROM "int4_tbl"
+                                                   ->  Materialize
+                                                         Output: b.fields, (((b.fields ->> 'q1'::text))::bigint)
+                                                         ->  Foreign Scan on public.int8_tbl b
+                                                               Output: b.fields, ((b.fields ->> 'q1'::text))::bigint
+                                                               InfluxDB query: SELECT * FROM "int8_tbl"
                            ->  Foreign Scan on public.int8_tbl d
-                                 Output: d.fields, COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, (((b2.fields ->> 'f1'::text))::integer)::bigint)), ((d.fields ->> 'q2'::text))::bigint)
+                                 Output: d.fields, ((d.fields ->> 'q1'::text))::bigint, COALESCE((COALESCE(((b.fields ->> 'q2'::text))::bigint, (((b2.fields ->> 'f1'::text))::integer)::bigint)), ((d.fields ->> 'q2'::text))::bigint)
                                  InfluxDB query: SELECT * FROM "int8_tbl"
    ->  Materialize
          Output: i.fields
@@ -6595,36 +7948,59 @@ select * from
          Output: 3
 (11 rows)
 
+-- a new postponed-quals issue (bug #17768)
+explain (costs off)
+select * from int4_tbl t1,
+  lateral (select * from int4_tbl t2 inner join int4_tbl t3 on (t1.fields->>'f1')::int = 1
+           inner join (int4_tbl t4 left join int4_tbl t5 on true) on true) ss;
+                        QUERY PLAN                         
+-----------------------------------------------------------
+ Nested Loop Left Join
+   ->  Nested Loop
+         ->  Nested Loop
+               ->  Nested Loop
+                     ->  Foreign Scan on int4_tbl t2
+                     ->  Materialize
+                           ->  Foreign Scan on int4_tbl t1
+               ->  Materialize
+                     ->  Foreign Scan on int4_tbl t3
+         ->  Materialize
+               ->  Foreign Scan on int4_tbl t4
+   ->  Materialize
+         ->  Foreign Scan on int4_tbl t5
+(13 rows)
+
 -- check dummy rels with lateral references (bug #15694)
 --Testcase 481:
 explain (verbose, costs off)
 select * from (select (fields->>'q1')::int8 q1, (fields->>'q2')::int8 q2 from INT8_TBL i8) i8 left join lateral
   (select *, i8.q2 from (select (fields->>'f1')::int4 f1 from INT4_TBL int4_tbl) int4_tbl where false) ss on true;
-                                                                            QUERY PLAN                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop Left Join
-   Output: ((i8.fields ->> 'q1'::text))::bigint, ((i8.fields ->> 'q2'::text))::bigint, ((fields ->> 'f1'::text))::integer, (((i8.fields ->> 'q2'::text))::bigint)
+   Output: ((i8.fields ->> 'q1'::text))::bigint, ((i8.fields ->> 'q2'::text))::bigint, (((fields ->> 'f1'::text))::integer), (((i8.fields ->> 'q2'::text))::bigint)
+   Join Filter: false
    ->  Foreign Scan on public.int8_tbl i8
          Output: i8.fields
          InfluxDB query: SELECT * FROM "int8_tbl"
    ->  Result
-         Output: fields, ((i8.fields ->> 'q2'::text))::bigint
+         Output: ((fields ->> 'f1'::text))::integer, ((i8.fields ->> 'q2'::text))::bigint
          One-Time Filter: false
-(8 rows)
+(9 rows)
 
 --Testcase 482:
 explain (verbose, costs off)
 select * from (select (fields->>'q1')::int8 q1, (fields->>'q2')::int8 q2 from INT8_TBL i8) i8 left join lateral
   (select *, i8.q2 from (select (fields->>'f1')::int4 f1 from INT4_TBL i1) i1, (select (fields->>'f1')::int4 f1 from INT4_TBL i2) i2 where false) ss on true;
-                                                                                              QUERY PLAN                                                                                              
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                QUERY PLAN                                                                                                
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop Left Join
-   Output: ((i8.fields ->> 'q1'::text))::bigint, ((i8.fields ->> 'q2'::text))::bigint, ((fields ->> 'f1'::text))::integer, ((fields ->> 'f1'::text))::integer, (((i8.fields ->> 'q2'::text))::bigint)
+   Output: ((i8.fields ->> 'q1'::text))::bigint, ((i8.fields ->> 'q2'::text))::bigint, (((fields ->> 'f1'::text))::integer), (((fields ->> 'f1'::text))::integer), (((i8.fields ->> 'q2'::text))::bigint)
    ->  Foreign Scan on public.int8_tbl i8
          Output: i8.fields
          InfluxDB query: SELECT * FROM "int8_tbl"
    ->  Result
-         Output: fields, fields, ((i8.fields ->> 'q2'::text))::bigint
+         Output: ((fields ->> 'f1'::text))::integer, ((fields ->> 'f1'::text))::integer, ((i8.fields ->> 'q2'::text))::bigint
          One-Time Filter: false
 (8 rows)
 
@@ -6702,8 +8078,8 @@ lateral (select * from (select (fields->>'q1')::int8 q1, (fields->>'q2')::int8 q
                                      where (fields->>'q2')::int8 = (select greatest(t1.q1,t2.q2))
                                        and (select v.id=0)) offset 0) ss2) ss
          where (t1.q1)::int8 = (ss.q2)::int8) ss0;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
+                                                                   QUERY PLAN                                                                   
+------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop
    Output: "*VALUES*".column1, ((int8_tbl.fields ->> 'q1'::text))::bigint, ((int8_tbl.fields ->> 'q2'::text))::bigint, ss2.q1, ss2.q2
    ->  Foreign Scan on public.int8_tbl
@@ -6726,10 +8102,10 @@ lateral (select * from (select (fields->>'q1')::int8 q1, (fields->>'q2')::int8 q
                              One-Time Filter: $4
                              InitPlan 1 (returns $2)
                                ->  Result
-                                     Output: GREATEST((($0 ->> 'q1'::text))::bigint, ((int8_tbl_1.fields ->> 'q2'::text))::bigint)
+                                     Output: GREATEST(((int8_tbl.fields ->> 'q1'::text))::bigint, ((int8_tbl_1.fields ->> 'q2'::text))::bigint)
                              InitPlan 2 (returns $4)
                                ->  Result
-                                     Output: ($3 = 0)
+                                     Output: ("*VALUES*".column1 = 0)
                              ->  Foreign Scan on public.int8_tbl t3
                                    Output: ((t3.fields ->> 'q2'::text))::bigint
                                    InfluxDB query: SELECT "q2" FROM "int8_tbl" WHERE (("q2" = $1))
@@ -6757,25 +8133,29 @@ select (fields->>'f1')::int4 f1,(fields->>'g')::int4 g from int4_tbl a, (select 
 ERROR:  column "fields" does not exist
 LINE 1: ...1,(fields->>'g')::int4 g from int4_tbl a, (select fields->>'...
                                                              ^
-HINT:  There is a column named "fields" in table "a", but it cannot be referenced from this part of the query.
+DETAIL:  There is a column named "fields" in table "a", but it cannot be referenced from this part of the query.
+HINT:  To reference that column, you must mark this subquery with LATERAL.
 --Testcase 489:
 select (fields->>'f1')::int4 f1,(fields->>'g')::int4 g from int4_tbl a, (select a.fields->>'f1' as g) ss;
 ERROR:  invalid reference to FROM-clause entry for table "a"
 LINE 1: ...1,(fields->>'g')::int4 g from int4_tbl a, (select a.fields->...
                                                              ^
-HINT:  There is an entry for table "a", but it cannot be referenced from this part of the query.
+DETAIL:  There is an entry for table "a", but it cannot be referenced from this part of the query.
+HINT:  To reference that table, you must mark this subquery with LATERAL.
 --Testcase 490:
 select (fields->>'f1')::int4 f1,(fields->>'g')::int4 g from int4_tbl a cross join (select fields->>'f1' as g) ss;
 ERROR:  column "fields" does not exist
 LINE 1: ...>>'g')::int4 g from int4_tbl a cross join (select fields->>'...
                                                              ^
-HINT:  There is a column named "fields" in table "a", but it cannot be referenced from this part of the query.
+DETAIL:  There is a column named "fields" in table "a", but it cannot be referenced from this part of the query.
+HINT:  To reference that column, you must mark this subquery with LATERAL.
 --Testcase 491:
 select (fields->>'f1')::int4 f1,(fields->>'g')::int4 g from int4_tbl a cross join (select a.fields->>'f1' as g) ss;
 ERROR:  invalid reference to FROM-clause entry for table "a"
 LINE 1: ...>>'g')::int4 g from int4_tbl a cross join (select a.fields->...
                                                              ^
-HINT:  There is an entry for table "a", but it cannot be referenced from this part of the query.
+DETAIL:  There is an entry for table "a", but it cannot be referenced from this part of the query.
+HINT:  To reference that table, you must mark this subquery with LATERAL.
 -- SQL:2008 says the left table is in scope but illegal to access here
 --Testcase 492:
 select (fields->>'f1')::int4 f1,(fields->>'g')::int4 g from int4_tbl a right join lateral generate_series(0, (a.fields->>'f1')::int4) g on true;
@@ -6811,13 +8191,13 @@ update xx1 set x2 = f1 from (select * from (select (fields->>'f1')::int4 f1 from
 ERROR:  column "x1" does not exist
 LINE 1: ...->>'f1')::int4 f1 from INT4_TBL) int4_tbl where f1 = x1) ss;
                                                                 ^
-HINT:  There is a column named "x1" in table "xx1", but it cannot be referenced from this part of the query.
+DETAIL:  There is a column named "x1" in table "xx1", but it cannot be referenced from this part of the query.
 --Testcase 498:
 update xx1 set x2 = f1 from (select * from (select (fields->>'f1')::int4 f1 from INT4_TBL) int4_tbl where f1 = xx1.x1) ss;
 ERROR:  invalid reference to FROM-clause entry for table "xx1"
 LINE 1: ...'f1')::int4 f1 from INT4_TBL) int4_tbl where f1 = xx1.x1) ss...
                                                              ^
-HINT:  There is an entry for table "xx1", but it cannot be referenced from this part of the query.
+DETAIL:  There is an entry for table "xx1", but it cannot be referenced from this part of the query.
 -- can't do it even with LATERAL:
 --Testcase 499:
 update xx1 set x2 = f1 from lateral (select * from (select (fields->>'f1')::int4 f1 from INT4_TBL) int4_tbl where f1 = x1) ss;
@@ -6835,13 +8215,13 @@ delete from xx1 using (select * from (select (fields->>'f1')::int4 f1 from INT4_
 ERROR:  column "x1" does not exist
 LINE 1: ...->>'f1')::int4 f1 from INT4_TBL) int4_tbl where f1 = x1) ss;
                                                                 ^
-HINT:  There is a column named "x1" in table "xx1", but it cannot be referenced from this part of the query.
+DETAIL:  There is a column named "x1" in table "xx1", but it cannot be referenced from this part of the query.
 --Testcase 502:
 delete from xx1 using (select * from (select (fields->>'f1')::int4 f1 from INT4_TBL) int4_tbl where f1 = xx1.x1) ss;
 ERROR:  invalid reference to FROM-clause entry for table "xx1"
 LINE 1: ...'f1')::int4 f1 from INT4_TBL) int4_tbl where f1 = xx1.x1) ss...
                                                              ^
-HINT:  There is an entry for table "xx1", but it cannot be referenced from this part of the query.
+DETAIL:  There is an entry for table "xx1", but it cannot be referenced from this part of the query.
 --Testcase 503:
 delete from xx1 using lateral (select * from (select (fields->>'f1')::int4 f1 from INT4_TBL) int4_tbl where f1 = x1) ss;
 ERROR:  invalid reference to FROM-clause entry for table "xx1"
@@ -7039,46 +8419,46 @@ select * from (select (fields->>'id')::int id from j1) j1 inner join (select (fi
 --Testcase 518:
 explain (verbose, costs off)
 select * from (select (fields->>'id')::int id from j1) j1 left join (select (fields->>'id')::int id from j2) j2 on (j1.id)::int = (j2.id)::int;
-                                            QUERY PLAN                                             
----------------------------------------------------------------------------------------------------
- Merge Left Join
-   Output: (((j1.fields ->> 'id'::text))::integer), ((j2.fields ->> 'id'::text))::integer
-   Merge Cond: ((((j1.fields ->> 'id'::text))::integer) = (((j2.fields ->> 'id'::text))::integer))
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
+ Merge Right Join
+   Output: (((j1.fields ->> 'id'::text))::integer), (((j2.fields ->> 'id'::text))::integer)
+   Merge Cond: ((((j2.fields ->> 'id'::text))::integer) = (((j1.fields ->> 'id'::text))::integer))
+   ->  Sort
+         Output: j2.fields, (((j2.fields ->> 'id'::text))::integer), (((j2.fields ->> 'id'::text))::integer)
+         Sort Key: (((j2.fields ->> 'id'::text))::integer)
+         ->  Foreign Scan on public.j2
+               Output: j2.fields, ((j2.fields ->> 'id'::text))::integer, ((j2.fields ->> 'id'::text))::integer
+               InfluxDB query: SELECT * FROM "j2"
    ->  Sort
          Output: j1.fields, (((j1.fields ->> 'id'::text))::integer)
          Sort Key: (((j1.fields ->> 'id'::text))::integer)
          ->  Foreign Scan on public.j1
                Output: j1.fields, ((j1.fields ->> 'id'::text))::integer
                InfluxDB query: SELECT * FROM "j1"
-   ->  Sort
-         Output: j2.fields, (((j2.fields ->> 'id'::text))::integer)
-         Sort Key: (((j2.fields ->> 'id'::text))::integer)
-         ->  Foreign Scan on public.j2
-               Output: j2.fields, ((j2.fields ->> 'id'::text))::integer
-               InfluxDB query: SELECT * FROM "j2"
 (15 rows)
 
 -- ensure right join is marked as unique
 --Testcase 519:
 explain (verbose, costs off)
 select * from (select (fields->>'id')::int id from j1) j1 right join (select (fields->>'id')::int id from j2) j2 on (j1.id)::int = (j2.id)::int;
-                                            QUERY PLAN                                             
----------------------------------------------------------------------------------------------------
- Merge Left Join
-   Output: ((j1.fields ->> 'id'::text))::integer, (((j2.fields ->> 'id'::text))::integer)
-   Merge Cond: ((((j2.fields ->> 'id'::text))::integer) = (((j1.fields ->> 'id'::text))::integer))
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
+ Merge Right Join
+   Output: (((j1.fields ->> 'id'::text))::integer), (((j2.fields ->> 'id'::text))::integer)
+   Merge Cond: ((((j1.fields ->> 'id'::text))::integer) = (((j2.fields ->> 'id'::text))::integer))
+   ->  Sort
+         Output: j1.fields, (((j1.fields ->> 'id'::text))::integer), (((j1.fields ->> 'id'::text))::integer)
+         Sort Key: (((j1.fields ->> 'id'::text))::integer)
+         ->  Foreign Scan on public.j1
+               Output: j1.fields, ((j1.fields ->> 'id'::text))::integer, ((j1.fields ->> 'id'::text))::integer
+               InfluxDB query: SELECT * FROM "j1"
    ->  Sort
          Output: j2.fields, (((j2.fields ->> 'id'::text))::integer)
          Sort Key: (((j2.fields ->> 'id'::text))::integer)
          ->  Foreign Scan on public.j2
                Output: j2.fields, ((j2.fields ->> 'id'::text))::integer
                InfluxDB query: SELECT * FROM "j2"
-   ->  Sort
-         Output: j1.fields, (((j1.fields ->> 'id'::text))::integer)
-         Sort Key: (((j1.fields ->> 'id'::text))::integer)
-         ->  Foreign Scan on public.j1
-               Output: j1.fields, ((j1.fields ->> 'id'::text))::integer
-               InfluxDB query: SELECT * FROM "j1"
 (15 rows)
 
 -- ensure full join is marked as unique
@@ -7088,20 +8468,20 @@ select * from (select (fields->>'id')::int id from j1) j1 full join (select (fie
                                             QUERY PLAN                                             
 ---------------------------------------------------------------------------------------------------
  Merge Full Join
-   Output: ((j1.fields ->> 'id'::text))::integer, ((j2.fields ->> 'id'::text))::integer
+   Output: (((j1.fields ->> 'id'::text))::integer), (((j2.fields ->> 'id'::text))::integer)
    Merge Cond: ((((j1.fields ->> 'id'::text))::integer) = (((j2.fields ->> 'id'::text))::integer))
    ->  Sort
-         Output: j1.fields, (((j1.fields ->> 'id'::text))::integer)
+         Output: (((j1.fields ->> 'id'::text))::integer)
          Sort Key: (((j1.fields ->> 'id'::text))::integer)
          ->  Foreign Scan on public.j1
-               Output: j1.fields, ((j1.fields ->> 'id'::text))::integer
-               InfluxDB query: SELECT * FROM "j1"
+               Output: ((j1.fields ->> 'id'::text))::integer
+               InfluxDB query: SELECT "id" FROM "j1"
    ->  Sort
-         Output: j2.fields, (((j2.fields ->> 'id'::text))::integer)
+         Output: (((j2.fields ->> 'id'::text))::integer)
          Sort Key: (((j2.fields ->> 'id'::text))::integer)
          ->  Foreign Scan on public.j2
-               Output: j2.fields, ((j2.fields ->> 'id'::text))::integer
-               InfluxDB query: SELECT * FROM "j2"
+               Output: ((j2.fields ->> 'id'::text))::integer
+               InfluxDB query: SELECT "id" FROM "j2"
 (15 rows)
 
 -- a clauseless (cross) join can't be unique
@@ -7310,13 +8690,13 @@ inner join (select (fields->>'id1')::int id1, (fields->>'id2')::int id2 from j2)
 explain (verbose, costs off)
 select * from (select (fields->>'id1')::int id1, (fields->>'id2')::int id2 from j1) j1
 left join (select (fields->>'id1')::int id1, (fields->>'id2')::int id2 from j2) j2 on (j1.id1)::int = (j2.id1)::int where (j1.id2)::int = 1;
-                                                                                QUERY PLAN                                                                                
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                  QUERY PLAN                                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Hash Right Join
-   Output: ((j1.fields ->> 'id1'::text))::integer, ((j1.fields ->> 'id2'::text))::integer, ((j2.fields ->> 'id1'::text))::integer, ((j2.fields ->> 'id2'::text))::integer
+   Output: ((j1.fields ->> 'id1'::text))::integer, ((j1.fields ->> 'id2'::text))::integer, (((j2.fields ->> 'id1'::text))::integer), (((j2.fields ->> 'id2'::text))::integer)
    Hash Cond: (((j2.fields ->> 'id1'::text))::integer = ((j1.fields ->> 'id1'::text))::integer)
    ->  Foreign Scan on public.j2
-         Output: j2.fields
+         Output: j2.fields, ((j2.fields ->> 'id1'::text))::integer, ((j2.fields ->> 'id2'::text))::integer
          InfluxDB query: SELECT * FROM "j2"
    ->  Hash
          Output: j1.fields
@@ -7325,6 +8705,31 @@ left join (select (fields->>'id1')::int id1, (fields->>'id2')::int id2 from j2) 
                InfluxDB query: SELECT * FROM "j1" WHERE (("id2" = 1))
 (11 rows)
 
+-- create unique index j1_id2_idx on j1(id2) where id2 is not null;
+-- ensure we don't use a partial unique index as unique proofs
+explain (verbose, costs off)
+select * from (select (fields->>'id2')::int id2 from j1) j1
+inner join (select (fields->>'id2')::int id2 from j2) j2 on (j1.id2)::int = (j2.id2)::int;
+                                             QUERY PLAN                                              
+-----------------------------------------------------------------------------------------------------
+ Merge Join
+   Output: (((j1.fields ->> 'id2'::text))::integer), (((j2.fields ->> 'id2'::text))::integer)
+   Merge Cond: ((((j1.fields ->> 'id2'::text))::integer) = (((j2.fields ->> 'id2'::text))::integer))
+   ->  Sort
+         Output: j1.fields, (((j1.fields ->> 'id2'::text))::integer)
+         Sort Key: (((j1.fields ->> 'id2'::text))::integer)
+         ->  Foreign Scan on public.j1
+               Output: j1.fields, ((j1.fields ->> 'id2'::text))::integer
+               InfluxDB query: SELECT * FROM "j1"
+   ->  Sort
+         Output: j2.fields, (((j2.fields ->> 'id2'::text))::integer)
+         Sort Key: (((j2.fields ->> 'id2'::text))::integer)
+         ->  Foreign Scan on public.j2
+               Output: j2.fields, ((j2.fields ->> 'id2'::text))::integer
+               InfluxDB query: SELECT * FROM "j2"
+(15 rows)
+
+-- drop index j1_id2_idx;
 -- validate logic in merge joins which skips mark and restore.
 -- it should only do this if all quals which were used to detect the unique
 -- are present as join quals, and not plain quals.
@@ -7436,11 +8841,6 @@ drop foreign table j2_nsc;
 drop foreign table j3;
 --Testcase 646:
 drop foreign table j3_nsc;
--- check that semijoin inner is not seen as unique for a portion of the outerrel
---Testcase 560:
-CREATE FOREIGN TABLE onek (
-  fields jsonb OPTIONS (fields 'true')
-) SERVER influxdb_svr OPTIONS(schemaless 'true');
 -- check that semijoin inner is not seen as unique for a portion of the outerrel
 --Testcase 561:
 explain (verbose, costs off)
