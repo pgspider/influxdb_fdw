@@ -36,7 +36,7 @@ CREATE FOREIGN TABLE "S 1"."T 0" (
 	"C 1" int NOT NULL,
 	c2 int NOT NULL,
 	c3 text,
-	time timestamp,
+	time timestamptz,
 	c6 varchar(10),
 	c7 char(10),
 	c8 text
@@ -46,7 +46,7 @@ CREATE FOREIGN TABLE "S 1"."T 1" (
 	"C 1" int NOT NULL,
 	c2 int NOT NULL,
 	c3 text,
-	time timestamp,
+	time timestamptz,
 	c6 varchar(10),
 	c7 char(10),
 	c8 text
@@ -80,7 +80,7 @@ INSERT INTO "S 1"."T 1"
 	SELECT id,
 	       id % 10,
 	       to_char(id, 'FM00000'),
-	       '1970-01-01'::timestamp + ((id % 100) || ' days')::interval,
+	       '1970-01-01'::timestamptz + ((id % 100) || ' days')::interval,
 	       id % 10,
 	       id % 10,
 	       'foo'::text
@@ -121,7 +121,7 @@ CREATE FOREIGN TABLE ft1 (
 	c1 int NOT NULL,
 	c2 int NOT NULL,
 	c3 text,
-	time timestamp,
+	time timestamptz,
 	c6 varchar(10),
 	c7 char(10) default 'ft1',
 	c8 text
@@ -135,7 +135,7 @@ CREATE FOREIGN TABLE ft2 (
 	c2 int NOT NULL,
 	cx int,
 	c3 text,
-	time timestamp,
+	time timestamptz,
 	c6 varchar(10),
 	c7 char(10) default 'ft2',
 	c8 text
@@ -3841,7 +3841,7 @@ CREATE FOREIGN TABLE pg_temp.ft1_nopw (
 	c2 int NOT NULL,
 	c3 text,
 	c4 timestamptz,
-	c5 timestamp,
+	c5 timestamptz,
 	c6 varchar(10),
 	c7 char(10) default 'ft1',
 	c8 user_enum
