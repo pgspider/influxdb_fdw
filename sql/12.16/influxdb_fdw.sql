@@ -612,6 +612,69 @@ INSERT INTO tmp_time (time, c1, c2, c3) VALUES ('2022-05-06 07:08:09', '07:08:09
 -- https://www.timeanddate.com/time/zone/japan/tokyo?syear=1850
 SELECT * FROM tmp_time;
 
+-- Type mis-match
+--Testcase 212:
+CREATE FOREIGN TABLE datatype_test (
+  time timestamp with time zone,
+  tag1 text,
+  tag2 text,
+  value1 int,
+  value2 text
+) SERVER server1 OPTIONS (table 'datatype_test', tags 'tag1,tag2');
+
+--Testcase 213:
+INSERT INTO datatype_test (tag1, tag2, value1, value2) VALUES ('time', '2021-02-02T00:00:01Z', '1', '2021-02-05T00:00:00Z');
+--Testcase 214:
+INSERT INTO datatype_test (tag1, tag2, value1, value2) VALUES ('time', '2022-02-02T00:00:01Z', '2', '2022-02-05T00:00:00Z');
+--Testcase 215:
+SELECT tag1, tag2, value1, value2 FROM datatype_test;
+-- Using text as timestamp
+--Testcase 216:
+ALTER FOREIGN TABLE datatype_test ALTER COLUMN tag2 TYPE timestamptz;
+--Testcase 217:
+ALTER FOREIGN TABLE datatype_test ALTER COLUMN value2 TYPE timestamptz;
+
+-- SELECT OK without filter
+--Testcase 218:
+SELECT tag1, tag2, value1, value2 FROM datatype_test;
+
+-- SELECT with timestamp filter, WHERE clause is pushed down
+-- InfluxDB cannot compare correctly, 0 row returned
+--Testcase 219:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT tag1, tag2, value1, value2 FROM datatype_test WHERE tag2 > '2021-02-02 00:00:01+00';
+--Testcase 220:
+SELECT tag1, tag2, value1, value2 FROM datatype_test WHERE tag2 > '2021-02-02 00:00:01+00';
+--Testcase 221:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT tag1, tag2, value1, value2 FROM datatype_test WHERE value2 > '2021-02-05 00:00:00+00';
+--Testcase 222:
+SELECT tag1, tag2, value1, value2 FROM datatype_test WHERE value2 > '2021-02-05 00:00:00+00';
+
+--Testcase 223:
+ALTER FOREIGN TABLE datatype_test ALTER COLUMN tag2 TYPE text;
+--Testcase 224:
+ALTER FOREIGN TABLE datatype_test ALTER COLUMN value2 TYPE text;
+
+-- uses explicit cast, WHERE clause is not pushed down
+-- compared correctly by postgres, 1 row returned
+--Testcase 225:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT tag1, tag2, value1, value2 FROM datatype_test WHERE tag2::timestamptz > '2021-02-02 00:00:01+00';
+--Testcase 226:
+SELECT tag1, tag2, value1, value2 FROM datatype_test WHERE tag2::timestamptz > '2021-02-02 00:00:01+00';
+--Testcase 227:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT tag1, tag2, value1, value2 FROM datatype_test WHERE value2::timestamptz > '2021-02-05 00:00:00+00';
+--Testcase 228:
+SELECT tag1, tag2, value1, value2 FROM datatype_test WHERE value2::timestamptz > '2021-02-05 00:00:00+00';
+
+-- clean-up
+--Testcase 229:
+DELETE FROM datatype_test;
+--Testcase 230:
+DROP FOREIGN TABLE datatype_test;
+
 -- Recover data
 :RECOVER_INIT_TXT_DROP_BUCKET;
 :RECOVER_INIT_TXT_CREATE_BUCKET;

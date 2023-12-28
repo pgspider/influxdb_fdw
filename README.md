@@ -783,6 +783,10 @@ the number of points with field1 and field2 are different in *InfluxDB* database
 - Conditions like `WHERE time + interval '1 day' < now()` do not work. Please use `WHERE time < now() - interval '1 day'`.
 - InfluxDB FDW does not return an error even if it is overflow.
 - `EXP` function of *InfluxDB* may return different precision number for different PC.
+- InfluxDB only supports some basic types for tags (string only) and fields (string, float, integer or boolean) => most Postgres types cannot be supported.
+- `IMPORT FOREIGN SCHEMA` should be used to identify foreign tables.
+  - If the user defines it manually, it is necessary to use the correct mapping type in the foreign table to avoid some unexpected behavior because of type mismatch or unsupported in InfluxDB.
+  - If a user wants to use an unsupported type with InfluxDB data, PostgreSQL's explicit cast functions should be used instead of define column type in foreign table directly.
 
 When a query to foreign tables fails, you can find why it fails by seeing a query executed in *InfluxDB* with `EXPLAIN VERBOSE`.
     

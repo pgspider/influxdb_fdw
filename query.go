@@ -289,7 +289,7 @@ func bindParameter(ctypes *C.InfluxDBType, cvalues *C.InfluxDBValue, cparamNum C
 		//Each placeholder is "$1", "$2",...,so set "1","2",... to map key
 		for i := range values {
 			switch types[i] {
-			case C.INFLUXDB_INT64:
+			case C.INFLUXDB_TIME, C.INFLUXDB_INT64:
 				//Cannot access union member in Go, so use cast
 				query.Parameters[strconv.Itoa(i+1)] = *(*int64)(unsafe.Pointer(&values[i]))
 				break
@@ -306,16 +306,6 @@ func bindParameter(ctypes *C.InfluxDBType, cvalues *C.InfluxDBValue, cparamNum C
 				break
 			case C.INFLUXDB_STRING:
 				query.Parameters[strconv.Itoa(i+1)] = C.GoString(*(**C.char)(unsafe.Pointer(&(values[i]))))
-				break
-			case C.INFLUXDB_TIME:
-				//We need to parse time value from String to Time type and back
-				timeString := C.GoString(*(**C.char)(unsafe.Pointer(&(values[i]))))
-				times, err := parseTime(timeString)
-				if err != nil {
-					//Parse time value unsuccessful
-					return err
-				}
-				query.Parameters[strconv.Itoa(i+1)] = times.Format(time.RFC3339Nano)
 				break
 			case C.INFLUXDB_NULL:
 				query.Parameters[strconv.Itoa(i+1)] = ""
@@ -544,14 +534,8 @@ func makeBatchPoint(db *C.char, tablename *C.char, ccolumns *C.struct_InfluxDBCo
 				}
 				break
 			case C.INFLUXDB_TIME:
-				//We need to parse time value from String to Time type
-				timeString := C.GoString(*(**C.char)(unsafe.Pointer(&(values[i]))))
-				times, err := parseTime(timeString)
-				if err != nil {
-					//Parse time value unsuccessful
-					return bp, err
-				}
-				timecol = times
+				//Bind timestamp as epoch time
+				timecol = time.Unix(0, *(*int64)(unsafe.Pointer(&values[i])))
 				break
 			case C.INFLUXDB_NULL:
 				//We do not need append null value when execute INSERT
