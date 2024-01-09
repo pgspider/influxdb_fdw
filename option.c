@@ -123,6 +123,7 @@ influxdb_fdw_validator(PG_FUNCTION_ARGS)
 			struct InfluxDBFdwOption *opt;
 			StringInfoData buf;
 
+#if PG_VERSIION_NUM < 160000
 			/*
 			 * Unknown option specified, complain about it. Provide a hint
 			 * with list of valid options for the object.
@@ -142,6 +143,34 @@ influxdb_fdw_validator(PG_FUNCTION_ARGS)
 					 ? errhint("Valid options in this context are: %s",
 							   buf.data)
 					 : errhint("There are no valid options in this context.")));
+#else
+			/*
+			 * Unknown option specified, complain about it. Provide a hint
+			 * with list of valid options for the object.
+			 */
+			const char *closest_match;
+			ClosestMatchState match_state;
+			bool		has_valid_options = false;
+
+			initClosestMatch(&match_state, def->defname, 4);
+			for (opt = valid_options; opt->optname; opt++)
+			{
+				if (catalog == opt->optcontext)
+				{
+					has_valid_options = true;
+					updateClosestMatch(&match_state, opt->optname);
+				}
+			}
+
+			closest_match = getClosestMatch(&match_state);
+			ereport(ERROR,
+					(errcode(ERRCODE_FDW_INVALID_OPTION_NAME),
+					 errmsg("invalid option \"%s\"", def->defname),
+					 has_valid_options ? closest_match ?
+					 errhint("Perhaps you meant the option \"%s\".",
+							 closest_match) : 0 :
+					 errhint("There are no valid options in this context.")));
+#endif
 		}
 
 		/*
@@ -209,7 +238,7 @@ influxdb_is_valid_option(const char *option, Oid context)
  * Fetch the options for a influxdb_fdw foreign table.
  */
 influxdb_opt *
-influxdb_get_options(Oid foreignoid)
+influxdb_get_options(Oid foreignoid, Oid userid)
 {
 	ForeignTable   *f_table = NULL;
 	ForeignServer  *f_server = NULL;
@@ -236,7 +265,7 @@ influxdb_get_options(Oid foreignoid)
 	}
 	PG_END_TRY();
 
-	f_mapping = GetUserMapping(GetUserId(), f_server->serverid);
+	f_mapping = GetUserMapping(userid, f_server->serverid);
 
 	options = NIL;
 	if (f_table)

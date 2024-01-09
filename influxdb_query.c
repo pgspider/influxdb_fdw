@@ -358,8 +358,8 @@ influxdb_bind_sql_var(Oid type, int idx, Datum value, bool *isnull, InfluxDBColu
 			{
 				/* Bind as string */
 				char	   *outputString = NULL;
-				Oid			outputFunctionId = InvalidOid;
-				bool		typeVarLength = false;
+				outputFunctionId = InvalidOid;
+				typeVarLength = false;
 
 				getTypeOutputInfo(type, &outputFunctionId, &typeVarLength);
 				outputString = OidOutputFunctionCall(outputFunctionId, value);
@@ -371,15 +371,6 @@ influxdb_bind_sql_var(Oid type, int idx, Datum value, bool *isnull, InfluxDBColu
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
 			{
-				/* Bind as string, but types is time */
-				char	   *outputString = NULL;
-				Oid			outputFunctionId = InvalidOid;
-				bool		typeVarLength = false;
-
-				getTypeOutputInfo(type, &outputFunctionId, &typeVarLength);
-				outputString = OidOutputFunctionCall(outputFunctionId, value);
-				param_influxdb_values[idx].s = outputString;
-#ifdef CXX_CLIENT
 				if (param_column_info[idx].column_type == INFLUXDB_TIME_KEY)
 				{
 					const int64 postgres_to_unix_epoch_usecs = (POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * USECS_PER_DAY;
@@ -387,20 +378,27 @@ influxdb_bind_sql_var(Oid type, int idx, Datum value, bool *isnull, InfluxDBColu
 					int64		valueNanoSecs = (valueTimestamp + postgres_to_unix_epoch_usecs) * 1000;
 
 					param_influxdb_values[idx].i = valueNanoSecs;
-				}	
-#endif
-				/*
-				 * In InfluxDB, Measurements,tag keys,tag values and field
-				 * keys are always strings type. And Field values only can be
-				 * floats, integers, strings, or Booleans. So if column isn't
-				 * 'time' column in InfluxdDB, data will be store like strings
-				 * in InfluxDB.
-				 */
-				if (param_column_info[idx].column_type != INFLUXDB_TIME_KEY)
-					param_influxdb_types[idx] = INFLUXDB_STRING;
-				else
 					param_influxdb_types[idx] = INFLUXDB_TIME;
+				}
+				else
+				{
+					/* Bind as string */
+					char	   *outputString = NULL;
+					outputFunctionId = InvalidOid;
+					typeVarLength = false;
 
+					getTypeOutputInfo(type, &outputFunctionId, &typeVarLength);
+					outputString = OidOutputFunctionCall(outputFunctionId, value);
+					param_influxdb_values[idx].s = outputString;
+					/*
+					 * In InfluxDB, Measurements,tag keys,tag values and field
+					 * keys are always strings type. And Field values only can be
+					 * floats, integers, strings, or Booleans. So if column isn't
+					 * 'time' column in InfluxdDB, data will be store like strings
+					 * in InfluxDB.
+					 */
+					param_influxdb_types[idx] = INFLUXDB_STRING;
+				}
 				break;
 			}
 		default:

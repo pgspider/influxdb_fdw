@@ -87,6 +87,9 @@ PG_MODULE_MAGIC;
 #define IS_KEY_COLUMN(A) ((strcmp(A->defname, "key") == 0) && \
 						  (strcmp(((Value *)(A->arg))->val.str, "true") == 0))
 
+#define SPD_CMD_CREATE 0
+#define SPD_CMD_DROP 1
+
 extern Datum influxdb_fdw_handler(PG_FUNCTION_ARGS);
 extern Datum influxdb_fdw_validator(PG_FUNCTION_ARGS);
 
@@ -243,6 +246,7 @@ static bool influxdb_contain_regex_star_functions(Node *clause);
 static int	influxdb_get_batch_size_option(Relation rel);
 #endif
 static void influxdb_extract_slcols(InfluxDBFdwRelationInfo *fpinfo, PlannerInfo *root, RelOptInfo *baserel, List *tlist);
+static bool influxdb_is_existed_measurement(Oid serverOid, char* tbl_name, influxdb_opt *options);
 
 #ifdef CXX_CLIENT
 #define free(x) pfree(x)
@@ -605,13 +609,23 @@ influxdbGetForeignRelSize(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntab
 	InfluxDBFdwRelationInfo *fpinfo;
 	influxdb_opt *options;
 	ListCell   *lc;
+	Oid			userid;
+#if PG_VERSION_NUM < 160000
+	RangeTblEntry *rte = planner_rt_fetch(baserel->relid, root);
+#endif
 
 	elog(DEBUG1, "influxdb_fdw : %s", __func__);
 	fpinfo = (InfluxDBFdwRelationInfo *) palloc0(sizeof(InfluxDBFdwRelationInfo));
 	baserel->fdw_private = (void *) fpinfo;
 
+#if PG_VERSION_NUM >= 160000
+	userid = OidIsValid(baserel->userid) ? baserel->userid : GetUserId();
+#else
+	userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
+#endif
+
 	/* Fetch the options */
-	options = influxdb_get_options(foreigntableid);
+	options = influxdb_get_options(foreigntableid, userid);
 
 	influxdb_get_schemaless_info(&(fpinfo->slinfo), options->schemaless, foreigntableid);
 
@@ -955,8 +969,6 @@ influxdbGetForeignPlan(PlannerInfo *root,
 		 */
 		if (outer_plan)
 		{
-			ListCell   *lc;
-
 			/*
 			 * Right now, we only consider grouping and aggregation beyond
 			 * joins. Queries involving aggregates or grouping do not require
@@ -1044,6 +1056,7 @@ influxdbBeginForeignScan(ForeignScanState *node, int eflags)
 	int			numParams;
 	int			rtindex;
 	bool		schemaless;
+	Oid			userid;
 #ifdef CXX_CLIENT
 	ForeignTable *ftable;
 #endif
@@ -1067,26 +1080,34 @@ influxdbBeginForeignScan(ForeignScanState *node, int eflags)
 
 	festate->cursor_exists = false;
 
-	/*
-	 * Identify which user to do the remote access as.  This should match what
-	 * ExecCheckRTEPerms() does.  In case of a join or aggregate, use the
-	 * lowest-numbered member RTE as a representative; we would get the same
-	 * result from any.
-	 */
 	if (fsplan->scan.scanrelid > 0)
 		rtindex = fsplan->scan.scanrelid;
 	else
+#if PG_VERSION_NUM < 160000
 		rtindex = bms_next_member(fsplan->fs_relids, -1);
+#else
+		rtindex = bms_next_member(fsplan->fs_base_relids, -1);
+#endif
 	rte = exec_rt_fetch(rtindex, estate);
 
+#if PG_VERSION_NUM >= 160000
+	/*
+	 * Identify which user to do the remote access as.  This should match what
+	 * ExecCheckPermissions() does.
+	 */
+	userid = OidIsValid(fsplan->checkAsUser) ? fsplan->checkAsUser : GetUserId();
+#else
+	userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
+#endif
+
 	/* Fetch options */
-	festate->influxdbFdwOptions = influxdb_get_options(rte->relid);
+	festate->influxdbFdwOptions = influxdb_get_options(rte->relid, userid);
 #ifdef CXX_CLIENT
 	if (!festate->influxdbFdwOptions->svr_version)
 		festate->influxdbFdwOptions->svr_version = influxdb_get_version_option(festate->influxdbFdwOptions);
 	/* get user mapping */
 	ftable = GetForeignTable(rte->relid);
-	festate->user = GetUserMapping(GetUserId(), ftable->serverid);
+	festate->user = GetUserMapping(userid, ftable->serverid);
 #endif
 
 	influxdb_get_schemaless_info(&(festate->slinfo), schemaless, rte->relid);
@@ -1315,8 +1336,8 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 				Aggref	   *agg = (Aggref *) target;
 				FuncExpr   *func = (FuncExpr *) target;
 				HeapTuple	tuple;
-				bool		is_func = false,
-							is_agg = false;
+				bool		is_func = false;
+				bool		is_agg_internal = false;
 				bool		funcstar = false;
 				bool		aggstar = false;
 				Oid			objectId = InvalidOid;
@@ -1328,7 +1349,7 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 				}
 				else
 				{
-					is_agg = true;
+					is_agg_internal = true;
 					aggstar = agg->aggstar;
 					objectId = agg->aggfnoid;
 				}
@@ -1348,7 +1369,7 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 				 * count(*) of postgreSQL return only 1 column, which is
 				 * different from InfluxDB. It does not need to go here.
 				 */
-				if ((is_agg && !(aggstar && strcmp(opername, "count") == 0)) || is_func)
+				if ((is_agg_internal && !(aggstar && strcmp(opername, "count") == 0)) || is_func)
 				{
 					funcstar = influxdb_is_star_func(objectId, opername);
 
@@ -1365,7 +1386,7 @@ make_tuple_from_result_row(InfluxDBRow * result_row,
 						TargetEntry *tle;
 						Node	   *n;
 
-						if (is_agg)
+						if (is_agg_internal)
 						{
 							regexlc = list_head(agg->args);
 							tle = (TargetEntry *) lfirst(regexlc);
@@ -1909,11 +1930,16 @@ influxdbBeginForeignModify(ModifyTableState *mtstate,
 	Relation	rel = resultRelInfo->ri_RelationDesc;
 	AttrNumber	n_params = 0;
 	Oid			typefnoid = InvalidOid;
+	Oid			userid;
 	bool		isvarlena = false;
 	ListCell   *lc = NULL;
 	Oid			foreignTableId = InvalidOid;
 	Plan	   *subplan;
 	int			i;
+#if (PG_VERSION_NUM < 160000)
+	RangeTblEntry *rte;
+#endif
+
 #ifdef CXX_CLIENT
 	ForeignTable *ftable;
 #endif
@@ -1937,14 +1963,24 @@ influxdbBeginForeignModify(ModifyTableState *mtstate,
 	fmstate = (InfluxDBFdwExecState *) palloc0(sizeof(InfluxDBFdwExecState));
 	fmstate->rowidx = 0;
 
+#if (PG_VERSION_NUM >= 160000)
+	/* Identify which user to do the remote access as. */
+	userid = ExecGetResultRelCheckAsUser(resultRelInfo, estate);
+#else
+	/* Find RTE. */
+	rte = exec_rt_fetch(resultRelInfo->ri_RangeTableIndex,
+						mtstate->ps.state);
+	userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
+#endif
+
 	/* Stash away the state info we have already */
-	fmstate->influxdbFdwOptions = influxdb_get_options(foreignTableId);
+	fmstate->influxdbFdwOptions = influxdb_get_options(foreignTableId, userid);
 #ifdef CXX_CLIENT
 	if (!fmstate->influxdbFdwOptions->svr_version)
 		fmstate->influxdbFdwOptions->svr_version = influxdb_get_version_option(fmstate->influxdbFdwOptions);
 	/* get user mapping */
 	ftable = GetForeignTable(foreignTableId);
-	fmstate->user = GetUserMapping(GetUserId(), ftable->serverid);
+	fmstate->user = GetUserMapping(userid, ftable->serverid);
 #endif
 	fmstate->rel = rel;
 	fmstate->query = strVal(list_nth(fdw_private, FdwModifyPrivateUpdateSql));
@@ -2102,9 +2138,7 @@ static int
 influxdbGetForeignModifyBatchSize(ResultRelInfo *resultRelInfo)
 {
 	int			batch_size;
-	InfluxDBFdwExecState *fmstate = resultRelInfo->ri_FdwState ?
-	(InfluxDBFdwExecState *) resultRelInfo->ri_FdwState :
-	NULL;
+	InfluxDBFdwExecState *fmstate = (InfluxDBFdwExecState *) resultRelInfo->ri_FdwState;
 
 	elog(DEBUG1, "influxdb_fdw : %s", __func__);
 
@@ -2112,8 +2146,9 @@ influxdbGetForeignModifyBatchSize(ResultRelInfo *resultRelInfo)
 	Assert(resultRelInfo->ri_BatchSize == 0);
 
 	/*
-	 * Should never get called when the insert is being performed as part of a
-	 * row movement operation.
+	 * Should never get called when the insert is being performed on a table
+	 * that is also among the target relations of an UPDATE operation, because
+	 * postgresBeginForeignInsert() currently rejects such insert attempts.
 	 */
 	Assert(fmstate == NULL || fmstate->aux_fmstate == NULL);
 
@@ -2327,7 +2362,11 @@ find_modifytable_subplan(PlannerInfo *root,
 	{
 		ForeignScan *fscan = (ForeignScan *) subplan;
 
+#if PG_VERSION_NUM < 160000
 		if (bms_is_member(rtindex, fscan->fs_relids))
+#else
+		if (bms_is_member(rtindex, fscan->fs_base_relids))
+#endif
 			return fscan;
 	}
 
@@ -2505,6 +2544,7 @@ influxdbBeginDirectModify(ForeignScanState *node, int eflags)
 	EState	   *estate = node->ss.ps.state;
 	InfluxDBFdwDirectModifyState *dmstate;
 	Index		rtindex;
+	Oid			userid;
 	RangeTblEntry *rte;
 	int			numParams;
 #ifdef CXX_CLIENT
@@ -2527,30 +2567,34 @@ influxdbBeginDirectModify(ForeignScanState *node, int eflags)
 
 	/*
 	 * Identify which user to do the remote access as.  This should match what
-	 * ExecCheckRTEPerms() does.
+	 * ExecCheckPermissions() does.
 	 */
+#if (PG_VERSION_NUM >= 160000)
+	userid = OidIsValid(fsplan->checkAsUser) ? fsplan->checkAsUser : GetUserId();
+	rtindex = node->resultRelInfo->ri_RangeTableIndex;
+#else
+	userid = GetUserId();
 #if (PG_VERSION_NUM < 140000)
 	rtindex = estate->es_result_relation_info->ri_RangeTableIndex;
 #else
 	rtindex = node->resultRelInfo->ri_RangeTableIndex;
 #endif
+#endif
 
 	rte = exec_rt_fetch(rtindex, estate);
-
-	/* Get info about foreign table. */
 	if (fsplan->scan.scanrelid == 0)
 		dmstate->rel = ExecOpenScanRelation(estate, rtindex, eflags);
 	else
 		dmstate->rel = node->ss.ss_currentRelation;
 
 	/* Fetch options */
-	dmstate->influxdbFdwOptions = influxdb_get_options(rte->relid);
+	dmstate->influxdbFdwOptions = influxdb_get_options(rte->relid, userid);
 #ifdef CXX_CLIENT
 	if (!dmstate->influxdbFdwOptions->svr_version)
 		dmstate->influxdbFdwOptions->svr_version = influxdb_get_version_option(dmstate->influxdbFdwOptions);
 	/* get user mapping */
 	ftable = GetForeignTable(RelationGetRelid(dmstate->rel));
-	dmstate->user = GetUserMapping(GetUserId(), ftable->serverid);
+	dmstate->user = GetUserMapping(userid, ftable->serverid);
 #endif
 
 	/* Update the foreign-join-related fields. */
@@ -2777,7 +2821,7 @@ influxdbImportForeignSchema(ImportForeignSchemaStmt *stmt,
 					 errmsg("invalid option \"%s\"", def->defname)));
 	}
 
-	options = influxdb_get_options(serverOid);
+	options = influxdb_get_options(serverOid, GetUserId());
 #ifndef CXX_CLIENT
 	ret = InfluxDBSchemaInfo(options->svr_address, options->svr_port,
 							 options->svr_username, options->svr_password,
@@ -3052,7 +3096,11 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel)
 		Index		sgref = get_pathtarget_sortgroupref(grouping_target, i);
 		ListCell   *l;
 
-		/* Check whether this expression is part of GROUP BY clause */
+		/*
+		 * Check whether this expression is part of GROUP BY clause.  Note we
+		 * check the whole GROUP BY clause not just processed_groupClause,
+		 * because we will ship all of it, cf. appendGroupByClause.
+		 */
 		if (sgref && get_sortgroupref_clause_noerr(sgref, query->groupClause))
 		{
 			TargetEntry *tle;
@@ -3153,10 +3201,10 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel)
 				 */
 				foreach(l, aggvars)
 				{
-					Expr	   *expr = (Expr *) lfirst(l);
+					Expr	   *aggref = (Expr *) lfirst(l);
 
-					if (IsA(expr, Aggref))
-						tlist = add_to_flat_tlist(tlist, list_make1(expr));
+					if (IsA(aggref, Aggref))
+						tlist = add_to_flat_tlist(tlist, list_make1(aggref));
 				}
 			}
 		}
@@ -3209,7 +3257,6 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel)
 	if (fpinfo->local_conds)
 	{
 		List	   *aggvars = NIL;
-		ListCell   *lc;
 
 		foreach(lc, fpinfo->local_conds)
 		{
@@ -4119,3 +4166,121 @@ influxdb_get_batch_size_option(Relation rel)
 	return batch_size;
 }
 #endif
+
+/*
+ * ExecForeignDDL is a public function that is called by core code.
+ * It executes DDL command on remote server.
+ *
+ * serverOid: remote server to get connected
+ * rel: relation to be created
+ * operation:
+ * 		0: CREATE command
+ * 		1: DROP command
+ * exists_flag:
+ *		in CREATE DDL: true if `IF NOT EXIST` is specified
+ *		in DROP DDL: true if `IF EXIST` is specified
+ */
+int
+ExecForeignDDL(Oid serverOid,
+			   Relation rel,
+			   int operation,
+			   bool exists_flag)
+{
+	char	   *ret_err;
+	StringInfoData sql;
+	influxdb_opt *options = NULL;
+	bool		isExisted = false;
+
+	elog(DEBUG1, "influxdb_fdw: %s", __func__);
+
+	if (operation != SPD_CMD_CREATE && operation != SPD_CMD_DROP)
+		elog(ERROR, "Only support CREATE/DROP DATASOURCE");
+
+	options = influxdb_get_options(RelationGetRelid(rel), GetUserId());
+
+	/* Check if new datasource measurement is already existed or not */
+	isExisted = influxdb_is_existed_measurement(serverOid, options->svr_table, options);
+
+	/* CREATE new datasource */
+	if (operation == SPD_CMD_CREATE)
+	{
+		if (!exists_flag && isExisted)
+			/* if CREATE without IF NOT EXIST and mesurement is existed, raise error. */
+			elog(ERROR, "influxdb_fdw: table \"%s\" has already existed", options->svr_table);
+		else
+			/* New measurement will be created by INSERT operation, so it just return success */
+			return 0;
+	}
+
+	/* DROP datasource */
+	if (!exists_flag && !isExisted)
+		/* if DROP without IF EXIST and mesurement is not existed, raise error. */
+		elog(ERROR, "influxdb_fdw: table \"%s\" does not exist", options->svr_table);
+
+	/* init sql query to drop InfluxDB measurement */
+	initStringInfo(&sql);
+
+	/* create DROP query */
+	influxdb_deparse_drop_measurement_stmt(&sql, rel);
+
+	ret_err = InfluxDBExecDDLCommand(options->svr_address, options->svr_port,
+							 options->svr_username, options->svr_password,
+							 options->svr_database, sql.data
+#ifdef CXX_CLIENT
+							 , options->svr_version, options->svr_token, options->svr_retention_policy
+#endif
+							 );
+
+	if (ret_err != NULL)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FDW_UNABLE_TO_CREATE_EXECUTION),
+				 errmsg("influxdb_fdw : %s", ret_err)));
+	}
+
+	pfree(sql.data);
+
+	return 0;
+}
+
+/* Check measurement is exised or not */
+static bool
+influxdb_is_existed_measurement(Oid serverOid, char* tbl_name, influxdb_opt *options)
+{
+	StringInfoData influxql;
+	struct InfluxDBQuery_return volatile ret;
+	struct InfluxDBResult volatile *result = NULL;
+	bool found = false;
+
+	initStringInfo(&influxql);
+	appendStringInfo(&influxql, "SHOW MEASUREMENTS ON %s WITH MEASUREMENT = %s", options->svr_database, tbl_name);
+
+#ifdef CXX_CLIENT
+	ret = InfluxDBQuery(influxql.data, GetUserMapping(GetUserId(), serverOid), options,
+#else
+	ret = InfluxDBQuery(influxql.data, options->svr_address, options->svr_port,
+						options->svr_username, options->svr_password,
+						options->svr_database,
+#endif
+						NULL, NULL, 0);
+	if (ret.r1 != NULL)
+	{
+		char	   *err = pstrdup(ret.r1);
+
+		free(ret.r1);
+		ret.r1 = err;
+		elog(ERROR, "influxdb_fdw : %s", err);
+	}
+#ifdef CXX_CLIENT
+	result = ret.r0;
+#else
+	result = &ret.r0;
+#endif
+
+	found = (result && result->nrow == 1) ? true : false;
+
+	if (result)
+		InfluxDBFreeResult((InfluxDBResult *)result);
+
+	return found;
+}

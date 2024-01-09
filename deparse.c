@@ -19,12 +19,16 @@
 #include "access/htup_details.h"
 #include "access/sysattr.h"
 #include "catalog/pg_aggregate.h"
+#include "catalog/pg_authid.h"
 #include "catalog/pg_collation.h"
 #include "catalog/pg_namespace.h"
 #include "catalog/pg_operator.h"
 #include "catalog/pg_proc.h"
+#include "catalog/pg_ts_config.h"
+#include "catalog/pg_ts_dict.h"
 #include "catalog/pg_type.h"
 #include "commands/defrem.h"
+#include "miscadmin.h"
 #include "nodes/nodeFuncs.h"
 #include "nodes/plannodes.h"
 #include "optimizer/clauses.h"
@@ -228,7 +232,7 @@ static bool influxdb_foreign_expr_walker(Node *node,
 /*
  * Functions to construct string representation of a node tree.
  */
-static void influxdb_deparse_expr(Expr *expr, deparse_expr_cxt *context);
+static void influxdb_deparse_expr(Expr *node, deparse_expr_cxt *context);
 static void influxdb_deparse_var(Var *node, deparse_expr_cxt *context);
 static void influxdb_deparse_const(Const *node, deparse_expr_cxt *context, int showtype);
 static void influxdb_deparse_param(Param *node, deparse_expr_cxt *context);
@@ -287,6 +291,7 @@ bool		influxdb_is_star_func(Oid funcid, char *in);
 static bool influxdb_is_unique_func(Oid funcid, char *in);
 static bool influxdb_is_supported_builtin_func(Oid funcid, char *in);
 static bool exist_in_function_list(char *funcname, const char **funclist);
+static void add_backslash(StringInfo buf, const char *ptr, const char *regex_special);
 
 /*
  * Local variables.
@@ -2116,6 +2121,24 @@ influxdb_deparse_column_ref(StringInfo buf, int varno, int varattno, Oid vartype
 	}
 }
 
+static void
+add_backslash(StringInfo buf, const char *ptr, const char *regex_special)
+{
+	char		ch = *ptr;
+
+	/* Check regex special character */
+	if (strchr(regex_special, ch) != NULL)
+	{
+		/* Escape this char */
+		appendStringInfoChar(buf, '\\');
+		appendStringInfoChar(buf, ch);
+	}
+	else
+	{
+		appendStringInfoChar(buf, ch);
+	}
+}
+
 /*
  * Append a SQL string regex representing "val" to buf.
  *
@@ -2167,22 +2190,12 @@ influxdb_deparse_string_regex(StringInfo buf, const char *val)
 					elog(ERROR, "invalid pattern matching");
 				}
 				else
-			default:
 				{
-					char		ch = *ptr;
-
-					/* Check regex special character */
-					if (strchr(regex_special, ch) != NULL)
-					{
-						/* Escape this char */
-						appendStringInfoChar(buf, '\\');
-						appendStringInfoChar(buf, ch);
-					}
-					else
-					{
-						appendStringInfoChar(buf, ch);
-					}
+					add_backslash(buf, ptr, regex_special);
 				}
+				break;
+			default:
+				add_backslash(buf, ptr, regex_special);
 				break;
 		}
 
@@ -3462,6 +3475,13 @@ influxdb_append_group_by_clause(List *tlist, deparse_expr_cxt *context)
 	Assert(!query->groupingSets);
 
 	context->influx_fill_expr = NULL;
+	/*
+	 * We intentionally print query->groupClause not processed_groupClause,
+	 * leaving it to the remote planner to get rid of any redundant GROUP BY
+	 * items again.  This is necessary in case processed_groupClause reduced
+	 * to empty, and in any case the redundancy situation on the remote might
+	 * be different than what we think here.
+	 */
 	foreach(lc, query->groupClause)
 	{
 		SortGroupClause *grp = (SortGroupClause *) lfirst(lc);
@@ -3808,7 +3828,7 @@ influxdb_is_tag_key(const char *colname, Oid reloid)
 	ListCell   *lc;
 
 	/* Get FDW options */
-	options = influxdb_get_options(reloid);
+	options = influxdb_get_options(reloid, GetUserId());
 
 	/* If there is no tag in "tags" option, it means column is field */
 	if (!options->tags_list)
@@ -3831,19 +3851,13 @@ influxdb_is_tag_key(const char *colname, Oid reloid)
  *****************************************************************************/
 
 /*
- * influxdb_contain_functions
+ * influxdb_contain_functions_walker
  *	  Recursively search for functions within a clause.
  *
  * Returns true if any function (or operator implemented by function) is found.
  *
  * We will recursively look into TargetEntry exprs.
  */
-static bool
-influxdb_contain_functions(Node *clause)
-{
-	return influxdb_contain_functions_walker(clause, NULL);
-}
-
 static bool
 influxdb_contain_functions_walker(Node *node, void *context)
 {
@@ -3860,10 +3874,10 @@ influxdb_contain_functions_walker(Node *node, void *context)
 	{
 		/* Recurse into subselects */
 		return query_tree_walker((Query *) node,
-								 influxdb_contain_functions,
+								 influxdb_contain_functions_walker,
 								 context, 0);
 	}
-	return expression_tree_walker(node, influxdb_contain_functions,
+	return expression_tree_walker(node, influxdb_contain_functions_walker,
 								  context);
 }
 
@@ -3894,7 +3908,7 @@ influxdb_is_foreign_function_tlist(PlannerInfo *root,
 	{
 		TargetEntry *tle = lfirst_node(TargetEntry, lc);
 
-		if (influxdb_contain_functions((Node *) tle->expr))
+		if (influxdb_contain_functions_walker((Node *) tle->expr, NULL))
 		{
 			is_contain_function = true;
 			break;
@@ -4149,7 +4163,7 @@ influxdb_get_number_tag_key(Oid relid, schemaless_info *pslinfo)
 		influxdb_opt *options;
 
 		/* Get FDW options */
-		options = influxdb_get_options(relid);
+		options = influxdb_get_options(relid, GetUserId());
 
 		return list_length(options->tags_list);
 	}
@@ -4557,4 +4571,16 @@ influxdb_escape_record_string(char *string)
 	appendStringInfoChar(buffer, '"');
 
 	return buffer->data;
+}
+
+/*
+ * Construct DROP MEASUREMENT <measurement_name> query.
+ *	This query deletes all data and series from the specified <measurement_name>
+ *	and deletes the measurement from the index.
+ */
+void
+influxdb_deparse_drop_measurement_stmt(StringInfo buf, Relation rel)
+{
+	appendStringInfo(buf, "DROP MEASUREMENT ");
+	influxdb_deparse_relation(buf, rel);
 }
