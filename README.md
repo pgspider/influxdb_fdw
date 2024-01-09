@@ -2,7 +2,7 @@ InfluxDB Foreign Data Wrapper for PostgreSQL
 ============================================
 
 This is a foreign data wrapper (FDW) to connect [PostgreSQL](https://www.postgresql.org/)
-to [InfluxDB](https://www.influxdata.com) database file. This FDW works with PostgreSQL 11, 12, 13, 14, 15 and confirmed with
+to [InfluxDB](https://www.influxdata.com) database file. This FDW works with PostgreSQL 12, 13, 14, 15, 16.0 and confirmed with
 - InfluxDB 1.8: with either [influxdb1-go](#install-influxdb-go-client-library) client or [influxdb-cxx](#install-influxdb_cxx-client-library) client.
 - InfluxDB 2.2: with [influxdb-cxx](#install-influxdb_cxx-client-library) client via InfluxDB v1 compatibility API.
 
@@ -288,7 +288,7 @@ Supported platforms
 `influxdb_fdw` was developed on Linux, and should run on any
 reasonably POSIX-compliant system.
 
-`influxdb_fdw` is designed to be compatible with PostgreSQL 11 ~ 15.
+`influxdb_fdw` is designed to be compatible with PostgreSQL 12 ~ 16.0.
 
 Installation
 ------------
@@ -780,6 +780,10 @@ the number of points with field1 and field2 are different in *InfluxDB* database
 - Conditions like `WHERE time + interval '1 day' < now()` do not work. Please use `WHERE time < now() - interval '1 day'`.
 - InfluxDB FDW does not return an error even if it is overflow.
 - `EXP` function of *InfluxDB* may return different precision number for different PC.
+- InfluxDB only supports some basic types for tags (string only) and fields (string, float, integer or boolean) => most Postgres types cannot be supported.
+- `IMPORT FOREIGN SCHEMA` should be used to identify foreign tables.
+  - If the user defines it manually, it is necessary to use the correct mapping type in the foreign table to avoid some unexpected behavior because of type mismatch or unsupported in InfluxDB.
+  - If a user wants to use an unsupported type with InfluxDB data, PostgreSQL's explicit cast functions should be used instead of define column type in foreign table directly.
 
 When a query to foreign tables fails, you can find why it fails by seeing a query executed in *InfluxDB* with `EXPLAIN VERBOSE`.
     
@@ -812,7 +816,7 @@ Reference FDW realisation, `postgres_fdw`
 License
 -------
 
-Copyright (c) 2018-2023, TOSHIBA CORPORATION
+Copyright (c) 2018, TOSHIBA CORPORATION
 
 Copyright (c) 2011-2016, EnterpriseDB Corporation
 

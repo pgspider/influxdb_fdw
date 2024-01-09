@@ -402,20 +402,29 @@ InfluxDBInsert(char *tablename, UserMapping *user, influxdb_opt *opts, struct In
     auto influxdb = influxdb_get_connection(user, opts);
     try
     {
+        long long prev_time = 0;
+        long long cur_time;
+
         influxdb->batchOf(cnumSlots);
+
+        /* wait a microsecond to ensure different timestamps with previous batch */
+        pg_usleep(1);
+
         /* Write batches of cnumSlots points */
         for (size_t idx = 0; idx < (size_t)cnumSlots; idx++)
         {
             influxdb::Point record(tablename);
 
-            /*
-             * InfluxDB does not accept two points with the same timestamp value,
-             * so, wait a microsecond to ensure that all inserted points have different timestamps
-             */
-            pg_usleep(1);
+            /* Busy wait to different timestamp */
+            do
+            {
+                cur_time = getCurrentMicroSecond();
+            }
+            while (cur_time <= prev_time);
+            prev_time = cur_time;
 
             /* set current time in micro second as default */
-            record.setTimestamp(getCurrentMicroSecond() * 1000);
+            record.setTimestamp(cur_time * 1000);
             for (size_t pos = 0; pos < (size_t)cparamNum; pos++)
                 makeRecord(record, ccolumns + pos, ctypes[idx * cparamNum + pos], cvalues[idx * cparamNum + pos]);
             influxdb->write(std::move(record));
@@ -423,6 +432,8 @@ InfluxDBInsert(char *tablename, UserMapping *user, influxdb_opt *opts, struct In
     }
     catch (const std::exception& e)
     {
+        /* clean error batch */
+        influxdb->clearBatch();
         retMsg = (char *) palloc0(sizeof(char) * (strlen(e.what()) + 1));
         strcpy(retMsg, e.what());
         return retMsg;
@@ -512,4 +523,64 @@ extern "C" void
 cleanup_cxx_client_connection(void)
 {
     influx_cleanup_connection();
+}
+
+/*
+ * InfluxDBExecDDLCommand
+ *      drop a measurement
+ * Return NULL if success, otherwise return error message
+ */
+extern "C" char *
+InfluxDBExecDDLCommand(char* addr, int port, char* user, char* pass, char* db, char* cquery, int version, char* auth_token, char* retention_policy)
+{
+    std::unique_ptr<influxdb::InfluxDB> influx;
+    char* retMsg = NULL;
+    bool retry_connect = false;
+
+    if (version != INFLUXDB_VERSION_1 && version != INFLUXDB_VERSION_2)
+    {
+        /* Automatically detect InfluxDB version 1.x and 2.x: trying to connect InfluxDB v2.x first */
+        influx = influxdb::InfluxDBFactory::GetV2(std::string(addr), port, std::string(db), std::string(auth_token), std::string(retention_policy));
+        try
+        {
+            auto err = influx->query(cquery);
+        }
+        catch(const std::exception& e)
+        {
+            /* Trying to connect InfluxDB v1.x */
+            retry_connect = true;
+        }
+
+        if (!retry_connect)
+            return NULL; /* Query successfully */
+
+        influx = influxdb::InfluxDBFactory::GetV1(std::string(addr), port, std::string(db), std::string(user), std::string(pass));
+        try
+        {
+            auto err = influx->query(cquery);
+        }
+        catch(const std::exception& e)
+        {
+            elog(ERROR, "influxdb_fdw: could not execute query: %s", cquery);
+        }
+    }
+    /* InfluxDB version is specified */
+    else if (version == INFLUXDB_VERSION_1)
+        influx = influxdb::InfluxDBFactory::GetV1(std::string(addr), port, std::string(db), std::string(user), std::string(pass));
+    else if (version == INFLUXDB_VERSION_2)
+        influx = influxdb::InfluxDBFactory::GetV2(std::string(addr), port, std::string(db), std::string(auth_token), std::string(retention_policy));
+
+    if (!influx)
+        elog(ERROR, "Fail to create influxDB client");
+
+    try
+    {
+        auto err = influx->query(cquery);
+    }
+    catch (const std::exception& e)
+    {
+        retMsg = (char *) pstrdup(e.what());
+    }
+
+    return retMsg;
 }

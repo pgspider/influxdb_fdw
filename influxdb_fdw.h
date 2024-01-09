@@ -75,7 +75,7 @@
 #define INFLUXDB_TARGETS_MIXING_AGGREF_UNSAFE	(INFLUXDB_TARGETS_MARK_COLUMN | INFLUXDB_TARGETS_MARK_AGGREF)
 #define INFLUXDB_TARGETS_MIXING_AGGREF_SAFE		(0u)
 
-#define CODE_VERSION 20000
+#define CODE_VERSION 20100
 
 #ifdef CXX_CLIENT
 #define INFLUXDB_VERSION_1    1
@@ -278,7 +278,7 @@ extern bool influxdb_is_foreign_function_tlist(PlannerInfo *root,
 
 
 /* option.c headers */
-extern influxdb_opt * influxdb_get_options(Oid foreigntableid);
+extern influxdb_opt * influxdb_get_options(Oid foreigntableid, Oid userid);
 #ifdef CXX_CLIENT
 extern int influxdb_get_version_option(influxdb_opt *opt);
 #endif
@@ -297,6 +297,7 @@ extern bool influxdb_deparse_direct_delete_sql(StringInfo buf, PlannerInfo *root
 											   List *remote_conds,
 											   List **params_list,
 											   List **retrieved_attrs);
+extern void influxdb_deparse_drop_measurement_stmt(StringInfo buf, Relation rel);
 extern void influxdb_append_where_clause(StringInfo buf, PlannerInfo *root, RelOptInfo *baserel, List *exprs,
 										 bool is_first, List **params);
 extern void influxdb_deparse_analyze(StringInfo buf, char *dbname, char *relname);
@@ -352,4 +353,13 @@ extern int check_connected_influxdb_version(char* addr, int port, char* user, ch
 /* clean up all cache connections of influx cxx client */
 extern void cleanup_cxx_client_connection(void);
 #endif		/* CXX_CLIENT */
+
+extern
+#if (PG_VERSION_NUM >= 160000)
+PGDLLEXPORT
+#endif
+int	ExecForeignDDL(Oid serverOid,
+						   Relation rel,
+						   int operation,
+						   bool if_not_exists);
 #endif							/* InfluxDB_FDW_H */

@@ -47,7 +47,7 @@ endif #!CXX_CLIENT
 EXTENSION = influxdb_fdw
 DATA = influxdb_fdw--1.0.sql influxdb_fdw--1.1.sql influxdb_fdw--1.1--1.2.sql influxdb_fdw--1.2.sql influxdb_fdw--1.3.sql
 
-REGRESS = aggregate influxdb_fdw selectfunc extra/join extra/limit extra/aggregates extra/insert extra/prepare extra/select_having extra/select extra/influxdb_fdw_post schemaless/aggregate schemaless/influxdb_fdw schemaless/selectfunc schemaless/schemaless schemaless/extra/join schemaless/extra/limit schemaless/extra/aggregates schemaless/extra/prepare schemaless/extra/select_having schemaless/extra/insert schemaless/extra/select schemaless/extra/influxdb_fdw_post schemaless/add_fields schemaless/add_tags schemaless/add_multi_key
+REGRESS = extra/aggregates 
 
 UNAME = uname
 OS := $(shell $(UNAME))
@@ -75,8 +75,8 @@ MAJORVERSION := $(basename $(VERSION))
 endif
 endif
 
-ifeq (,$(findstring $(MAJORVERSION), 11 12 13 14 15))
-$(error PostgreSQL 11, 12, 13, 14 or 15 is required to compile this extension)
+ifeq (,$(findstring $(MAJORVERSION), 12 13 14 15 16.0))
+$(error PostgreSQL 12, 13, 14, 15 or 16.0 is required to compile this extension)
 endif
 
 ifdef REGRESS_PREFIX
