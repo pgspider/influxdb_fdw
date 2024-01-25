@@ -90,7 +90,7 @@ pipeline {
                 catchError() {
                     sh """
                         cd ${INFLUXDB_DOCKER_PATH}
-                        docker-compose up -d
+                        docker compose up -d
                     """
                 }
             }
@@ -596,7 +596,7 @@ pipeline {
         always {
             sh """
                 cd ${INFLUXDB_DOCKER_PATH}
-                docker-compose down
+                docker compose down
             """
         }
     }

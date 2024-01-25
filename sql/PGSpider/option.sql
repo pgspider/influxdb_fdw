@@ -12,7 +12,7 @@ CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname 'op
 --Testcase 5:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname 'optiondb', host 'http://localhost', port '38086', version '-1', retention_policy '');
 
--- host must be not NULL or not empty
+-- host must be not NULL
 --Testcase 6:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname 'optiondb', port '38086', version '2', retention_policy '');
 --Testcase 7:
@@ -24,15 +24,22 @@ SELECT * FROM optiontbl;
 --Testcase 10:
 DROP SERVER influxdb_svr CASCADE;
 
+-- host must start with either http:// or https://
 --Testcase 11:
 CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname 'optiondb', host '', port '38086', version '2', retention_policy '');
 --Testcase 12:
-CREATE USER MAPPING FOR CURRENT_USER SERVER influxdb_svr OPTIONS (auth_token 'mytoken');
+CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (dbname 'optiondb', host 'localhost', port '38086', version '2', retention_policy '');
 --Testcase 13:
-CREATE FOREIGN TABLE optiontbl (tag1 text, version text, value2 int) SERVER influxdb_svr;
+CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (host 'HTTP://localhost', port '38086', version '2', retention_policy '');
+DROP SERVER influxdb_svr CASCADE;
 --Testcase 14:
-SELECT * FROM optiontbl;
+CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (host 'HTTPS://localhost', port '38086', version '2', retention_policy '');
+DROP SERVER influxdb_svr CASCADE;
 --Testcase 15:
+CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (host 'https://localhost', port '38086', version '2', retention_policy '');
+DROP SERVER influxdb_svr CASCADE;
+--Testcase 92:
+CREATE SERVER influxdb_svr FOREIGN DATA WRAPPER influxdb_fdw OPTIONS (host 'hTTpS://localhost', port '38086', version '2', retention_policy '');
 DROP SERVER influxdb_svr CASCADE;
 
 -- dbname must be not NULL or not empty
