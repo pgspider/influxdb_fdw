@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <regex.h>
 
 #include "funcapi.h"
 #include "access/reloptions.h"
@@ -24,6 +25,7 @@
 #include "catalog/pg_foreign_table.h"
 #include "catalog/pg_user_mapping.h"
 #include "catalog/pg_type.h"
+#include "catalog/pg_collation.h"
 #include "commands/defrem.h"
 #include "commands/explain.h"
 #include "foreign/fdwapi.h"
@@ -41,6 +43,7 @@
 #include "optimizer/restrictinfo.h"
 #include "optimizer/planmain.h"
 #include "utils/varlena.h"
+#include "utils/formatting.h"
 
 #ifdef CXX_CLIENT
 #include "query_cxx.h"
@@ -212,6 +215,26 @@ influxdb_fdw_validator(PG_FUNCTION_ARGS)
 						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 						 errmsg("InfluxDB only support versions from v1.x to 2.x. \"%s\" must be 1 or 2.",  def->defname)));
 		}
+
+		/* Validate host address if it is set */
+		if (strcmp(def->defname, "host") == 0)
+		{
+			regex_t regex;
+			int ret;
+			char *host = str_tolower(defGetString(def), strlen(defGetString(def)), C_COLLATION_OID);
+
+			/* Must start with either http:// or https:// */
+			ret = regcomp(&regex, "^((http|https)://)", REG_EXTENDED);
+			Assert(ret == 0); /*for debug invalid regex pattern */
+			ret = regexec(&regex, host, 0, NULL, 0);
+			if (ret == REG_NOMATCH)
+			{
+				regfree(&regex);
+				elog(ERROR, "influxdb_fdw: Host address must start with either http:// or https://");
+			}
+
+			regfree(&regex);
+		}
 #endif
 	}
 	PG_RETURN_VOID();
@@ -322,7 +345,7 @@ influxdb_get_options(Oid foreignoid, Oid userid)
 
 #ifdef CXX_CLIENT
 	/* When using the influxdb-cxx API client, c++ not allow std::string(NULL). */
-	if (opt->svr_address == NULL || strcmp(opt->svr_address, "") == 0)
+	if (opt->svr_address == NULL)
 		elog(ERROR, "influxdb_fdw: Server Host not specified");
 
 	if (opt->svr_database == NULL || strcmp(opt->svr_database, "") == 0)
