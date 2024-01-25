@@ -488,28 +488,26 @@ check_connected_influxdb_version(char* addr, int port, char* user, char* pass, c
 
     query = "SHOW MEASUREMENTS ON " + std::string(db);
 
-    influx = influxdb::InfluxDBFactory::GetV2(std::string(addr), port, std::string(db), std::string(auth_token), std::string(retention_policy));
-
     try
     {
+        influx = influxdb::InfluxDBFactory::GetV2(std::string(addr), port, std::string(db), std::string(auth_token), std::string(retention_policy));
         auto measurements = influx->query(query);
         return INFLUXDB_VERSION_2;
     }
-    catch(const std::exception& e)
+    catch (const std::exception &e)
     {
         /* do nothing */
     }
 
-    influx = influxdb::InfluxDBFactory::GetV1(std::string(addr), port, std::string(db), std::string(user), std::string(pass));
-
     try
     {
+        influx = influxdb::InfluxDBFactory::GetV1(std::string(addr), port, std::string(db), std::string(user), std::string(pass));
         auto measurements = influx->query(query);
         return INFLUXDB_VERSION_1;
     }
     catch(const std::exception& e)
     {
-        elog(ERROR, "Could not connect to InfluxDB.");
+        elog(ERROR, "Could not connect to InfluxDB: %s", e.what());
     }
 
     elog(ERROR, "Could not connect to InfluxDB.");
@@ -539,10 +537,10 @@ InfluxDBExecDDLCommand(char* addr, int port, char* user, char* pass, char* db, c
 
     if (version != INFLUXDB_VERSION_1 && version != INFLUXDB_VERSION_2)
     {
-        /* Automatically detect InfluxDB version 1.x and 2.x: trying to connect InfluxDB v2.x first */
-        influx = influxdb::InfluxDBFactory::GetV2(std::string(addr), port, std::string(db), std::string(auth_token), std::string(retention_policy));
         try
         {
+            /* Automatically detect InfluxDB version 1.x and 2.x: trying to connect InfluxDB v2.x first */
+            influx = influxdb::InfluxDBFactory::GetV2(std::string(addr), port, std::string(db), std::string(auth_token), std::string(retention_policy));
             auto err = influx->query(cquery);
         }
         catch(const std::exception& e)
@@ -554,9 +552,9 @@ InfluxDBExecDDLCommand(char* addr, int port, char* user, char* pass, char* db, c
         if (!retry_connect)
             return NULL; /* Query successfully */
 
-        influx = influxdb::InfluxDBFactory::GetV1(std::string(addr), port, std::string(db), std::string(user), std::string(pass));
         try
         {
+            influx = influxdb::InfluxDBFactory::GetV1(std::string(addr), port, std::string(db), std::string(user), std::string(pass));
             auto err = influx->query(cquery);
         }
         catch(const std::exception& e)
@@ -564,17 +562,18 @@ InfluxDBExecDDLCommand(char* addr, int port, char* user, char* pass, char* db, c
             elog(ERROR, "influxdb_fdw: could not execute query: %s", cquery);
         }
     }
-    /* InfluxDB version is specified */
-    else if (version == INFLUXDB_VERSION_1)
-        influx = influxdb::InfluxDBFactory::GetV1(std::string(addr), port, std::string(db), std::string(user), std::string(pass));
-    else if (version == INFLUXDB_VERSION_2)
-        influx = influxdb::InfluxDBFactory::GetV2(std::string(addr), port, std::string(db), std::string(auth_token), std::string(retention_policy));
-
-    if (!influx)
-        elog(ERROR, "Fail to create influxDB client");
 
     try
     {
+        /* InfluxDB version is specified */
+        if (version == INFLUXDB_VERSION_1)
+            influx = influxdb::InfluxDBFactory::GetV1(std::string(addr), port, std::string(db), std::string(user), std::string(pass));
+        else if (version == INFLUXDB_VERSION_2)
+            influx = influxdb::InfluxDBFactory::GetV2(std::string(addr), port, std::string(db), std::string(auth_token), std::string(retention_policy));
+
+        if (!influx)
+            elog(ERROR, "Fail to create influxDB client");
+
         auto err = influx->query(cquery);
     }
     catch (const std::exception& e)
