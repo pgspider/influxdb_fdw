@@ -352,7 +352,7 @@ Target database name.
 
 - **host** as *string*, optional
 
-The address used to connect to InfluxDB server.
+The address used to connect to InfluxDB server. Please note it's important to use `http://` or `https://` prefix before host address.
 
 - **port** as *integer*, optional
 
