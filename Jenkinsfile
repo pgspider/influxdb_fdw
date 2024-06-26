@@ -1,10 +1,10 @@
-def NODE_NAME = 'AWS_Instance_CentOS'
+def NODE_NAME = 'tsdv_node_1'
 def MAIL_TO = '$DEFAULT_RECIPIENTS'
 def BRANCH_NAME = 'Branch [' + env.BRANCH_NAME + ']'
 def BUILD_INFO = 'Jenkins job: ' + env.BUILD_URL + '\n'
 
-def INFLUXDB_DOCKER_PATH = '/home/jenkins/Docker/Server/Influx'
-def BRANCH_PGSPIDER = 'master'
+def INFLUXDB_DOCKER_PATH = '/home/test/jenkins/Docker/Server/Influx'
+def BRANCH_PGSPIDER = 'rocky_linux_8_support'
 def make_check_test(String target, String version, String cxx_client, String InfluxDBVersion) {
     def prefix = ""
     script {
@@ -19,7 +19,7 @@ def make_check_test(String target, String version, String cxx_client, String Inf
         sh """
             rm -rf make_check_existed_test.out || true
             docker exec -u postgres postgresserver_multi_for_influxdb_existed_test /bin/bash -c '/home/test/influxdb_existed_test.sh ${env.GIT_BRANCH} ${target}${version} ${cxx_client} ${InfluxDBVersion}'
-            docker exec -u postgres -w /home/postgres/${target}${version}/contrib/influxdb_fdw postgresserver_multi_for_influxdb_existed_test /bin/bash -c 'export LD_LIBRARY_PATH=/usr/local/lib64:$LD_LIBRARY_PATH && export PATH=$PATH:/usr/local/go/bin && go env -w GO111MODULE=auto && go get github.com/influxdata/influxdb1-client/v2 && source scl_source enable devtoolset-7 && export LANGUAGE="en_US.UTF-8" && export LANG="en_US.UTF-8" && export LC_ALL="en_US.UTF-8" && make ${prefix} ${cxx_client} && export NO_PROXY=172.23.0.3,172.23.0.4,172.23.0.5 && make check ${prefix} ${cxx_client} | tee make_check.out'
+            docker exec -u postgres -w /home/postgres/${target}${version}/contrib/influxdb_fdw postgresserver_multi_for_influxdb_existed_test /bin/bash -c 'export LD_LIBRARY_PATH=/usr/local/lib64: && export PATH=$PATH:/usr/local/go/bin && go env -w GO111MODULE=auto && go get github.com/influxdata/influxdb1-client/v2 && export LANGUAGE="en_US.UTF-8" && export LANG="en_US.UTF-8" && export LC_ALL="en_US.UTF-8" && make ${prefix} ${cxx_client} && export no_proxy=172.23.0.3,172.23.0.4,172.23.0.5 && export NO_PROXY=172.23.0.3,172.23.0.4,172.23.0.5 && make check ${prefix} ${cxx_client} | tee make_check.out'
             docker cp postgresserver_multi_for_influxdb_existed_test:/home/postgres/${target}${version}/contrib/influxdb_fdw/make_check.out make_check_existed_test.out
         """
     }
@@ -41,6 +41,7 @@ def init_data_influxdbv1(){
     sh """
         echo 'Influx version:'
         docker exec influxserver_multi_for_existed_test /bin/bash -c 'influxd version'
+        docker exec influxserver_multi_for_existed_test /bin/bash -c 'sed -i "s/.*store-enabled.*/  store-enabled = false/" /etc/influxdb/influxdb.conf'
         docker exec -d influxserver_multi_for_existed_test /bin/bash -c 'influxd -config /etc/influxdb/influxdb.conf'
         docker exec influxserver_multi_for_existed_test /bin/bash -c '/home/test/start_existed_test.sh ${env.GIT_BRANCH}'
     """
@@ -50,10 +51,11 @@ def init_data_influxdbcxx(){
     sh """
         echo 'Influx version:'
         docker exec influxserver1_multi_for_existed_test /bin/bash -c 'influxd version'
+        docker exec influxserver1_multi_for_existed_test /bin/bash -c 'sed -i "s/.*store-enabled.*/  store-enabled = false/" /etc/influxdb/influxdb.conf'
         docker exec -d influxserver1_multi_for_existed_test /bin/bash -c 'export INFLUXDB_HTTP_AUTH_ENABLED=true && influxd -config /etc/influxdb/influxdb.conf'
         docker exec influxserver1_multi_for_existed_test /bin/bash -c '/home/test/start_existed_test_cxx.sh ${env.GIT_BRANCH}'
         docker exec influxserverv2_multi_for_existed_test /bin/bash -c 'influxd version'
-        docker exec -d influxserverv2_multi_for_existed_test /bin/bash -c 'influxd --storage-write-timeout=100s --http-bind-address=:38086'
+        docker exec -d influxserverv2_multi_for_existed_test /bin/bash -c 'influxd --storage-write-timeout=500s --http-bind-address=:38086'
         docker exec influxserverv2_multi_for_existed_test /bin/bash -c '/home/test/start_existed_test_v2.sh ${env.GIT_BRANCH}'
     """
 }
