@@ -72,7 +72,7 @@ Columns of foreign table in schemaless mode
 	CREATE FOREIGN TABLE sc1(
 	  time timestamp with time zone,
           tags jsonb OPTIONS(tags 'true'),
-          fields jsonb OPTIONS (fields 'true')      
+          fields jsonb OPTIONS (fields 'true')
 	)
 	SERVER influxdb_svr
 	OPTIONS (
@@ -104,10 +104,10 @@ Querying foreign tables:
 
 - Get data through schemaless foreign table:
   <pre>
-  
+
   EXPLAIN VERBOSE
   SELECT * FROM sc1;
-                              QUERY PLAN                             
+                              QUERY PLAN
   --------------------------------------------------------------------
   Foreign Scan on public.sc1  (cost=10.00..853.00 rows=853 width=72)
     Output: "time", tags, fields
@@ -115,7 +115,7 @@ Querying foreign tables:
   (3 rows)
 
   SELECT * FROM sc1;
-            time          |         tags          |                           fields                           
+            time          |         tags          |                           fields
   ------------------------+-----------------------+------------------------------------------------------------
   1970-01-01 09:00:00+09 | {"device_id": "dev1"} | {"sig1": "1", "sig2": "a", "sig3": "1.1", "sig4": "true"}
   1970-01-01 09:00:00+09 | {"device_id": "dev2"} | {"sig1": "2", "sig2": "b", "sig3": "1.2", "sig4": "false"}
@@ -138,7 +138,7 @@ Fetch values in jsonb expression:
 For examples:
 - Fetch all column based on all actual columns:
   <pre>
-  
+
   EXPLAIN VERBOSE
   SELECT time,tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1;
                                                                                               QUERY PLAN                                                                                              
@@ -165,10 +165,10 @@ For examples:
 
 - `jsonb` expression is pushed down in `WHERE`.
   <pre>
-  
+
   EXPLAIN VERBOSE
   SELECT * FROM sc1 WHERE (fields->>'sig3')::double precision > 2;
-                              QUERY PLAN                             
+                              QUERY PLAN
   --------------------------------------------------------------------
   Foreign Scan on public.sc1  (cost=10.00..284.00 rows=284 width=72)
     Output: "time", tags, fields
@@ -176,7 +176,7 @@ For examples:
   (3 rows)
 
   SELECT * FROM sc1 WHERE (fields->>'sig3')::double precision > 2;
-            time          |         tags          |                           fields                           
+            time          |         tags          |                           fields
   ------------------------+-----------------------+------------------------------------------------------------
   1970-01-01 09:00:00+09 | {"device_id": "dev1"} | {"sig1": "4", "sig2": "d", "sig3": "2.4", "sig4": "true"}
   1970-01-01 09:00:00+09 | {"device_id": "dev2"} | {"sig1": "5", "sig2": "e", "sig3": "2.5", "sig4": "false"}
@@ -189,10 +189,10 @@ For examples:
 
 - `jsonb` expression is pushed down in aggregate `sum` (remote) + tag + `group by`
   <pre>
-  
+
   EXPLAIN VERBOSE
   SELECT sum((fields->>'sig1')::bigint),tags->>'device_id' device_id FROM sc1 GROUP BY tags->>'device_id';
-                                        QUERY PLAN                                      
+                                        QUERY PLAN
   --------------------------------------------------------------------------------------
   Foreign Scan  (cost=1.00..1.00 rows=1 width=64)
     Output: (sum(((fields ->> 'sig1'::text))::bigint)), ((tags ->> 'device_id'::text))
@@ -200,7 +200,7 @@ For examples:
   (3 rows)
 
   SELECT sum((fields->>'sig1')::bigint),tags->>'device_id' device_id FROM sc1 GROUP BY tags->>'device_id';
-  sum | device_id 
+  sum | device_id
   -----+-----------
     12 | dev1
     15 | dev2
@@ -221,7 +221,7 @@ For examples:
 #### The existence of `NULL` values depends on the target list in remote query in InfluxDB
 - If specific field keys are selected, InfluxDB does not return `NULL` values for any row that has `NULL` value.
 - In InfluxDB, `SELECT tag_keys` - selecting only tag keys does not return values, so some field keys are required to be selected.
-Current implementation of non-schemaless need arbitrary on field key added to remote select query. And this is a limitation of current `influxdb_fdw`, e.g. remote query: `SELECT tag_keys, field_key`. 
+Current implementation of non-schemaless need arbitrary on field key added to remote select query. And this is a limitation of current `influxdb_fdw`, e.g. remote query: `SELECT tag_keys, field_key`.
 Even though the field key has `NULL` values, this InfluxDB query does not return `NULL` values.
 - If all field key is selected by `SELECT *` in remote query, `NULL` values are returned by InfluxDB.
 
@@ -269,7 +269,7 @@ For example:
   4    2 4
   5    5 -5
   6    5 -5
-  7    0 
+  7    0
   10     0
   </pre>
 
@@ -279,8 +279,8 @@ For example:
   - `fields, fields->>'c2', sqrt((fields->>'c1')::int)`: function `sqrt()` is not pushed down.
   - `fields, sqrt((fields->>'c1')::int)`: function `sqrt()` is not pushed down.
   - `fields->>'c2', sqrt((fields->>'c1')::int)`: there is no fields jsonb column, so function `sqrt()` is pushed down.
-  
-Also see [Limitations](#limitations).  
+
+Also see [Limitations](#limitations).
 
 Supported platforms
 -------------------
@@ -375,7 +375,7 @@ command:
 - **user** as *string*, no default
 
   Username for V1 basic authentication (InfluxDB ver. 1.x).
-      
+
 - **password** as *string*, no default
 
   Password for V1 basic authentication (InfluxDB ver. 1.x).
@@ -390,21 +390,21 @@ command:
 `CREATE FOREIGN TABLE` command.
 
 - **tags** as *string*, optional, no default
-    
+
 - **table** as *string*, optional, no default
 
 - **schemaless** as *boolean*, optional, default `false`
-  
+
   Enable schemaless mode.
 
 ## IMPORT FOREIGN SCHEMA options
 
-`influxdb_fdw` supports [IMPORT FOREIGN SCHEMA](https://www.postgresql.org/docs/current/sql-importforeignschema.html) and 
+`influxdb_fdw` supports [IMPORT FOREIGN SCHEMA](https://www.postgresql.org/docs/current/sql-importforeignschema.html) and
  accepts the following options via the
 `IMPORT FOREIGN SCHEMA` command.
- 
+
 - **schemaless** as *boolean*, optional, default `false`
-  
+
   Enable schemaless mode.
 
 ## TRUNCATE support
@@ -421,7 +421,7 @@ functions, `influxdb_fdw` provides the following user-callable utility functions
 Listed as *type*, *name with arguments*, *returm datatype* where such function types are availlable:
 - **vf** - volatile functions
 - **a** - aggregations
-- **sf** - stable functions 
+- **sf** - stable functions
 - **f** - simple function
 
 ### Common functions
@@ -613,7 +613,7 @@ Rules and problems with InfluxDB identifiers **yet not tested and described**.
 Generated columns
 -----------------
 
-Behavoiur within generated columns **yet not tested and described**. 
+Behavoiur within generated columns **yet not tested and described**.
 
 For more details on generated columns see:
 
@@ -786,10 +786,11 @@ the number of points with field1 and field2 are different in *InfluxDB* database
   - If a user wants to use an unsupported type with InfluxDB data, PostgreSQL's explicit cast functions should be used instead of define column type in foreign table directly.
 
 When a query to foreign tables fails, you can find why it fails by seeing a query executed in *InfluxDB* with `EXPLAIN VERBOSE`.
-    
+
 Contributing
 ------------
 Opening issues and pull requests on GitHub are welcome. Test scripts is multiversional for PostgreSQL, works in POSIX context and based on comparing output of SQL commands in psql with expected output text files.
+Current test expected results are generated based on results in `Rocky Linux 8` and its default `glibc 2.28`. Test results may fail with other version of `glibc` due to string collation changes.
 
 Useful links
 ------------

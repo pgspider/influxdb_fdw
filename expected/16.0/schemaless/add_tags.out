@@ -62,9 +62,9 @@ select bool_and((fields->>'sig3')::double precision > -10), string_agg('446757sv
 
 --Testcase 10:
 select count(fields->>'sig1'), stddev((fields->>'sig3')::double precision + 333), min(fields->>'sig2' COLLATE "en_US") from sctbl4;
- count |       stddev       |   min    
--------+--------------------+----------
-     9 | 145.85476033064916 | システム
+ count |       stddev       |      min       
+-------+--------------------+----------------
+     9 | 145.85476033064916 | 012002'akewo02
 (1 row)
 
 --Testcase 11:
@@ -485,17 +485,17 @@ select string_agg(tags->>'sid19', tags->>'sid17'), avg((tags->>'sid3')::bigint),
 select sum((tags->>'sid3')::bigint), sum((tags->>'sid20')::bigint), bool_and((tags->>'sid5')::boolean != (tags->>'sid6')::boolean) from sctbl4 GROUP BY (fields->>'sig2' COLLATE "en_US") ORDER BY (fields->>'sig2' COLLATE "en_US");
  sum  |   sum    | bool_and 
 ------+----------+----------
- 7663 |  8888888 | t
+      |          | 
       |          | 
       |          | 
  8578 | 14681764 | t
-      |          | 
  3646 |     1232 | t
    38 |    31246 | t
       |          | 
       |          | 
- 4366 | 12315475 | t
+ 7663 |  8888888 | t
       |          | 
+ 4366 | 12315475 | t
       |          | 
 (12 rows)
 
@@ -531,17 +531,17 @@ select stddev((tags->>'sid20')::bigint), avg((tags->>'sid2')::bigint order by (t
 select every((tags->>'sid11')::boolean = (tags->>'sid15')::boolean), bool_or((tags->>'sid6')::boolean != (tags->>'sid11')::boolean), count(time) from sctbl4 GROUP BY (fields->>'sig2' COLLATE "en_US") ORDER BY (fields->>'sig2' COLLATE "en_US");
  every | bool_or | count 
 -------+---------+-------
- f     | f       |     2
        |         |     2
        |         |     2
- t     | t       |     2
        |         |     1
+ t     | t       |     2
  t     | f       |     3
  t     | t       |     3
        |         |     2
        |         |     1
- t     | t       |     3
+ f     | f       |     2
        |         |     1
+ t     | t       |     3
        |         |     1
 (12 rows)
 
@@ -781,9 +781,9 @@ select stddev((tags->>'sid13')::double precision + (fields->>'sig1')::bigint * (
       stddev       |     sum      |                               string_agg                                
 -------------------+--------------+-------------------------------------------------------------------------
                    |        10753 | constraint豚は誰も好
+                   |     15027939 | average豚は誰も好
                    | 361657498609 | cooperation豚は誰も好
  44165363438.80249 |  10796365666 | freighter豚は誰も好なぜ18歳で那就是他如何赢得100万美元attract豚は誰も好
-                   |     15027939 | average豚は誰も好
                    |              | 
 (5 rows)
 
@@ -804,17 +804,17 @@ select stddev((tags->>'sid3')::bigint * (tags->>'sid2')::bigint - (tags->>'sid20
 select stddev((tags->>'sid3')::bigint) + count(tags->>'sid10') + count(tags->>'sid4'), count(time) + count(tags->>'sid1') - sum((tags->>'sid2')::bigint), avg((tags->>'sid3')::bigint) * count(*) + count(tags->>'sid17') from sctbl4 GROUP BY (fields->>'sig2' COLLATE "en_US") ORDER BY (fields->>'sig2' COLLATE "en_US");
  ?column? | ?column? |        ?column?        
 ----------+----------+------------------------
-          | -5637125 | 15327.0000000000000000
+          |          |                       
           |          |                       
           |          |                       
           | -5061712 | 17157.0000000000000000
-          |          |                       
           | -9655919 | 10939.0000000000000000
           | -4830955 |   115.0000000000000000
           |          |                       
           |          |                       
-          | -2462186 | 13099.0000000000000000
+          | -5637125 | 15327.0000000000000000
           |          |                       
+          | -2462186 | 13099.0000000000000000
           |          |                       
 (12 rows)
 
@@ -890,9 +890,9 @@ select sum((tags->>'sid2')::bigint) + count(tags->>'sid1') - count(tags->>'sid8'
  ?column? | ?column? |                                   string_agg                                   
 ----------+----------+--------------------------------------------------------------------------------
   9655923 |        1 | 誰が作ったのか誰も質問しませんhf675578ytgu
+  5637128 |        1 | lを着た豚は誰も好きではないhf675578ytgu
   2462190 |        1 | 彼はなぜ18歳で彼がHHJAHJGYJBhf675578ytgu
   9892674 |        2 | 彼はなぜ18歳で彼がhf675578ytgu那就是他如何赢得100万美元id1彼は豚がhf675578ytgu
-  5637128 |        1 | lを着た豚は誰も好きではないhf675578ytgu
           |       18 | 
 (5 rows)
 
@@ -900,17 +900,17 @@ select sum((tags->>'sid2')::bigint) + count(tags->>'sid1') - count(tags->>'sid8'
 select sum((tags->>'sid3')::bigint) - avg((tags->>'sid12')::bigint) * count(tags->>'sid9'), bool_and((tags->>'sid11')::boolean) AND bool_and((tags->>'sid20')::bigint >= -16735467) OR every(tags->>'sid16' != 'id3'), sum((tags->>'sid20')::bigint) + avg((tags->>'sid12')::bigint) / count(tags->>'sid19') from sctbl4 GROUP BY (fields->>'sig2' COLLATE "en_US") ORDER BY (fields->>'sig2' COLLATE "en_US");
         ?column?        | ?column? |         ?column?          
 ------------------------+----------+---------------------------
-  -6139051.000000000000 | t        |     15035602.000000000000
+                        |          |                          
                         |          |                          
                         |          |                          
  -5075.0000000000000000 | t        | 14695417.0000000000000000
-                        |          |                          
  -9521.0000000000000000 | t        |    14399.0000000000000000
   -10781647581.00000000 | f        |      10781678865.00000000
                         |          |                          
                         |          |                          
- -361645183134.00000000 | t        |     361657502975.00000000
+  -6139051.000000000000 | t        |     15035602.000000000000
                         |          |                          
+ -361645183134.00000000 | t        |     361657502975.00000000
                         |          |                          
 (12 rows)
 
