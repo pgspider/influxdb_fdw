@@ -592,6 +592,78 @@ SELECT * FROM cpu;
 
 --Testcase 201:
 DROP FOREIGN TABLE cpu_nsc;
+
+-- Validate foreign table in schemaless mode
+-- time column data type is not either timestamp or timestamp without timezone
+--Testcase 206:
+CREATE FOREIGN TABLE ftcpu (time time, tags jsonb options (tags 'true'), fields jsonb options(fields 'true')) SERVER server1 OPTIONS (table 'cpu', schemaless 'true');
+--Testcase 207:
+SELECT * FROM ftcpu;
+--Testcase 208:
+DROP FOREIGN TABLE ftcpu;
+
+-- time_text column data type is not text
+--Testcase 209:
+CREATE FOREIGN TABLE ftcpu (time timestamp, time_text int, tags jsonb options (tags 'true'), fields jsonb options(fields 'true')) SERVER server1 OPTIONS (table 'cpu', schemaless 'true');
+--Testcase 210:
+SELECT * FROM ftcpu;
+--Testcase 211:
+DROP FOREIGN TABLE ftcpu;
+
+-- time column option value is not 'time'
+--Testcase 212:
+CREATE FOREIGN TABLE ftcpu (t timestamp options (column_name 'time1'), tags jsonb options (tags 'true'), fields jsonb options(fields 'true')) SERVER server1 OPTIONS (table 'cpu', schemaless 'true');
+--Testcase 213:
+SELECT * FROM ftcpu;
+--Testcase 214:
+DROP FOREIGN TABLE ftcpu;
+
+-- tags and fields column data type is not jsonb
+--Testcase 215:
+CREATE FOREIGN TABLE ftcpu (time timestamp, tags json options (tags 'true'), fields json options(fields 'true')) SERVER server1 OPTIONS (table 'cpu', schemaless 'true');
+--Testcase 216:
+SELECT * FROM ftcpu;
+--Testcase 217:
+DROP FOREIGN TABLE ftcpu;
+
+-- tags and fields column option values are not 'true'
+--Testcase 218:
+CREATE FOREIGN TABLE ftcpu (time timestamp, tags jsonb options (tags 'false'), fields jsonb options(fields 'false')) SERVER server1 OPTIONS (table 'cpu', schemaless 'true');
+--Testcase 219:
+SELECT * FROM ftcpu;
+--Testcase 220:
+DROP FOREIGN TABLE ftcpu;
+
+-- using other column name which is not 'time', 'time_text', 'tags' and 'fields'.
+--Testcase 221:
+CREATE FOREIGN TABLE ftcpu (time timestamp, time_text text, tags jsonb options (tags 'true'), fields jsonb options(fields 'true'), other timestamp) SERVER server1 OPTIONS (table 'cpu', schemaless 'true');
+--Testcase 222:
+SELECT * FROM ftcpu;
+
+--Testcase 223:
+ALTER FOREIGN TABLE ftcpu DROP other;
+--Testcase 224:
+ALTER FOREIGN TABLE ftcpu ADD other text;
+--Testcase 225:
+SELECT * FROM ftcpu;
+
+--Testcase 226:
+ALTER FOREIGN TABLE ftcpu DROP other;
+--Testcase 227:
+ALTER FOREIGN TABLE ftcpu ADD other jsonb;
+--Testcase 228:
+SELECT * FROM ftcpu;
+
+--Testcase 229:
+ALTER FOREIGN TABLE ftcpu DROP other;
+--Testcase 230:
+ALTER FOREIGN TABLE ftcpu ADD other int;
+--Testcase 231:
+SELECT * FROM ftcpu;
+--Testcase 232:
+DROP FOREIGN TABLE ftcpu;
+
+--Testcase 205:
 DROP USER MAPPING FOR CURRENT_USER SERVER server1;
 --Testcase 202:
 DROP SERVER server1 CASCADE;
