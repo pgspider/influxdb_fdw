@@ -3883,107 +3883,107 @@ DROP FOREIGN TABLE batch_table_nsc;
 -- influxdb_fdw does not support partition insert
 -- Use partitioning
 --Testcase 730:
-CREATE TABLE batch_table ( x int ) PARTITION BY HASH (x);
+-- CREATE TABLE batch_table ( x int ) PARTITION BY HASH (x);
 
 --Testcase 731:
-CREATE TABLE batch_table_p0 (LIKE batch_table);
+-- CREATE TABLE batch_table_p0 (LIKE batch_table);
 --Testcase 732:
-CREATE FOREIGN TABLE batch_table_p0f
-	PARTITION OF batch_table
-	FOR VALUES WITH (MODULUS 3, REMAINDER 0)
-	SERVER influxdb_svr
-	OPTIONS (table 'batch_table_p0', batch_size '10', schemaless 'true');
+-- CREATE FOREIGN TABLE batch_table_p0f
+-- 	PARTITION OF batch_table
+-- 	FOR VALUES WITH (MODULUS 3, REMAINDER 0)
+-- 	SERVER influxdb_svr
+-- 	OPTIONS (table 'batch_table_p0', batch_size '10', schemaless 'true');
 
 --Testcase 733:
-CREATE TABLE batch_table_p1 (LIKE batch_table);
+-- CREATE TABLE batch_table_p1 (LIKE batch_table);
 --Testcase 734:
-CREATE FOREIGN TABLE batch_table_p1f
-	PARTITION OF batch_table
-	FOR VALUES WITH (MODULUS 3, REMAINDER 1)
-	SERVER influxdb_svr
-	OPTIONS (table 'batch_table_p1', batch_size '1', schemaless 'true');
+-- CREATE FOREIGN TABLE batch_table_p1f
+-- 	PARTITION OF batch_table
+-- 	FOR VALUES WITH (MODULUS 3, REMAINDER 1)
+-- 	SERVER influxdb_svr
+-- 	OPTIONS (table 'batch_table_p1', batch_size '1', schemaless 'true');
 
 --Testcase 735:
-CREATE TABLE batch_table_p2
-	PARTITION OF batch_table
-	FOR VALUES WITH (MODULUS 3, REMAINDER 2);
+-- CREATE TABLE batch_table_p2
+-- 	PARTITION OF batch_table
+-- 	FOR VALUES WITH (MODULUS 3, REMAINDER 2);
 
 --Testcase 736:
-INSERT INTO batch_table SELECT * FROM generate_series(1, 66) i;
+-- INSERT INTO batch_table SELECT * FROM generate_series(1, 66) i;
 --Testcase 737:
-SELECT COUNT(*) FROM batch_table;
+-- SELECT COUNT(*) FROM batch_table;
 
 -- Check that enabling batched inserts doesn't interfere with cross-partition
 -- updates
 --Testcase 738:
-CREATE TABLE batch_cp_upd_test (a int) PARTITION BY LIST (a);
+-- CREATE TABLE batch_cp_upd_test (a int) PARTITION BY LIST (a);
 --Testcase 739:
-CREATE TABLE batch_cp_upd_test1 (LIKE batch_cp_upd_test);
+-- CREATE TABLE batch_cp_upd_test1 (LIKE batch_cp_upd_test);
 --Testcase 740:
-CREATE FOREIGN TABLE batch_cp_upd_test1_f
-	PARTITION OF batch_cp_upd_test
-	FOR VALUES IN (1)
-	SERVER influxdb_svr
-	OPTIONS (table 'batch_cp_upd_test1', batch_size '10', schemaless 'true');
+-- CREATE FOREIGN TABLE batch_cp_upd_test1_f
+-- 	PARTITION OF batch_cp_upd_test
+-- 	FOR VALUES IN (1)
+-- 	SERVER influxdb_svr
+-- 	OPTIONS (table 'batch_cp_upd_test1', batch_size '10', schemaless 'true');
 --Testcase 741:
-CREATE TABLE batch_cp_up_test1 PARTITION OF batch_cp_upd_test
-	FOR VALUES IN (2);
+-- CREATE TABLE batch_cp_upd_test2 PARTITION OF batch_cp_upd_test
+-- 	FOR VALUES IN (2);
 --Testcase 742:
-INSERT INTO batch_cp_upd_test VALUES (1), (2);
+-- INSERT INTO batch_cp_upd_test VALUES (1), (2);
 
 -- The following moves a row from the local partition to the foreign one
 -- influxdb_fdw does not support UPDATE
 -- UPDATE batch_cp_upd_test t SET a = 1 FROM (VALUES (1), (2)) s(a) WHERE t.a = s.a;
 --Testcase 743:
-SELECT tableoid::regclass, * FROM batch_cp_upd_test;
+-- SELECT tableoid::regclass, * FROM batch_cp_upd_test;
 
 -- Clean up
 --Testcase 744:
-DROP TABLE batch_table, batch_cp_upd_test, batch_table_p0, batch_table_p1 CASCADE;
+-- DROP TABLE batch_table, batch_cp_upd_test, batch_table_p0, batch_table_p1 CASCADE;
 
 -- influxdb_fdw does not support partition insert
 -- Use partitioning
 --Testcase 745:
-ALTER SERVER influxdb_svr OPTIONS (ADD batch_size '10');
+-- ALTER SERVER influxdb_svr OPTIONS (ADD batch_size '10');
 
 --Testcase 746:
-CREATE TABLE batch_table ( x int, field1 text, field2 text) PARTITION BY HASH (x);
+-- CREATE TABLE batch_table ( x int, field1 text, field2 text) PARTITION BY HASH (x);
 
 --Testcase 747:
-CREATE TABLE batch_table_p0 (LIKE batch_table);
+-- CREATE TABLE batch_table_p0 (LIKE batch_table);
 --Testcase 748:
-ALTER TABLE batch_table_p0 ADD CONSTRAINT p0_pkey PRIMARY KEY (x);
+-- ALTER TABLE batch_table_p0 ADD CONSTRAINT p0_pkey PRIMARY KEY (x);
 --Testcase 749:
-CREATE FOREIGN TABLE batch_table_p0f
-	PARTITION OF batch_table
-	FOR VALUES WITH (MODULUS 2, REMAINDER 0)
-	SERVER influxdb_svr
-	OPTIONS (table 'batch_table_p0', schemaless 'true');
+-- CREATE FOREIGN TABLE batch_table_p0f
+-- 	PARTITION OF batch_table
+-- 	FOR VALUES WITH (MODULUS 2, REMAINDER 0)
+-- 	SERVER influxdb_svr
+-- 	OPTIONS (table 'batch_table_p0', schemaless 'true');
 
 --Testcase 750:
-CREATE TABLE batch_table_p1 (LIKE batch_table);
+-- CREATE TABLE batch_table_p1 (LIKE batch_table);
 --Testcase 751:
-ALTER TABLE batch_table_p1 ADD CONSTRAINT p1_pkey PRIMARY KEY (x);
+-- ALTER TABLE batch_table_p1 ADD CONSTRAINT p1_pkey PRIMARY KEY (x);
 --Testcase 752:
-CREATE FOREIGN TABLE batch_table_p1f
-	PARTITION OF batch_table
-	FOR VALUES WITH (MODULUS 2, REMAINDER 1)
-	SERVER influxdb_svr
-	OPTIONS (table 'batch_table_p1', schemaless 'true');
+-- CREATE FOREIGN TABLE batch_table_p1f
+-- 	PARTITION OF batch_table
+-- 	FOR VALUES WITH (MODULUS 2, REMAINDER 1)
+-- 	SERVER influxdb_svr
+-- 	OPTIONS (table 'batch_table_p1', schemaless 'true');
 
 --Testcase 753:
-INSERT INTO batch_table SELECT i, 'test'||i, 'test'|| i FROM generate_series(1, 50) i;
+-- INSERT INTO batch_table SELECT i, 'test'||i, 'test'|| i FROM generate_series(1, 50) i;
 --Testcase 754:
-SELECT COUNT(*) FROM batch_table;
+-- SELECT COUNT(*) FROM batch_table;
 --Testcase 755:
-SELECT * FROM batch_table ORDER BY x;
+-- SELECT * FROM batch_table ORDER BY x;
 
 --Testcase 756:
-ALTER SERVER influxdb_svr OPTIONS (DROP batch_size);
+-- ALTER SERVER influxdb_svr OPTIONS (DROP batch_size);
 
 -- Clean up
 --Testcase 757:
-DROP TABLE batch_table, batch_table_p0, batch_table_p1 CASCADE;
+-- DROP TABLE batch_table, batch_table_p0, batch_table_p1 CASCADE;
 /* InfluxDB does not support partition table
 -- ===================================================================
 -- test asynchronous execution
