@@ -1034,7 +1034,10 @@ When a query to foreign tables fails, you can find why it fails by seeing a quer
 Contributing
 ------------
 Opening issues and pull requests on GitHub are welcome. Test scripts is multiversional for PostgreSQL, works in POSIX context and based on comparing output of SQL commands in psql with expected output text files.
-Current test expected results are generated based on results in `Rocky Linux 8` and its default `glibc 2.28`. Test results may fail with other version of `glibc` due to string collation changes.
+Current test expected results are generated based on results in `Rocky Linux 8` and its default `glibc 2.28`. Test results may fail with other version of `glibc` with the following cases.
+  - Different order of records due to string collation changes
+  - Minor change of float number after decimal point due to different floating point calculation
+
 
 Useful links
 ------------
