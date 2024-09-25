@@ -45,8 +45,11 @@
 #define INFLUXDB_FIELDS_COLUMN "fields"
 #define INFLUXDB_TAGS_PGTYPE "jsonb"
 #define INFLUXDB_FIELDS_PGTYPE "jsonb"
-#define INFLUXDB_IS_TIME_COLUMN(X) (strcmp(X,INFLUXDB_TIME_COLUMN) == 0 || \
-						  strcmp(X,INFLUXDB_TIME_TEXT_COLUMN) == 0)
+#define INFLUXDB_IS_TIME_COLUMN(X) (strcmp(X, INFLUXDB_TIME_COLUMN) == 0 || \
+									strcmp(X, INFLUXDB_TIME_TEXT_COLUMN) == 0)
+#define INFLUXDB_IS_TIME_TYPE(typeoid) ((typeoid == TIMESTAMPTZOID) || \
+										(typeoid == TIMEOID) ||        \
+										(typeoid == TIMESTAMPOID))
 #define CR_NO_ERROR 0
 
 /* Define some typeArray for low version */

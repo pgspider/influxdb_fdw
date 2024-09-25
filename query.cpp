@@ -376,6 +376,8 @@ makeRecord(influxdb::Point& record, struct InfluxDBColumnInfo* pColInfo, InfluxD
                 case INFLUXDB_FIELD_KEY:
                     record.addField(pColInfo->column_name, std::string{value.s});
                     break;
+                default:
+                    elog(ERROR, "Unexpected column type: %d", pColInfo->column_type);
             }
         }
         case INFLUXDB_NULL:
