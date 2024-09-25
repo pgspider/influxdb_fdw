@@ -282,6 +282,250 @@ For example:
 
 Also see [Limitations](#limitations).
 
+### Time operator support for both schemaless and non-schemaless
+- (1) For comparison between time key column with time constant, time param, `now()` function, time expression with `now()` function, InfluxDB FDW pushes down the following operators: `=`, `<`, `>`, `>=`, `<=`.
+- (2) For comparsion between tags/fields column with tags/fields, time constant, time param, InfluxDB FDW pushes down the operator `=`, `!=`, `<>`.
+- (3) For comparison with time key column, InfluxDB FDW does not push down `!=` and `<>`.
+- (4) For comparison between `interval` and `interval`, InfluxDB FDW does not pushdown.
+- (5) For comparison with time function which is not `now()`, InfluxDB FDW does not pushdown
+- (6) For comparison between time key and time column, InfluxDB FDW does not pushdown the folowing operators `<`, `>`, `<=`, `>=`, `=`.
+- (7) For comparison between tags/fields with tags/fields, time constant, time param, InfluxDB FDW does not pushdown the operators `<`, `>`, `<=`, `>=`.
+- (8) For comparison between time expression `time +/- interval` with `time` (not time key), InfluxDB FDW does not pushdown.
+- (9) For comparison between time expression `time column +/- interval`, `param +/- interval` with time key, InfluxDB FDW does not pushdown
+
+For example:
+- Create a foreign table with all types of time column that InfluxDB FDW supports now. The examples below show examples for each points in non-schemaless, please refer to the test for more test cases of both schemaless and non-schemaless.
+
+```sql
+CREATE FOREIGN TABLE tmp_time (
+time timestamp,
+c1 time,
+c2 timestamp,
+c3 timestamp with time zone,
+agvState character varying NULL COLLATE pg_catalog."default",
+value numeric NULL
+) SERVER server1 OPTIONS (table 'tmp_time');
+
+INSERT INTO tmp_time (time, c1, agvState, value) VALUES ('1900-01-01 01:01:01', '01:02:03', 'state 1', 0.1);
+INSERT INTO tmp_time (time, c1, agvState, value) VALUES ('2100-01-01 01:01:01', '04:05:06', 'state 2', 0.2);
+INSERT INTO tmp_time (time, c1, agvState, value) VALUES ('1990-01-01 01:01:01', '07:08:09', 'state 3', 0.3);
+INSERT INTO tmp_time (time, c2) VALUES ('2020-12-27 03:02:56.634467', '1950-02-02 02:02:02');
+INSERT INTO tmp_time (time, c3, agvState, value) VALUES ('2021-12-27 03:02:56.668301', '1800-02-02 02:02:02+9', 'state 5', 0.5);
+INSERT INTO tmp_time (time, c1, c2, c3, agvState, value) VALUES ('2022-05-06 07:08:09', '07:08:09', '2022-05-06 07:08:09', '2022-05-06 07:08:09+9', 'state 6', 0.6);
+INSERT INTO tmp_time (time, c1, c2, c3, agvState, value) VALUES ('2023-05-06 07:08:09', '07:08:10', '2023-05-06 07:08:09', '2023-05-06 07:08:09+9', 'state 7', 0.7);
+INSERT INTO tmp_time (time, c1, c2, c3, c4, c5, agvState, value) VALUES ('2023-05-06 07:08:09', '07:08:10', '2023-05-06 07:08:09', '2023-05-06 07:08:09+9', '2023-05-06 08:08:09', '2023-05-06 08:08:09+9', 'state 8', 0.8);
+INSERT INTO tmp_time (time, c1, c2, c3, c4, c5, agvState, value) VALUES ('2025-05-06 07:08:09', '07:08:10', '2025-05-06 07:08:09', '2025-05-06 07:08:09+9', '2025-05-06 08:08:09', '2025-05-06 08:08:09+9', 'state 9', 0.9);
+
+```
+- Example for point (1):
+```sql
+EXPLAIN VERBOSE
+SELECT * FROM tmp_time WHERE time > '2022-05-06 07:08:09';
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.tmp_time  (cost=10.00..227.00 rows=227 width=96)
+   Output: "time", c1, c2, c3, agvstate, value
+   InfluxDB query: SELECT "c1", "c2", "c3", "agvstate", "value" FROM "tmp_time" WHERE ((time > '2022-05-06 07:08:09'))
+(3 rows)
+
+SELECT * FROM tmp_time WHERE time > '2022-05-06 07:08:09';
+        time         |    c1    |         c2          |           c3           | agvstate | value 
+---------------------+----------+---------------------+------------------------+----------+-------
+ 2023-05-06 07:08:09 | 07:08:10 | 2023-05-06 07:08:09 | 2023-05-06 07:08:09+09 | state 7  |   0.7
+ 2100-01-01 01:01:01 | 04:05:06 |                     |                        | state 2  |   0.2
+(2 rows)
+```
+- Example for point (2):
+```sql
+EXPLAIN VERBOSE
+SELECT * FROM tmp_time WHERE c2 > '1950-02-02 02:02:02';
+                                   QUERY PLAN                                   
+--------------------------------------------------------------------------------
+ Foreign Scan on public.tmp_time  (cost=10.00..227.00 rows=227 width=96)
+   Output: "time", c1, c2, c3, agvstate, value
+   Filter: (tmp_time.c2 > '1950-02-02 02:02:02'::timestamp without time zone)
+   InfluxDB query: SELECT "c1", "c2", "c3", "agvstate", "value" FROM "tmp_time"
+(4 rows)
+
+SELECT * FROM tmp_time WHERE c2 > '1950-02-02 02:02:02';
+        time         |    c1    |         c2          |           c3           | agvstate | value 
+---------------------+----------+---------------------+------------------------+----------+-------
+ 2022-05-06 07:08:09 | 07:08:09 | 2022-05-06 07:08:09 | 2022-05-06 07:08:09+09 | state 6  |   0.6
+ 2023-05-06 07:08:09 | 07:08:10 | 2023-05-06 07:08:09 | 2023-05-06 07:08:09+09 | state 7  |   0.7
+(2 rows)
+
+EXPLAIN VERBOSE
+SELECT * FROM tmp_time WHERE c2 = '2022-05-06 07:08:09';
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.tmp_time  (cost=10.00..3.00 rows=3 width=96)
+   Output: "time", c1, c2, c3, agvstate, value
+   InfluxDB query: SELECT "c1", "c2", "c3", "agvstate", "value" FROM "tmp_time" WHERE (("c2" = '2022-05-06 07:08:09'))
+(3 rows)
+
+SELECT * FROM tmp_time WHERE c2 = '2022-05-06 07:08:09';
+        time         |    c1    |         c2          |           c3           | agvstate | value 
+---------------------+----------+---------------------+------------------------+----------+-------
+ 2022-05-06 07:08:09 | 07:08:09 | 2022-05-06 07:08:09 | 2022-05-06 07:08:09+09 | state 6  |   0.6
+(1 row)
+```
+- Example for point (3):
+```sql
+EXPLAIN VERBOSE
+SELECT * FROM tmp_time WHERE time != '2022-05-06 07:08:09';
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
+ Foreign Scan on public.tmp_time  (cost=10.00..679.00 rows=679 width=96)
+   Output: "time", c1, c2, c3, agvstate, value
+   Filter: (tmp_time."time" <> '2022-05-06 07:08:09'::timestamp without time zone)
+   InfluxDB query: SELECT "c1", "c2", "c3", "agvstate", "value" FROM "tmp_time"
+(4 rows)
+
+SELECT * FROM tmp_time WHERE time != '2022-05-06 07:08:09';
+            time            |    c1    |         c2          |              c3              | agvstate | value 
+----------------------------+----------+---------------------+------------------------------+----------+-------
+ 1900-01-01 01:01:01        | 01:02:03 |                     |                              | state 1  |   0.1
+ 1990-01-01 01:01:01        | 07:08:09 |                     |                              | state 3  |   0.3
+ 2020-12-27 03:02:56.634467 |          | 1950-02-02 02:02:02 |                              |          |      
+ 2021-12-27 03:02:56.668301 |          |                     | 1800-02-02 02:21:01+09:18:59 | state 5  |   0.5
+ 2023-05-06 07:08:09        | 07:08:10 | 2023-05-06 07:08:09 | 2023-05-06 07:08:09+09       | state 7  |   0.7
+ 2100-01-01 01:01:01        | 04:05:06 |                     |                              | state 2  |   0.2
+(6 rows)
+```
+- Example for point (4):
+```sql
+-- Does not push down time subtraction time - time vs interval
+EXPLAIN VERBOSE
+SELECT * FROM tmp_time WHERE time - c2 <= interval '1d';
+                                   QUERY PLAN                                   
+--------------------------------------------------------------------------------
+ Foreign Scan on public.tmp_time  (cost=10.00..227.00 rows=227 width=96)
+   Output: "time", c1, c2, c3, agvstate, value
+   Filter: ((tmp_time."time" - tmp_time.c2) <= '@ 1 day'::interval)
+   InfluxDB query: SELECT "c1", "c2", "c3", "agvstate", "value" FROM "tmp_time"
+(4 rows)
+
+SELECT * FROM tmp_time WHERE time - c2 <= interval '1d';
+        time         |    c1    |         c2          |           c3           | agvstate | value 
+---------------------+----------+---------------------+------------------------+----------+-------
+ 2022-05-06 07:08:09 | 07:08:09 | 2022-05-06 07:08:09 | 2022-05-06 07:08:09+09 | state 6  |   0.6
+ 2023-05-06 07:08:09 | 07:08:10 | 2023-05-06 07:08:09 | 2023-05-06 07:08:09+09 | state 7  |   0.7
+(2 rows)
+
+-- Does not push down nested time subtraction
+EXPLAIN VERBOSE
+SELECT * FROM tmp_time WHERE (time - c2) - (c1 - c1) > interval '-1d';
+                                              QUERY PLAN                                               
+-------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.tmp_time  (cost=10.00..227.00 rows=227 width=96)
+   Output: "time", c1, c2, c3, agvstate, value
+   Filter: (((tmp_time."time" - tmp_time.c2) - (tmp_time.c1 - tmp_time.c1)) > '@ 1 day ago'::interval)
+   InfluxDB query: SELECT "c1", "c2", "c3", "agvstate", "value" FROM "tmp_time"
+(4 rows)
+
+SELECT * FROM tmp_time WHERE (time - c2) - (c1 - c1) > interval '-1d';
+        time         |    c1    |         c2          |           c3           | agvstate | value 
+---------------------+----------+---------------------+------------------------+----------+-------
+ 2022-05-06 07:08:09 | 07:08:09 | 2022-05-06 07:08:09 | 2022-05-06 07:08:09+09 | state 6  |   0.6
+ 2023-05-06 07:08:09 | 07:08:10 | 2023-05-06 07:08:09 | 2023-05-06 07:08:09+09 | state 7  |   0.7
+(2 rows)
+
+```
+- Example for point (5):
+```sql
+EXPLAIN VERBOSE
+SELECT * FROM tmp_time WHERE influx_time(time, interval '3m') - interval '3m' < time;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.tmp_time  (cost=10.00..201.00 rows=201 width=112)
+   Output: "time", c1, c2, c3, c4, c5, agvstate, value
+   Filter: ((influx_time(tmp_time."time", '@ 3 mins'::interval) - '@ 3 mins'::interval) < tmp_time."time")
+   InfluxDB query: SELECT "c1", "c2", "c3", "c4", "c5", "agvstate", "value" FROM "tmp_time"
+(4 rows)
+
+SELECT * FROM tmp_time WHERE influx_time(time, interval '3m') - interval '3m' < time;
+ERROR:  stub influx_time(timestamp with time zone, interval) is called
+CONTEXT:  PL/pgSQL function influx_time(timestamp with time zone,interval) line 3 at RAISE
+```
+- Example for point (6):
+```sql
+EXPLAIN VERBOSE
+SELECT * FROM tmp_time WHERE time = c2;
+                                         QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
+ Foreign Scan on public.tmp_time  (cost=10.00..3.00 rows=3 width=112)
+   Output: "time", c1, c2, c3, c4, c5, agvstate, value
+   Filter: (tmp_time."time" = tmp_time.c2)
+   InfluxDB query: SELECT "c1", "c2", "c3", "c4", "c5", "agvstate", "value" FROM "tmp_time"
+(4 rows)
+
+SELECT * FROM tmp_time WHERE time = c2;
+        time         |    c1    |         c2          |           c3           |         c4          |           c5           | agvstate | value 
+---------------------+----------+---------------------+------------------------+---------------------+------------------------+----------+-------
+ 2022-05-06 07:08:09 | 07:08:09 | 2022-05-06 07:08:09 | 2022-05-06 07:08:09+09 |                     |                        | state 6  |   0.6
+ 2023-05-06 07:08:09 | 07:08:10 | 2023-05-06 07:08:09 | 2023-05-06 07:08:09+09 | 2023-05-06 08:08:09 | 2023-05-06 08:08:09+09 | state 8  |   0.8
+ 2025-05-06 07:08:09 | 07:08:10 | 2025-05-06 07:08:09 | 2025-05-06 07:08:09+09 | 2025-05-06 08:08:09 | 2025-05-06 08:08:09+09 | state 9  |   0.9
+(3 rows)
+```
+- Example for point (7):
+```sql
+EXPLAIN VERBOSE
+SELECT * FROM tmp_time WHERE c2 < c4;
+                                         QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
+ Foreign Scan on public.tmp_time  (cost=10.00..201.00 rows=201 width=112)
+   Output: "time", c1, c2, c3, c4, c5, agvstate, value
+   Filter: (tmp_time.c2 < tmp_time.c4)
+   InfluxDB query: SELECT "c1", "c2", "c3", "c4", "c5", "agvstate", "value" FROM "tmp_time"
+(4 rows)
+
+--Testcase 471:
+SELECT * FROM tmp_time WHERE c2 < c4;
+        time         |    c1    |         c2          |           c3           |         c4          |           c5           | agvstate | value 
+---------------------+----------+---------------------+------------------------+---------------------+------------------------+----------+-------
+ 2023-05-06 07:08:09 | 07:08:10 | 2023-05-06 07:08:09 | 2023-05-06 07:08:09+09 | 2023-05-06 08:08:09 | 2023-05-06 08:08:09+09 | state 8  |   0.8
+ 2025-05-06 07:08:09 | 07:08:10 | 2025-05-06 07:08:09 | 2025-05-06 07:08:09+09 | 2025-05-06 08:08:09 | 2025-05-06 08:08:09+09 | state 9  |   0.9
+(2 rows)
+
+```
+- Example for point (8):
+```sql
+EXPLAIN VERBOSE
+SELECT * FROM tmp_time WHERE (time + interval '1d') > now() + interval '-1d';
+                                         QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
+ Foreign Scan on public.tmp_time  (cost=10.00..201.00 rows=201 width=112)
+   Output: "time", c1, c2, c3, c4, c5, agvstate, value
+   Filter: ((tmp_time."time" + '@ 1 day'::interval) > (now() + '@ 1 day ago'::interval))
+   InfluxDB query: SELECT "c1", "c2", "c3", "c4", "c5", "agvstate", "value" FROM "tmp_time"
+(4 rows)
+
+SELECT * FROM tmp_time WHERE (time + interval '1d') > now() + interval '-1d';
+        time         |    c1    |         c2          |           c3           |         c4          |           c5           | agvstate | value 
+---------------------+----------+---------------------+------------------------+---------------------+------------------------+----------+-------
+ 2025-05-06 07:08:09 | 07:08:10 | 2025-05-06 07:08:09 | 2025-05-06 07:08:09+09 | 2025-05-06 08:08:09 | 2025-05-06 08:08:09+09 | state 9  |   0.9
+ 2100-01-01 01:01:01 | 04:05:06 |                     |                        |                     |                        | state 2  |   0.2
+(2 rows)
+```
+- Example for point (9):
+```sql
+EXPLAIN VERBOSE
+SELECT * FROM tmp_time WHERE time = c2 + interval '25896 days 01:00:54.634467';
+                                          QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
+ Foreign Scan on public.tmp_time  (cost=10.00..3.00 rows=3 width=112)
+   Output: "time", c1, c2, c3, c4, c5, agvstate, value
+   Filter: (tmp_time."time" = (tmp_time.c2 + '@ 25896 days 1 hour 54.634467 secs'::interval))
+   InfluxDB query: SELECT "c1", "c2", "c3", "c4", "c5", "agvstate", "value" FROM "tmp_time"
+(4 rows)
+
+SELECT * FROM tmp_time WHERE time = c2 + interval '25896 days 01:00:54.634467';
+            time            | c1 |         c2          | c3 | c4 | c5 | agvstate | value 
+----------------------------+----+---------------------+----+----+----+----------+-------
+ 2020-12-27 03:02:56.634467 |    | 1950-02-02 02:02:02 |    |    |    |          |      
+(1 row)
+```
+
 Supported platforms
 -------------------
 
