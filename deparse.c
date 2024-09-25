@@ -193,6 +193,9 @@ typedef struct foreign_loc_cxt
 	bool		influx_fill_enable; /* true if deparse subexpression inside
 									 * influx_time() */
 	bool		have_otherfunc_influx_time_tlist; /* true if having other functions than influx_time() in tlist. */
+	bool		has_time_key;			/* mark true if comparison with time key column */
+	bool		has_sub_or_add_operator; 	/* mark true if expression has '-' or '+' operator */
+	bool		is_comparison;				/* mark true if has comparison */
 } foreign_loc_cxt;
 
 /*
@@ -276,7 +279,11 @@ static Node *influxdb_deparse_sort_group_clause(Index ref, List *tlist,
 static void influxdb_deparse_explicit_target_list(List *tlist, List **retrieved_attrs,
 												  deparse_expr_cxt *context);
 static Expr *influxdb_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel);
-static bool influxdb_is_contain_time_column(List *tlist);
+static bool influxdb_contain_time_column(List *exprs, schemaless_info *pslinfo);
+static bool influxdb_contain_time_key_column(Oid relid, List *exprs);
+static bool influxdb_contain_time_expr(List *exprs);
+static bool influxdb_contain_time_function(List *exprs);
+static bool influxdb_contain_time_const_or_param(List *exprs);
 static void influxdb_append_field_key(TupleDesc tupdesc, StringInfo buf, Index rtindex, PlannerInfo *root, bool first);
 static void influxdb_append_limit_clause(deparse_expr_cxt *context);
 static bool influxdb_is_string_type(Node *node, schemaless_info *pslinfo);
@@ -404,6 +411,9 @@ influxdb_is_foreign_expr(PlannerInfo *root,
 	loc_cxt.state = FDW_COLLATE_NONE;
 	loc_cxt.can_skip_cast = false;
 	loc_cxt.influx_fill_enable = false;
+	loc_cxt.has_time_key = false;
+	loc_cxt.has_sub_or_add_operator = false;
+	loc_cxt.is_comparison = false;
 	if (!influxdb_foreign_expr_walker((Node *) expr, &glob_cxt, &loc_cxt))
 		return false;
 
@@ -481,6 +491,9 @@ influxdb_foreign_expr_walker(Node *node,
 	inner_cxt.can_pushdown_stable = false;
 	inner_cxt.can_pushdown_volatile = false;
 	inner_cxt.influx_fill_enable = false;
+	inner_cxt.has_time_key = false;
+	inner_cxt.has_sub_or_add_operator = false;
+	inner_cxt.is_comparison = false;
 	switch (nodeTag(node))
 	{
 		case T_Var:
@@ -503,11 +516,17 @@ influxdb_foreign_expr_walker(Node *node,
 						return false;
 
 					/* check column is time column? */
-					if (var->vartype == TIMESTAMPTZOID ||
-						var->vartype == TIMEOID ||
-						var->vartype == TIMESTAMPOID)
+					if (INFLUXDB_IS_TIME_TYPE(var->vartype))
 					{
 						is_time_column = true;
+
+						/*
+						 * Does not pushdown comparison between substraction or addition of time column with interval and time key
+						 * For example:
+						 *	time key = time column +/- interval
+						 */
+						if (outer_cxt->is_comparison && outer_cxt->has_sub_or_add_operator && outer_cxt->has_time_key)
+							return false;
 					}
 
 					/* Mark this target is field/tag */
@@ -599,6 +618,17 @@ influxdb_foreign_expr_walker(Node *node,
 				if (!is_valid_type(p->paramtype))
 					return false;
 
+				if (INFLUXDB_IS_TIME_TYPE(p->paramtype))
+				{
+					/*
+					 * Does not pushdown comparison between substraction or addition of Param with interval and time key
+					 * For example:
+					 *	time key = Param +/- interval
+					 */
+					if (outer_cxt->is_comparison && outer_cxt->has_sub_or_add_operator && outer_cxt->has_time_key)
+						return false;
+				}
+
 				/*
 				 * Collation rule is same as for Consts and non-foreign Vars.
 				 */
@@ -641,6 +671,21 @@ influxdb_foreign_expr_walker(Node *node,
 				}
 				opername = pstrdup(((Form_pg_proc) GETSTRUCT(tuple))->proname.data);
 				ReleaseSysCache(tuple);
+
+				if (INFLUXDB_IS_TIME_TYPE(fe->funcresulttype))
+				{
+					if (outer_cxt->is_comparison)
+					{
+						if (strcmp(opername, "now") != 0)	/* Does not support comparison with function except now()*/
+						{
+							return false;
+						}
+						else if (!outer_cxt->has_time_key)	/* Does not support comparison between now() and not time key (tags/fields column or time expression) */
+						{
+							return false;
+						}
+					}
+				}
 
 				if (strcmp(opername, "float8") == 0 || strcmp(opername, "numeric") == 0)
 				{
@@ -781,6 +826,9 @@ influxdb_foreign_expr_walker(Node *node,
 				OpExpr	   *oe = (OpExpr *) node;
 				bool		is_slvar = false;
 				bool		is_param = false;
+				bool		has_time_key = false;
+				bool		has_time_column = false;
+				bool		has_time_tags_or_fields_column = false;
 
 				if (influxdb_is_slvar_fetch(node, &(fpinfo->slinfo)))
 					is_slvar = true;
@@ -811,31 +859,139 @@ influxdb_foreign_expr_walker(Node *node,
 					return false;
 				}
 
-				/*
-				 * Cannot pushdown to InfluxDB if there is string comparison
-				 * with: "<, >, <=, >=" operators
-				 */
-				if (influxdb_is_string_type((Node *) linitial(oe->args), &(fpinfo->slinfo)))
+				if (strcmp(cur_opname, "=") == 0 ||
+					strcmp(cur_opname, ">") == 0 ||
+					strcmp(cur_opname, "<") == 0 ||
+					strcmp(cur_opname, ">=") == 0 ||
+					strcmp(cur_opname, "<=") == 0 ||
+					strcmp(cur_opname, "!=") == 0 ||
+					strcmp(cur_opname, "<>") == 0)
 				{
-					if (strcmp(cur_opname, "<") == 0 ||
-						strcmp(cur_opname, ">") == 0 ||
-						strcmp(cur_opname, "<=") == 0 ||
-						strcmp(cur_opname, ">=") == 0)
+					inner_cxt.is_comparison = true;
+				}
+
+				/*
+				 * Does not pushdown time comparison between interval vs interval
+				 * For example:
+				 *	(time - time) vs interval constant
+				 *	(time - time) vs (time - time)
+				 */
+				if (inner_cxt.is_comparison &&
+					exprType((Node*) linitial(oe->args)) == INTERVALOID &&
+					exprType((Node*) lsecond(oe->args)) == INTERVALOID)
+				{
+					return false;
+				}
+
+				has_time_key = influxdb_contain_time_key_column(glob_cxt->relid, oe->args);
+
+				/*
+				 * Does not pushdown time comparison between time expression vs not time key
+				 * For example:
+				 *	time +/- interval vs tags/fields column
+				 *	time +/- interval vs time +/- interval
+				 *	time +/- interval vs function
+				 */
+				if (inner_cxt.is_comparison &&
+					!has_time_key &&
+					influxdb_contain_time_expr(oe->args))
+				{
+					return false;
+				}
+
+				/*
+				 * Does not pushdown comparsion using !=, <> with time key column.
+				 */
+				if (strcmp(cur_opname, "!=") == 0 ||
+					strcmp(cur_opname, "<>") == 0)
+				{
+					if (has_time_key)
+						return false;
+				}
+
+				has_time_column = influxdb_contain_time_column(oe->args, &(fpinfo->slinfo));
+
+				has_time_tags_or_fields_column = (has_time_column && !has_time_key);
+
+				/* Does not pushdown time comparison between tags/fields vs function */
+				if (inner_cxt.is_comparison &&
+					has_time_tags_or_fields_column &&
+					influxdb_contain_time_function(oe->args))
+				{
+					return false;
+				}
+
+				if (strcmp(cur_opname, ">") == 0 ||
+					strcmp(cur_opname, "<") == 0 ||
+					strcmp(cur_opname, ">=") == 0 ||
+					strcmp(cur_opname, "<=") == 0 ||
+					strcmp(cur_opname, "=") == 0)
+				{
+					List *first = list_make1(linitial(oe->args));
+					List *second = list_make1(lsecond(oe->args));
+					bool has_both_time_colum = influxdb_contain_time_column(first, &(fpinfo->slinfo)) &&
+											   influxdb_contain_time_column(second, &(fpinfo->slinfo));
+
+					/*
+					 * Does not pushdown time comparsion using <, >, <=, >=, = between time key and time column
+					 * For example:
+					 *	time key vs time key
+					 *	time key vs tags/fields column
+					 */
+					if (has_time_key && has_both_time_colum)
 					{
 						return false;
+					}
+
+					/* Handle the operators <, >, <=, >= */
+					if (strcmp(cur_opname, "=") != 0)
+					{
+						bool has_first_time_key = influxdb_contain_time_key_column(glob_cxt->relid, first);
+						bool has_second_time_key = influxdb_contain_time_key_column(glob_cxt->relid, second);
+						bool has_both_tags_or_fields_column = (has_both_time_colum && !has_first_time_key && !has_second_time_key);
+
+						/* Does not pushdown comparison between tags/fields column and time tags/field column */
+						if (has_both_tags_or_fields_column)
+							return false;
+
+						/*
+						 * Does not pushdown comparison between tags/fields column and time constant or time param
+						 * For example:
+						 *	tags/fields vs '2010-10-10 10:10:10'
+						 */
+
+						if (has_time_tags_or_fields_column &&
+							influxdb_contain_time_const_or_param(oe->args))
+						{
+							return false;
+						}
+
+						/*
+						 * Cannot pushdown to InfluxDB if there is string comparison
+						 * with: "<, >, <=, >=" operators.
+						 */
+						if (influxdb_is_string_type((Node *)linitial(oe->args), &(fpinfo->slinfo)))
+						{
+							return false;
+						}
 					}
 				}
 
 				/*
-				 * Cannot pushdown to InfluxDB if compare time column with
-				 * "!=, <>" operators
+				 * Does not support pushdown time comparison between time key column and time column +/- interval or
+				 * param +/- interval or function +/- interval except now() +/- interval.
+				 * Set flag here and recursive check in each node T_Var, T_Param, T_FuncExpr.
 				 */
-				if (strcmp(cur_opname, "!=") == 0 || strcmp(cur_opname, "<>") == 0)
+				if (strcmp(cur_opname, "+") == 0 ||
+					strcmp(cur_opname, "-") == 0)
 				{
-					if (influxdb_is_contain_time_column(oe->args))
-					{
-						return false;
-					}
+					inner_cxt.has_time_key = outer_cxt->has_time_key;
+					inner_cxt.is_comparison = outer_cxt->is_comparison;
+					inner_cxt.has_sub_or_add_operator = true;
+				}
+				else
+				{
+					inner_cxt.has_time_key = has_time_key;
 				}
 
 				if (is_slvar || is_param)
@@ -927,7 +1083,7 @@ influxdb_foreign_expr_walker(Node *node,
 				 * InfluxDB do not support OR with multi time column or time
 				 * column with !=, <> --> Not pushdown time column
 				 */
-				if (influxdb_is_contain_time_column(oe->args))
+				if (influxdb_contain_time_column(oe->args, &(fpinfo->slinfo)))
 				{
 					return false;
 				}
@@ -1021,6 +1177,9 @@ influxdb_foreign_expr_walker(Node *node,
 				/* inherit can_skip_cast flag */
 				inner_cxt.can_skip_cast = outer_cxt->can_skip_cast;
 				inner_cxt.influx_fill_enable = outer_cxt->influx_fill_enable;
+				inner_cxt.has_time_key = outer_cxt->has_time_key;
+				inner_cxt.has_sub_or_add_operator = outer_cxt->has_sub_or_add_operator;
+				inner_cxt.is_comparison = outer_cxt->is_comparison;
 
 				/*
 				 * Recurse to component subexpressions.
@@ -1294,6 +1453,24 @@ influxdb_foreign_expr_walker(Node *node,
 			{
 				CoerceViaIO *cio = (CoerceViaIO *) node;
 				Node *arg = (Node *)cio->arg;
+
+				/*
+				 * Does not pushdown time comparison between time key with time expression with tags/fields
+				 * For example:
+				 *	time key = (fields->>'c2')::timestamp + interval '1d'
+				 */
+				if (influxdb_is_slvar_fetch(arg, &(fpinfo->slinfo)))
+				{
+					if (INFLUXDB_IS_TIME_TYPE(cio->resulttype))
+					{
+						if (outer_cxt->is_comparison &&
+							outer_cxt->has_sub_or_add_operator &&
+							outer_cxt->has_time_key)
+						{
+							return false;
+						}
+					}
+				}
 
 				if (influxdb_is_slvar_fetch(arg, &(fpinfo->slinfo)) ||
 					influxdb_is_param_fetch(arg, &(fpinfo->slinfo)))
@@ -2448,9 +2625,9 @@ influxdb_deparse_const(Const *node, deparse_expr_cxt *context, int showtype)
 				 * 09:00:00+09' -> '2015-08-18 00:00:00'
 				 */
 				datum = DirectFunctionCall2(timestamptz_zone, CStringGetTextDatum("UTC"), node->constvalue);
+				getTypeOutputInfo(TIMESTAMPOID, &typoutput, &typIsVarlena);
 
 				/* Convert to string */
-				getTypeOutputInfo(TIMESTAMPOID, &typoutput, &typIsVarlena);
 				extval = OidOutputFunctionCall(typoutput, datum);
 				appendStringInfo(buf, "'%s'", extval);
 				break;
@@ -2867,6 +3044,7 @@ influxdb_deparse_op_expr(OpExpr *node, deparse_expr_cxt *context)
 
 	/* Deparse right operand. */
 	appendStringInfoChar(buf, ' ');
+
 	influxdb_deparse_expr(llast(node->args), context);
 
 	/* Reset regex require for next operation */
@@ -3665,26 +3843,150 @@ influxdb_deparse_sort_group_clause(Index ref, List *tlist, deparse_expr_cxt *con
 
 /*
  * At least one element in the list is time column
- * influxdb_is_contain_time_column function returns true.
+ * influxdb_contain_time_column function returns true.
  */
 static bool
-influxdb_is_contain_time_column(List *tlist)
+influxdb_contain_time_column(List *exprs, schemaless_info *pslinfo)
 {
-	Expr	   *expr;
-	Var		   *var;
 	ListCell   *lc;
 
-	/* Check Timestamp type for the operand which is Var */
-	foreach(lc, tlist)
+	foreach(lc, exprs)
 	{
-		expr = (Expr *) lfirst(lc);
+		Expr	*expr = (Expr *) lfirst(lc);
+
+		if (IsA(expr, Var))
+		{
+			Var *var = (Var *)expr;
+
+			if (INFLUXDB_IS_TIME_TYPE(var->vartype))
+			{
+				return true;
+			}
+		}
+		else if (IsA(expr, CoerceViaIO))
+		{
+			CoerceViaIO *cio = (CoerceViaIO *) expr;
+			Node *arg = (Node *)cio->arg;
+
+			if (influxdb_is_slvar_fetch(arg, pslinfo))
+			{
+				if (INFLUXDB_IS_TIME_TYPE(cio->resulttype))
+				{
+					return true;
+				}
+			}
+		}
+	}
+
+	return false;
+}
+
+/*
+ * At least one element in the list is time key column
+ */
+static bool
+influxdb_contain_time_key_column(Oid relid, List *exprs)
+{
+	ListCell *lc;
+
+	foreach (lc, exprs)
+	{
+		Expr *expr = (Expr *)lfirst(lc);
+		Var *var;
+
 		if (!IsA(expr, Var))
 			continue;
 
-		var = (Var *) expr;
-		if (var->vartype == TIMESTAMPTZOID ||
-			var->vartype == TIMEOID ||
-			var->vartype == TIMESTAMPOID)
+		var = (Var *)expr;
+
+		if (INFLUXDB_IS_TIME_TYPE(var->vartype))
+		{
+			char *column_name = influxdb_get_column_name(relid, var->varattno);
+
+			if (INFLUXDB_IS_TIME_COLUMN(column_name))
+				return true;
+		}
+	}
+
+	return false;
+}
+
+/*
+ * At least one element in the list is time expression except Var, Const, Param, FuncExpr.
+ */
+static bool
+influxdb_contain_time_expr(List *exprs)
+{
+	ListCell *lc;
+
+	foreach (lc, exprs)
+	{
+		Expr *expr = (Expr *)lfirst(lc);
+		Oid type;
+
+		if (IsA(expr, Var) ||
+			IsA(expr, Const) ||
+			IsA(expr, Param) ||
+			IsA(expr, FuncExpr))
+		{
+			continue;
+		}
+
+		type = exprType((Node *)expr);
+
+		if (INFLUXDB_IS_TIME_TYPE(type))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+/*
+ * At least one element in the list is time function
+ */
+static bool
+influxdb_contain_time_function(List *exprs)
+{
+	ListCell *lc;
+
+	foreach (lc, exprs)
+	{
+		Expr *expr = (Expr *)lfirst(lc);
+		FuncExpr *func_expr;
+
+		if (!IsA(expr, FuncExpr))
+			continue;
+
+		func_expr = (FuncExpr *)expr;
+
+		if (INFLUXDB_IS_TIME_TYPE(func_expr->funcresulttype))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+/*
+ * At least one element in the list is time const or time param
+ */
+static bool
+influxdb_contain_time_const_or_param(List *exprs)
+{
+	ListCell *lc;
+
+	foreach (lc, exprs)
+	{
+		Expr *expr = (Expr *)lfirst(lc);
+		Oid type;
+
+		if (!IsA(expr, Const) && !IsA(expr, Param))
+			continue;
+
+		type = exprType((Node *)expr);
+
+		if (INFLUXDB_IS_TIME_TYPE(type))
 		{
 			return true;
 		}
@@ -3959,6 +4261,8 @@ influxdb_is_foreign_function_tlist(PlannerInfo *root,
 		loc_cxt.can_pushdown_stable = false;
 		loc_cxt.can_pushdown_volatile = false;
 		loc_cxt.influx_fill_enable = false;
+		loc_cxt.has_time_key = false;
+		loc_cxt.has_sub_or_add_operator = false;
 		if (!influxdb_foreign_expr_walker((Node *) tle->expr, &glob_cxt, &loc_cxt))
 			return false;
 
