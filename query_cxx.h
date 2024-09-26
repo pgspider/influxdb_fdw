@@ -63,6 +63,7 @@ typedef struct InfluxDBResult {
 
 /* Represents information of a table's column type */
 typedef enum InfluxDBColumnType{
+	INFLUXDB_UNKNOWN_KEY,
 	INFLUXDB_TIME_KEY,
 	INFLUXDB_TAG_KEY,
 	INFLUXDB_FIELD_KEY
