@@ -217,6 +217,12 @@ typedef struct deparse_expr_cxt
 										 * directly */
 	bool        has_bool_cmp;   /* outer has bool comparison target */
 	FuncExpr   *influx_fill_expr;	/* Store the fill() function */
+
+	/*
+	 * For comparison with time key column, if its data type is timestamp with time zone,
+	 * need to convert to timestamp without time zone.
+	 */
+	bool        convert_to_timestamp;
 } deparse_expr_cxt;
 
 typedef struct pull_func_clause_context
@@ -283,7 +289,8 @@ static bool influxdb_contain_time_column(List *exprs, schemaless_info *pslinfo);
 static bool influxdb_contain_time_key_column(Oid relid, List *exprs);
 static bool influxdb_contain_time_expr(List *exprs);
 static bool influxdb_contain_time_function(List *exprs);
-static bool influxdb_contain_time_const_or_param(List *exprs);
+static bool influxdb_contain_time_param(List *exprs);
+static bool influxdb_contain_time_const(List *exprs);
 static void influxdb_append_field_key(TupleDesc tupdesc, StringInfo buf, Index rtindex, PlannerInfo *root, bool first);
 static void influxdb_append_limit_clause(deparse_expr_cxt *context);
 static bool influxdb_is_string_type(Node *node, schemaless_info *pslinfo);
@@ -959,9 +966,9 @@ influxdb_foreign_expr_walker(Node *node,
 						 * For example:
 						 *	tags/fields vs '2010-10-10 10:10:10'
 						 */
-
 						if (has_time_tags_or_fields_column &&
-							influxdb_contain_time_const_or_param(oe->args))
+							(influxdb_contain_time_const(oe->args) ||
+							 influxdb_contain_time_param(oe->args)))
 						{
 							return false;
 						}
@@ -1756,6 +1763,7 @@ influxdb_deparse_select_stmt_for_rel(StringInfo buf, PlannerInfo *root, RelOptIn
 	context.require_regex = false;
 	context.is_tlist = false;
 	context.can_skip_cast = false;
+	context.convert_to_timestamp = false;
 	/* Construct SELECT clause */
 	influxdb_deparse_select(tlist, retrieved_attrs, &context);
 
@@ -2239,6 +2247,7 @@ influxdb_append_where_clause(StringInfo buf,
 	context.params_list = params;
 	context.is_tlist = false;
 	context.can_skip_cast = false;
+	context.convert_to_timestamp = false;
 
 	foreach(lc, exprs)
 	{
@@ -2426,18 +2435,22 @@ static void
 influxdb_deparse_expr(Expr *node, deparse_expr_cxt *context)
 {
 	bool		outer_can_skip_cast = context->can_skip_cast;
+	bool		outer_convert_to_timestamp = context->convert_to_timestamp;
 
 	if (node == NULL)
 		return;
 
 	context->can_skip_cast = false;
+	context->convert_to_timestamp = false;
 
 	switch (nodeTag(node))
 	{
 		case T_Var:
+			context->convert_to_timestamp = outer_convert_to_timestamp;
 			influxdb_deparse_var((Var *) node, context);
 			break;
 		case T_Const:
+			context->convert_to_timestamp = outer_convert_to_timestamp;
 			influxdb_deparse_const((Const *) node, context, 0);
 			break;
 		case T_Param:
@@ -2448,6 +2461,7 @@ influxdb_deparse_expr(Expr *node, deparse_expr_cxt *context)
 			influxdb_deparse_func_expr((FuncExpr *) node, context);
 			break;
 		case T_OpExpr:
+			context->convert_to_timestamp = outer_convert_to_timestamp;
 			influxdb_deparse_op_expr((OpExpr *) node, context);
 			break;
 		case T_ScalarArrayOpExpr:
@@ -2621,11 +2635,19 @@ influxdb_deparse_const(Const *node, deparse_expr_cxt *context, int showtype)
 				Datum		datum;
 
 				/*
-				 * Convert from TIMESTAMPTZOID to TIMESTAMP ex: '2015-08-18
+				 * For time key column, convert from TIMESTAMPTZOID to TIMESTAMP ex: '2015-08-18
 				 * 09:00:00+09' -> '2015-08-18 00:00:00'
 				 */
-				datum = DirectFunctionCall2(timestamptz_zone, CStringGetTextDatum("UTC"), node->constvalue);
-				getTypeOutputInfo(TIMESTAMPOID, &typoutput, &typIsVarlena);
+				if (context->convert_to_timestamp)
+				{
+					datum = DirectFunctionCall2(timestamptz_zone, CStringGetTextDatum("UTC"), node->constvalue);
+					getTypeOutputInfo(TIMESTAMPOID, &typoutput, &typIsVarlena);
+				}
+				else
+				{
+					datum = node->constvalue;
+					getTypeOutputInfo(TIMESTAMPTZOID, &typoutput, &typIsVarlena);
+				}
 
 				/* Convert to string */
 				extval = OidOutputFunctionCall(typoutput, datum);
@@ -3010,6 +3032,8 @@ influxdb_deparse_op_expr(OpExpr *node, deparse_expr_cxt *context)
 	InfluxDBFdwRelationInfo *fpinfo =
 		(InfluxDBFdwRelationInfo *)(context->foreignrel->fdw_private);
 
+	RangeTblEntry *rte = planner_rt_fetch(context->scanrel->relid, context->root);
+
 	/* Retrieve information about the operator from system catalog. */
 	tuple = SearchSysCache1(OPEROID, ObjectIdGetDatum(node->opno));
 	if (!HeapTupleIsValid(tuple))
@@ -3027,6 +3051,12 @@ influxdb_deparse_op_expr(OpExpr *node, deparse_expr_cxt *context)
 		influxdb_deparse_slvar((Node *)node, linitial_node(Var, node->args), lsecond_node(Const, node->args), context);
 		ReleaseSysCache(tuple);
 		return;
+	}
+
+	if (oprkind == 'b' &&
+		influxdb_contain_time_key_column(rte->relid, node->args))
+	{
+		context->convert_to_timestamp = true;
 	}
 
 	/* Always parenthesize the expression. */
@@ -3969,10 +3999,10 @@ influxdb_contain_time_function(List *exprs)
 }
 
 /*
- * At least one element in the list is time const or time param
+ * At least one element in the list is time param
  */
 static bool
-influxdb_contain_time_const_or_param(List *exprs)
+influxdb_contain_time_param(List *exprs)
 {
 	ListCell *lc;
 
@@ -3981,7 +4011,34 @@ influxdb_contain_time_const_or_param(List *exprs)
 		Expr *expr = (Expr *)lfirst(lc);
 		Oid type;
 
-		if (!IsA(expr, Const) && !IsA(expr, Param))
+		if (!IsA(expr, Param))
+			continue;
+
+		type = exprType((Node *)expr);
+
+		if (INFLUXDB_IS_TIME_TYPE(type))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/*
+ * At least one element in the list is time const
+ */
+static bool
+influxdb_contain_time_const(List *exprs)
+{
+	ListCell *lc;
+
+	foreach (lc, exprs)
+	{
+		Expr *expr = (Expr *)lfirst(lc);
+		Oid type;
+
+		if (!IsA(expr, Const))
 			continue;
 
 		type = exprType((Node *)expr);

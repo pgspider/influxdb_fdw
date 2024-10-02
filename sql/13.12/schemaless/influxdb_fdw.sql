@@ -605,7 +605,6 @@ time timestamp,
 tags jsonb OPTIONS (tags 'true'),
 fields jsonb OPTIONS (fields 'true')
 ) SERVER server1 OPTIONS (table 'tmp_time', schemaless 'true', tags 'c1');
-
 -- Use this foreign table to insert data to the table tmp_time in non-schemaless mode.
 --Testcase 210:
 CREATE FOREIGN TABLE tmp_time_nsc (
@@ -1402,6 +1401,38 @@ DELETE FROM tmp_time WHERE time = (SELECT max(time) FROM tmp_time WHERE time = '
 
 --Testcase 229:
 SELECT * FROM tmp_time;
+
+-- Test time conversion in comparison with tags/field column
+--Testcase 510:
+EXPLAIN VERBOSE
+SELECT * FROM tmp_time WHERE (fields->>'c3')::timestamptz = '1800-02-02 02:02:02+9';
+--Testcase 511:
+SELECT * FROM tmp_time WHERE (fields->>'c3')::timestamptz = '1800-02-02 02:02:02+9';
+
+-- Test time conversion in comparison with time key column
+--Testcase 512:
+ALTER FOREIGN TABLE tmp_time_nsc ALTER COLUMN time TYPE timestamptz;
+--Testcase 519:
+ALTER FOREIGN TABLE tmp_time ALTER COLUMN time TYPE timestamptz;
+--Testcase 513:
+INSERT INTO tmp_time_nsc (time, c1, agvState, value) VALUES ('1900-01-01 01:01:01+9', '02:02:04', 'state 10', 1);
+
+--Testcase 514:
+EXPLAIN VERBOSE
+SELECT * FROM tmp_time WHERE time = '1900-01-01 01:01:01+9';
+--Testcase 515:
+SELECT * FROM tmp_time WHERE time = '1900-01-01 01:01:01+9';
+
+--Testcase 516:
+DELETE FROM tmp_time WHERE time = '1900-01-01 01:01:01+9';
+
+--Testcase 517:
+SELECT * FROM tmp_time;
+
+--Testcase 518:
+ALTER FOREIGN TABLE tmp_time_nsc ALTER COLUMN time TYPE timestamp;
+--Testcase 520:
+ALTER FOREIGN TABLE tmp_time ALTER COLUMN time TYPE timestamp;
 
 -- Recover data
 :RECOVER_INIT_TXT_DROP_BUCKET;
