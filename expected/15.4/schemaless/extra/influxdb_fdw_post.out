@@ -1384,7 +1384,6 @@ SELECT * FROM ft1 WHERE CASE (tags->>'c3')::text COLLATE "C" WHEN (fields->>'c6'
 -- This test case drop configuration when execute non-schemaless before
 --Testcase 863:
 DROP TEXT SEARCH CONFIGURATION IF EXISTS public.custom_search;
-NOTICE:  text search configuration "public.custom_search" does not exist, skipping
 -- check schema-qualification of regconfig constant
 --Testcase 864:
 CREATE TEXT SEARCH CONFIGURATION public.custom_search

@@ -1408,6 +1408,34 @@ DELETE FROM tmp_time WHERE c3 = (SELECT c3 FROM tmp_time WHERE c3 = '2022-05-06 
 --Testcase 247:
 SELECT * FROM tmp_time;
 
+-- Test time conversion in comparison with tags/field column
+--Testcase 510:
+EXPLAIN VERBOSE
+SELECT * FROM tmp_time WHERE c3 = '1800-02-02 02:02:02+9';
+--Testcase 511:
+SELECT * FROM tmp_time WHERE c3 = '1800-02-02 02:02:02+9';
+
+-- Test time conversion in comparison with time key column
+--Testcase 512:
+ALTER FOREIGN TABLE tmp_time ALTER COLUMN time TYPE timestamptz;
+--Testcase 513:
+INSERT INTO tmp_time (time, c1, agvState, value) VALUES ('1900-01-01 01:01:01+9', '02:02:04', 'state 10', 1);
+
+--Testcase 514:
+EXPLAIN VERBOSE
+SELECT * FROM tmp_time WHERE time = '1900-01-01 01:01:01+9';
+--Testcase 515:
+SELECT * FROM tmp_time WHERE time = '1900-01-01 01:01:01+9';
+
+--Testcase 516:
+DELETE FROM tmp_time WHERE time = '1900-01-01 01:01:01+9';
+
+--Testcase 517:
+SELECT * FROM tmp_time;
+
+--Testcase 518:
+ALTER FOREIGN TABLE tmp_time ALTER COLUMN time TYPE timestamp;
+
 -- Type mis-match
 --Testcase 212:
 CREATE FOREIGN TABLE datatype_test (
