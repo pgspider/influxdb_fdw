@@ -1625,6 +1625,45 @@ c5 timestamp with time zone,
 agvState character varying NULL COLLATE pg_catalog."default",
 value numeric NULL
 ) SERVER server1 OPTIONS (table 'tmp_time');
+-- Test binding NULL parameter in the condition
+-- Testcase 600:
+EXPLAIN VERBOSE
+SELECT * FROM tmp_time WHERE time = (SELECT max(c2) FROM tmp_time);
+                                                                         QUERY PLAN                                                                          
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.tmp_time  (cost=2576.41..2569.41 rows=3 width=112)
+   Output: tmp_time."time", tmp_time.c1, tmp_time.c2, tmp_time.c3, tmp_time.c4, tmp_time.c5, tmp_time.agvstate, tmp_time.value
+   InfluxDB query: SELECT "c1", "c2", "c3", "c4", "c5", "agvstate", "value" FROM "tmp_time" WHERE ((time = $1))
+   InitPlan 1 (returns $0)
+     ->  Aggregate  (cost=2566.40..2566.41 rows=1 width=8)
+           Output: max(tmp_time_1.c2)
+           ->  Foreign Scan on public.tmp_time tmp_time_1  (cost=10.00..2560.00 rows=2560 width=8)
+                 Output: tmp_time_1."time", tmp_time_1.c1, tmp_time_1.c2, tmp_time_1.c3, tmp_time_1.c4, tmp_time_1.c5, tmp_time_1.agvstate, tmp_time_1.value
+                 InfluxDB query: SELECT "c2" FROM "tmp_time"
+(9 rows)
+
+-- Testcase 601:
+SELECT * FROM tmp_time WHERE time = (SELECT max(c2) FROM tmp_time);
+ERROR:  influxdb_fdw : cannot bind NULL due to InfluxDB does not support to filter NULL value
+-- Testcase 602:
+EXPLAIN VERBOSE
+DELETE FROM tmp_time WHERE time = (SELECT max(c2) FROM tmp_time);
+                                                                         QUERY PLAN                                                                          
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Delete on public.tmp_time  (cost=2576.41..2579.41 rows=13 width=8)
+   InitPlan 1 (returns $0)
+     ->  Aggregate  (cost=2566.40..2566.41 rows=1 width=8)
+           Output: max(tmp_time_1.c2)
+           ->  Foreign Scan on public.tmp_time tmp_time_1  (cost=10.00..2560.00 rows=2560 width=8)
+                 Output: tmp_time_1."time", tmp_time_1.c1, tmp_time_1.c2, tmp_time_1.c3, tmp_time_1.c4, tmp_time_1.c5, tmp_time_1.agvstate, tmp_time_1.value
+                 InfluxDB query: SELECT "c2" FROM "tmp_time"
+   ->  Foreign Delete on public.tmp_time  (cost=10.00..13.00 rows=13 width=8)
+         InfluxDB query: DELETE FROM "tmp_time" WHERE ((time = $1))
+(9 rows)
+
+-- Testcase 603:
+DELETE FROM tmp_time WHERE time = (SELECT max(c2) FROM tmp_time);
+ERROR:  influxdb_fdw : cannot bind NULL due to InfluxDB does not support to filter NULL value
 --Testcase 205:
 SELECT * FROM tmp_time;
  time | c1 | c2 | c3 | c4 | c5 | agvstate | value 
@@ -4583,7 +4622,7 @@ DELETE FROM tmp_time WHERE c3 = (SELECT c3 FROM tmp_time WHERE c3 = '2022-05-06 
 
 --Testcase 246:
 DELETE FROM tmp_time WHERE c3 = (SELECT c3 FROM tmp_time WHERE c3 = '2022-05-06 07:08:09+9');
-ERROR:  influxdb_fdw : cannot bind NULL
+ERROR:  influxdb_fdw : cannot bind NULL due to InfluxDB does not support to filter NULL value
 --Testcase 247:
 SELECT * FROM tmp_time;
             time            |    c1    |         c2          |              c3              |         c4          |           c5           | agvstate | value 
