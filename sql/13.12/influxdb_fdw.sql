@@ -609,6 +609,18 @@ agvState character varying NULL COLLATE pg_catalog."default",
 value numeric NULL
 ) SERVER server1 OPTIONS (table 'tmp_time');
 
+-- Test binding NULL parameter in the condition
+-- Testcase 600:
+EXPLAIN VERBOSE
+SELECT * FROM tmp_time WHERE time = (SELECT max(c2) FROM tmp_time);
+-- Testcase 601:
+SELECT * FROM tmp_time WHERE time = (SELECT max(c2) FROM tmp_time);
+-- Testcase 602:
+EXPLAIN VERBOSE
+DELETE FROM tmp_time WHERE time = (SELECT max(c2) FROM tmp_time);
+-- Testcase 603:
+DELETE FROM tmp_time WHERE time = (SELECT max(c2) FROM tmp_time);
+
 --Testcase 205:
 SELECT * FROM tmp_time;
 --Testcase 206:
