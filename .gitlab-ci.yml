@@ -1,0 +1,90 @@
+stages:
+  - build
+  - publish
+
+default:
+  tags:
+    - benzaiten-autoscale
+
+# Global variable (can configure outside in gitlab web)
+variables:
+  ARTIFACT_DIR: "fdw_rpm"
+  PGSPIDER_RELEASE_VERSION: "4.0.0-1"
+  PGSPIDER_BASE_POSTGRESQL_VERSION: "16"
+  INFLUXDB_FDW_RELEASE_VERSION: "2.1.0"
+  PGSPIDER_RPM_ID: "14997"
+  INFLUXDB_CXX_PROJECT_ID: "728"
+  INFLUXBB_CXX_RPM_ID: "14859"
+  INFLUXDB_CXX_PACKAGE_VERSION: "0.0.1"
+  INFLUXDB_CXX_RELEASE_VERSION: "0.0.1-1"
+  PACKAGE_RELEASE_VERSION: "1"
+
+project_build:
+  stage: build
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
+  variables:
+    IMAGE_TAG: "fdw_build"
+    DOCKERFILE: "Dockerfile_rpm"
+  before_script:
+    - export http_proxy=$PROXY && export https_proxy=$PROXY
+    - export no_proxy=$NO_PROXY
+    # handle if the previous pipeline error
+    - docker rm $(docker stop test) || true
+    - docker rmi $IMAGE_TAG || true
+    - echo "y" | docker system prune
+    - echo "y" | docker volume prune
+  script:
+    - echo "Building RPM ....."
+    - if [ $PGSPIDER_RPM_ID ]; then PGSPIDER_RPM_ID_POSTFIX="-$PGSPIDER_RPM_ID"; fi
+    - if [ $INFLUXBB_CXX_RPM_ID ]; then INFLUXBB_CXX_RPM_ID_POSTFIX="-$INFLUXBB_CXX_RPM_ID"; fi
+    - docker build -t $IMAGE_TAG
+                  --build-arg proxy=$PROXY
+                  --build-arg no_proxy=$NO_PROXY
+                  --build-arg ACCESS_TOKEN=$ACCESS_TOKEN
+                  --build-arg PACKAGE_RELEASE_VERSION=$PACKAGE_RELEASE_VERSION
+                  --build-arg PGSPIDER_BASE_POSTGRESQL_VERSION=$PGSPIDER_BASE_POSTGRESQL_VERSION
+                  --build-arg PGSPIDER_RELEASE_VERSION=$PGSPIDER_RELEASE_VERSION
+                  --build-arg PGSPIDER_RPM_ID=$PGSPIDER_RPM_ID_POSTFIX
+                  --build-arg PGSPIDER_RPM_URL="$CI_API_V4_URL/projects/$PGSPIDER_PROJECT_ID/packages/generic/rpm_rhel8/$PGSPIDER_BASE_POSTGRESQL_VERSION"
+                  --build-arg INFLUXDB_FDW_RELEASE_VERSION=$INFLUXDB_FDW_RELEASE_VERSION
+                  --build-arg INFLUXBB_CXX_RPM_ID=$INFLUXBB_CXX_RPM_ID_POSTFIX
+                  --build-arg INFLUXDB_CXX_RPM_URL="$CI_API_V4_URL/projects/$INFLUXDB_CXX_PROJECT_ID/packages/generic/rpm_rhel8/$INFLUXDB_CXX_PACKAGE_VERSION"
+                  --build-arg INFLUXDB_CXX_RELEASE_VERSION=$INFLUXDB_CXX_RELEASE_VERSION
+                  -f rpm/$DOCKERFILE .
+    # get rpm file from docker image
+    - mkdir -p $ARTIFACT_DIR
+    - docker run -d --name test $IMAGE_TAG /usr/sbin/init
+    - docker cp test:/home/user1/rpmbuild/RPMS/x86_64 $ARTIFACT_DIR
+    # clean-up: delete docker image
+    - docker rm $(docker stop test)
+    - docker rmi $IMAGE_TAG
+    - cp $ARTIFACT_DIR/x86_64/* $ARTIFACT_DIR
+    - rm -rf $ARTIFACT_DIR/x86_64/
+  artifacts:
+    paths:
+      - $ARTIFACT_DIR
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+
+# Push RPM to Registry job
+project_publish:
+  stage: publish
+  before_script:
+    - export http_proxy=$PROXY && export https_proxy=$PROXY
+    - export no_proxy=$NO_PROXY
+    - apt-get update -qq && apt-get install -y -qq curl
+  variables:
+    curl_command: "curl --header \"PRIVATE-TOKEN: $ACCESS_TOKEN\" --insecure --upload-file"
+    package_uri: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/rpm_rhel8/$PGSPIDER_BASE_POSTGRESQL_VERSION"
+  script:
+    - echo "Publishing ....."
+    # influxdb_fdw
+    - eval "$curl_command $ARTIFACT_DIR/influxdb_fdw_$PGSPIDER_BASE_POSTGRESQL_VERSION-$INFLUXDB_FDW_RELEASE_VERSION-$PACKAGE_RELEASE_VERSION.rhel8.x86_64.rpm
+                        $package_uri/influxdb_fdw_$PGSPIDER_BASE_POSTGRESQL_VERSION-$INFLUXDB_FDW_RELEASE_VERSION-$PACKAGE_RELEASE_VERSION.rhel8.x86_64-$CI_PIPELINE_ID.rpm"
+    # debugsource
+    - eval "$curl_command $ARTIFACT_DIR/influxdb_fdw_$PGSPIDER_BASE_POSTGRESQL_VERSION-debugsource-$INFLUXDB_FDW_RELEASE_VERSION-$PACKAGE_RELEASE_VERSION.rhel8.x86_64.rpm
+                        $package_uri/influxdb_fdw_$PGSPIDER_BASE_POSTGRESQL_VERSION-debugsource-$INFLUXDB_FDW_RELEASE_VERSION-$PACKAGE_RELEASE_VERSION.rhel8.x86_64-$CI_PIPELINE_ID.rpm"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
