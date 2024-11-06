@@ -2236,10 +2236,9 @@ SELECT stddev((fields->>'c3')::bigint), stddev((fields->>'c3')::bigint ORDER BY 
 
 --Testcase 174:
 SELECT sqrt(abs((fields->>'c3')::bigint)), sqrt(abs((fields->>'c3')::bigint)), sqrt(abs((fields->>'c11')::bigint)), sqrt(abs((fields->>'c20')::int)) FROM ( SELECT * FROM sctbl3 WHERE tags->>'t5' LIKE '111111' ) AS sctbl3 ORDER BY 1 ASC,2 DESC;
-       sqrt        |       sqrt        |       sqrt        |       sqrt        
--------------------+-------------------+-------------------+-------------------
- 19197.54690058081 | 19197.54690058081 | 8.831760866327848 | 8.831760866327848
-(1 row)
+ sqrt | sqrt | sqrt | sqrt 
+------+------+------+------
+(0 rows)
 
 --Testcase 175:
 SELECT * FROM ( SELECT tags->>'t1' t1, (tags->>'t2')::int t2, (tags->>'t3')::double precision t3, tags->>'t4' t4, tags->>'t5' t5, fields->>'c2' c2, (fields->>'c3')::bigint c3 FROM sctbl3 WHERE (fields->>'c13')::int>-1000 OR (fields->>'c14')::bigint<1000 ) AS tb3 WHERE c3 <-1 AND c2 > 'KissMe' ORDER BY 1 DESC,2 ASC,3 DESC,4,5 LIMIT 5 OFFSET 0;

@@ -525,6 +525,130 @@ SELECT * FROM tmp_time WHERE time = c2 + interval '25896 days 01:00:54.634467';
  2020-12-27 03:02:56.634467 |    | 1950-02-02 02:02:02 |    |    |    |          |      
 (1 row)
 ```
+#### Pattern Matching
+InfluxDB FDW supports pattern matching (case sensitive) by using LIKE operator in WHERE clause.
+The following operators are used:
+- `LIKE` or `~~`: Check if a value matches a pattern (case sensitive)
+- `NOT LIKE` or `!~~`: Check if a value does not match a pattern (case sensitive)
+
+For example,
+
+Test with percent sign (`%`)
+```
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor LIKE 'A%';
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sensor_tbl
+   Output: "time", device, line, sensor, value
+   InfluxDB query: SELECT "device", "line", "sensor", "value" FROM "sensor" WHERE (("sensor" =~ /^A(.*)/))
+(3 rows)
+
+SELECT * FROM sensor_tbl WHERE sensor LIKE 'A%';
+             time              | device | line | sensor | value 
+-------------------------------+--------+------+--------+-------
+ 2024-10-18 14:44:24.297985+09 | D01    | L01  | A32    |     1
+ 2024-10-18 14:44:24.319444+09 | D02    | L02  | A31    |     2
+ 2024-10-18 14:44:24.325517+09 | D03    | L03  | Alarm  |     3
+(3 rows)
+
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor NOT LIKE 'A%';
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sensor_tbl
+   Output: "time", device, line, sensor, value
+   InfluxDB query: SELECT "device", "line", "sensor", "value" FROM "sensor" WHERE (("sensor" !~ /^A(.*)/))
+(3 rows)
+
+SELECT * FROM sensor_tbl WHERE sensor NOT LIKE 'A%';
+             time              | device | line |     sensor      | value 
+-------------------------------+--------+------+-----------------+-------
+ 2024-10-18 14:44:24.331317+09 | D04    | L04  | PS5A_PS2        |     4
+ 2024-10-18 14:44:24.336539+09 | D05    | L05  | ^PS5A_PS2       |     5
+ 2024-10-18 14:44:24.341984+09 | D06    | L06  | PS5A_PS2$       |     6
+ 2024-10-18 14:44:24.347979+09 | D07    | L07  | ^PS5A_PS2$      |     7
+ 2024-10-18 14:44:24.353777+09 | D08    | L08  | _PS5A_PS2_      |     8
+ 2024-10-18 14:44:24.361595+09 | D09    | L09  | %PS5A%PS2%      |     9
+ 2024-10-18 14:44:24.368482+09 | D10    | L10  | \^$.|?aBc*+()[{ |    10
+(7 rows)
+
+
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~~ 'A%';
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sensor_tbl
+   Output: "time", device, line, sensor, value
+   InfluxDB query: SELECT "device", "line", "sensor", "value" FROM "sensor" WHERE (("sensor" =~ /^A(.*)/))
+(3 rows)
+
+
+SELECT * FROM sensor_tbl WHERE sensor ~~ 'A%';
+             time              | device | line | sensor | value 
+-------------------------------+--------+------+--------+-------
+ 2024-10-18 14:44:24.297985+09 | D01    | L01  | A32    |     1
+ 2024-10-18 14:44:24.319444+09 | D02    | L02  | A31    |     2
+ 2024-10-18 14:44:24.325517+09 | D03    | L03  | Alarm  |     3
+(3 rows)
+
+
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor !~~ 'A%';
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sensor_tbl
+   Output: "time", device, line, sensor, value
+   InfluxDB query: SELECT "device", "line", "sensor", "value" FROM "sensor" WHERE (("sensor" !~ /^A(.*)/))
+(3 rows)
+
+SELECT * FROM sensor_tbl WHERE sensor !~~ 'A%';
+             time              | device | line |     sensor      | value 
+-------------------------------+--------+------+-----------------+-------
+ 2024-10-18 14:44:24.331317+09 | D04    | L04  | PS5A_PS2        |     4
+ 2024-10-18 14:44:24.336539+09 | D05    | L05  | ^PS5A_PS2       |     5
+ 2024-10-18 14:44:24.341984+09 | D06    | L06  | PS5A_PS2$       |     6
+ 2024-10-18 14:44:24.347979+09 | D07    | L07  | ^PS5A_PS2$      |     7
+ 2024-10-18 14:44:24.353777+09 | D08    | L08  | _PS5A_PS2_      |     8
+ 2024-10-18 14:44:24.361595+09 | D09    | L09  | %PS5A%PS2%      |     9
+ 2024-10-18 14:44:24.368482+09 | D10    | L10  | \^$.|?aBc*+()[{ |    10
+(7 rows)
+```
+Test with underscore sign (`_`)
+```
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor LIKE '_PS5A_PS2_';
+                                                           QUERY PLAN                                                           
+--------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sensor_tbl
+   Output: "time", device, line, sensor, value
+   InfluxDB query: SELECT "device", "line", "sensor", "value" FROM "sensor" WHERE (("sensor" =~ /^(.{1})PS5A(.{1})PS2(.{1})$/))
+(3 rows)
+
+SELECT * FROM sensor_tbl WHERE sensor LIKE '_PS5A_PS2_';
+             time              | device | line |   sensor   | value 
+-------------------------------+--------+------+------------+-------
+ 2024-10-18 14:44:24.347979+09 | D07    | L07  | ^PS5A_PS2$ |     7
+ 2024-10-18 14:44:24.353777+09 | D08    | L08  | _PS5A_PS2_ |     8
+ 2024-10-18 14:44:24.361595+09 | D09    | L09  | %PS5A%PS2% |     9
+(3 rows)
+
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor LIKE '\_PS5A\_PS2\_';
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sensor_tbl
+   Output: "time", device, line, sensor, value
+   InfluxDB query: SELECT "device", "line", "sensor", "value" FROM "sensor" WHERE (("sensor" =~ /^_PS5A_PS2_$/))
+(3 rows)
+
+SELECT * FROM sensor_tbl WHERE sensor LIKE '\_PS5A\_PS2\_';
+             time              | device | line |   sensor   | value 
+-------------------------------+--------+------+------------+-------
+ 2024-10-18 14:44:24.353777+09 | D08    | L08  | _PS5A_PS2_ |     8
+(1 row)
+
+```
 
 Supported platforms
 -------------------

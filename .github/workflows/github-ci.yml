@@ -1,0 +1,123 @@
+name: Create RPM Release
+
+on:
+  workflow_dispatch:
+
+env:
+  OWNER_GITHUB: "pgspider"                               # User name. For example: [user_name] in https://github.com/user_name/your_repository.git
+  INFLUXDB_FDW_RELEASE_VERSION: "2.1.0"                  # Release version of influxdb_fdw. For example: 2.1.0.
+  INFLUXDB_CXX_PROJECT_GITHUB: "influxdb-cxx"            # Repository name of influxdb-cxx. For example: [influxdb-cxx] in https://github.com/user_name/influxdb-cxx.git
+  INFLUXDB_CXX_RELEASE_VERSION: "0.0.1-1"                # Release version of influxdb-cxx. For example: 0.0.1-1.
+  INFLUXDB_CXX_RELEASE_PACKAGE_VERSION: "0.0.1"          # Release package version of influxdb-cxx. For example: 0.0.1.
+  PGSPIDER_RELEASE_VERSION: "4.0.0-1"                    # Release version of pgspider. For example: 4.0.0-1.
+  PGSPIDER_RELEASE_PACKAGE_VERSION: "4.0.0"              # Release package version of PGSPider.For example: 4.0.0.
+  PGSPIDER_PROJECT_GITHUB: "pgspider"                    # Repository name of pgspider. For example: [pgspider] in https://github.com/user_name/pgspider.git
+  PGSPIDER_BASE_POSTGRESQL_VERSION: "16"                 # Main version of postgresql that pgspider based on it. For example: 16.
+  ARTIFACT_DIR: "fdw_rpm"                                # Directory name of Artifact to contain rpm files temporary. Default is "fdw_rpm".
+  PACKAGE_RELEASE_VERSION: "1"
+  
+
+jobs:
+  # Job 1: Build rpm files and upload them to Artifact
+  project_build:
+    runs-on: ubuntu-latest
+
+    container:
+      image: docker:24.0.5
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock
+
+    env:
+      IMAGE_TAG: "fdw_build"
+      DOCKERFILE: "Dockerfile_rpm"
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Before scripts
+      run: |
+        apk add wget
+
+    - name: Build RPM
+      run: |
+        docker build -t $IMAGE_TAG \
+          --build-arg PACKAGE_RELEASE_VERSION=${{ env.PACKAGE_RELEASE_VERSION }} \
+          --build-arg PGSPIDER_RELEASE_VERSION=${{ env.PGSPIDER_RELEASE_VERSION }} \
+          --build-arg PGSPIDER_BASE_POSTGRESQL_VERSION=${{ env.PGSPIDER_BASE_POSTGRESQL_VERSION }} \
+          --build-arg PGSPIDER_RELEASE_PACKAGE_VERSION=${{ env.PGSPIDER_RELEASE_PACKAGE_VERSION }} \
+          --build-arg PGSPIDER_RPM_URL="https://github.com/${{ env.OWNER_GITHUB }}/${{ env.PGSPIDER_PROJECT_GITHUB }}/releases/download/${{ env.PGSPIDER_RELEASE_PACKAGE_VERSION }}" \
+          --build-arg INFLUXDB_FDW_RELEASE_VERSION=${{ env.INFLUXDB_FDW_RELEASE_VERSION }} \
+          --build-arg INFLUXDB_CXX_RPM_URL="https://github.com/${{ env.OWNER_GITHUB }}/${{ env.INFLUXDB_CXX_PROJECT_GITHUB }}/releases/download/${{ env.INFLUXDB_CXX_RELEASE_PACKAGE_VERSION }}" \
+          --build-arg PGSPIDER_RPM_ID= \
+          --build-arg INFLUXDB_CXX_RELEASE_VERSION=${{ env.INFLUXDB_CXX_RELEASE_VERSION }} \
+           --build-arg INFLUXBB_CXX_RPM_ID= \
+          -f rpm/$DOCKERFILE .
+
+    - name: Copy RPM Artifact
+      run: |
+        mkdir -p ${{ env.ARTIFACT_DIR }}
+        docker run -d --name test $IMAGE_TAG /usr/sbin/init
+        docker cp test:/home/user1/rpmbuild/RPMS/x86_64 ${{ env.ARTIFACT_DIR }}
+
+    - name: Move rpm files
+      run: |
+        cp ${{ env.ARTIFACT_DIR }}/x86_64/* ${{ env.ARTIFACT_DIR }}
+        rm -rf ${{ env.ARTIFACT_DIR }}/x86_64/
+
+    - name: Upload RPM Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.ARTIFACT_DIR }}
+        path: '${{ github.workspace }}/${{ env.ARTIFACT_DIR }}'
+
+  project_publish:
+    needs: project_build
+    runs-on: ubuntu-latest
+    permissions: write-all
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Install curl
+      run: sudo apt-get update -qq && sudo apt-get install -y -qq curl
+
+    # Create release. After this step, source code is published.
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ env.INFLUXDB_FDW_RELEASE_VERSION }}
+        release_name: Release ${{ env.INFLUXDB_FDW_RELEASE_VERSION }}
+        draft: false
+        prerelease: false
+
+    # Download rpm files from Artifact
+    - name: Download RPM Artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ env.ARTIFACT_DIR }}
+
+    # Upload rpm files to release that is created in previous step
+    - name: Upload influxdb fdw rpm
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./influxdb_fdw_${{ env.PGSPIDER_BASE_POSTGRESQL_VERSION }}-${{ env.INFLUXDB_FDW_RELEASE_VERSION }}-${{ env.PACKAGE_RELEASE_VERSION }}.rhel8.x86_64.rpm
+        asset_name: influxdb_fdw_${{ env.PGSPIDER_BASE_POSTGRESQL_VERSION }}-${{ env.INFLUXDB_FDW_RELEASE_VERSION }}-${{ env.PACKAGE_RELEASE_VERSION }}.rhel8.x86_64.rpm
+        asset_content_type: application/octet-stream
+
+    - name: Upload influxdb fdw debugsource rpm
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./influxdb_fdw_${{ env.PGSPIDER_BASE_POSTGRESQL_VERSION }}-debugsource-${{ env.INFLUXDB_FDW_RELEASE_VERSION }}-${{ env.PACKAGE_RELEASE_VERSION }}.rhel8.x86_64.rpm
+        asset_name: influxdb_fdw_${{ env.PGSPIDER_BASE_POSTGRESQL_VERSION }}-debugsource-${{ env.INFLUXDB_FDW_RELEASE_VERSION }}-${{ env.PACKAGE_RELEASE_VERSION }}.rhel8.x86_64.rpm
+        asset_content_type: application/octet-stream
