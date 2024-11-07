@@ -306,6 +306,7 @@ static bool influxdb_is_unique_func(Oid funcid, char *in);
 static bool influxdb_is_supported_builtin_func(Oid funcid, char *in);
 static bool exist_in_function_list(char *funcname, const char **funclist);
 static void add_backslash(StringInfo buf, const char *ptr, const char *regex_special);
+static bool influxdb_last_percent_sign_check(const char *val);
 
 /*
  * Local variables.
@@ -2326,6 +2327,39 @@ add_backslash(StringInfo buf, const char *ptr, const char *regex_special)
 }
 
 /*
+ * Check if the last percent sign is escaped.
+ *
+ * Return true if there is no '%' sign or '%' sign is escaped
+ * Return false if '%' sign is not escaped
+ */
+static bool
+influxdb_last_percent_sign_check(const char *val)
+{
+	int len;
+	int count_backslash = 0;
+
+	if (val == NULL)
+		return false;
+
+	len = strlen(val) - 1;
+
+	if (val[len] != '%')
+		return true;
+
+	len--;
+	while (len >= 0 && val[len] == '\\')
+	{
+		count_backslash ++;
+		len--;
+	}
+
+	if (count_backslash % 2 == 0)
+		return false;
+
+	return true;
+}
+
+/*
  * Append a SQL string regex representing "val" to buf.
  *
  * We convert LIKE's pattern on PostgreSQL to regex pattern on
@@ -2339,15 +2373,26 @@ add_backslash(StringInfo buf, const char *ptr, const char *regex_special)
  * PostgreSQL's underscore is used to matches any single character.
  * We convert '_' character to "(.{1})" regex string.
  *
- * Escape regex special characters: "\\^$.|?*+()[{"
+ * Escape regex special characters: "\\^$.|?*+()[{%"
  */
 void
 influxdb_deparse_string_regex(StringInfo buf, const char *val)
 {
-	const char *regex_special = "\\^$.|?*+()[{";
+	const char *regex_special = "\\^$.|?*+()[{%";
 	const char *ptr = val;
 
 	appendStringInfoChar(buf, '/');
+
+	/*
+	 * If there is no '%' sign at begin of string, add '^' sign at begin of string.
+	 * For example,
+	 *	- 'A\%'    -> '^A\%$'
+	 *	- 'A\\%'   -> '^A\\(.*)'
+	 *	- 'A\\\%'  -> '^A\\\%$'
+	 */
+	if (val[0] != '%')
+		appendStringInfoChar(buf, '^');
+
 	while (*ptr != '\0')
 	{
 		switch (*ptr)
@@ -2387,6 +2432,19 @@ influxdb_deparse_string_regex(StringInfo buf, const char *val)
 
 		ptr++;
 	}
+
+	/*
+	 * If either there is no '%' sign or there is a '%' sign (but escaped) at end of string, add '$' sign at the end of string.
+	 * For example:
+	 *	- '%Abc'    -> '(.*)Abc$'       No '%', add '$' at end of string
+	 *	- '%Abc%'   -> '(.*)Abc(.*)'    '%' is not escaped, don't add '$' at end of string
+	 *	- '%Abc\%'  -> '(.*)Abc\%$'     '%' is escaped, add '$' at end of string
+	 *	- '%Abc\\%' -> '(.*)Abc\\(.*)'  '%' is not escaped, don't add '$' at end of string
+	 *	- 'Abc\%'   -> '^Abc\%$'        '%' is escaped, add '$' at end of string
+	 */
+	if (influxdb_last_percent_sign_check(val))
+		appendStringInfoChar(buf, '$');
+
 	appendStringInfoChar(buf, '/');
 
 	return;

@@ -1,9 +1,9 @@
-def NODE_NAME = 'AWS_Instance_CentOS'
+def NODE_NAME = 'tsdv_node_2'
 def MAIL_TO = '$DEFAULT_RECIPIENTS'
 def BRANCH_NAME = 'Branch [' + env.BRANCH_NAME + ']'
 def BUILD_INFO = 'Jenkins job: ' + env.BUILD_URL + '\n'
 
-def INFLUXDB_DOCKER_PATH = '/home/jenkins/Docker/Server/Influx'
+def INFLUXDB_DOCKER_PATH = '/home/test/jenkins/Docker/Server/Influx'
 def BRANCH_PGSPIDER = 'master'
 def make_check_test(String target, String version, String cxx_client, String InfluxDBVersion) {
     def prefix = ""
