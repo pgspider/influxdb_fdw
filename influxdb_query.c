@@ -271,21 +271,16 @@ influxdb_convert_record_to_datum(Oid pgtyp, int pgtypmod, char **row, int attnum
 
 /*
  * influxdb_bind_sql_var
- * Bind the values provided as DatumBind the values and nulls to modify the target table
+ * Bind the values provided as Datum Bind to modify the target table
+ * Datum value must be not NULL.
  */
 void
-influxdb_bind_sql_var(Oid type, int idx, Datum value, bool *isnull, InfluxDBColumnInfo *param_column_info,
+influxdb_bind_sql_var(Oid type, int idx, Datum value, InfluxDBColumnInfo *param_column_info,
 					  InfluxDBType * param_influxdb_types, InfluxDBValue * param_influxdb_values)
 {
 
 	Oid			outputFunctionId = InvalidOid;
 	bool		typeVarLength = false;
-
-	if (*isnull)
-	{
-		elog(ERROR, "influxdb_fdw : cannot bind NULL");
-		return;
-	}
 
 	getTypeOutputInfo(type, &outputFunctionId, &typeVarLength);
 

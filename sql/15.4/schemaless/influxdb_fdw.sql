@@ -605,7 +605,6 @@ time timestamp,
 tags jsonb OPTIONS (tags 'true'),
 fields jsonb OPTIONS (fields 'true')
 ) SERVER server1 OPTIONS (table 'tmp_time', schemaless 'true', tags 'c1');
-
 -- Use this foreign table to insert data to the table tmp_time in non-schemaless mode.
 --Testcase 210:
 CREATE FOREIGN TABLE tmp_time_nsc (
@@ -1403,6 +1402,38 @@ DELETE FROM tmp_time WHERE time = (SELECT max(time) FROM tmp_time WHERE time = '
 --Testcase 229:
 SELECT * FROM tmp_time;
 
+-- Test time conversion in comparison with tags/field column
+--Testcase 510:
+EXPLAIN VERBOSE
+SELECT * FROM tmp_time WHERE (fields->>'c3')::timestamptz = '1800-02-02 02:02:02+9';
+--Testcase 511:
+SELECT * FROM tmp_time WHERE (fields->>'c3')::timestamptz = '1800-02-02 02:02:02+9';
+
+-- Test time conversion in comparison with time key column
+--Testcase 512:
+ALTER FOREIGN TABLE tmp_time_nsc ALTER COLUMN time TYPE timestamptz;
+--Testcase 519:
+ALTER FOREIGN TABLE tmp_time ALTER COLUMN time TYPE timestamptz;
+--Testcase 513:
+INSERT INTO tmp_time_nsc (time, c1, agvState, value) VALUES ('1900-01-01 01:01:01+9', '02:02:04', 'state 10', 1);
+
+--Testcase 514:
+EXPLAIN VERBOSE
+SELECT * FROM tmp_time WHERE time = '1900-01-01 01:01:01+9';
+--Testcase 515:
+SELECT * FROM tmp_time WHERE time = '1900-01-01 01:01:01+9';
+
+--Testcase 516:
+DELETE FROM tmp_time WHERE time = '1900-01-01 01:01:01+9';
+
+--Testcase 517:
+SELECT * FROM tmp_time;
+
+--Testcase 518:
+ALTER FOREIGN TABLE tmp_time_nsc ALTER COLUMN time TYPE timestamp;
+--Testcase 520:
+ALTER FOREIGN TABLE tmp_time ALTER COLUMN time TYPE timestamp;
+
 -- Recover data
 :RECOVER_INIT_TXT_DROP_BUCKET;
 :RECOVER_INIT_TXT_CREATE_BUCKET;
@@ -1480,6 +1511,265 @@ ALTER FOREIGN TABLE ftcpu ADD other int;
 SELECT * FROM ftcpu;
 --Testcase 232:
 DROP FOREIGN TABLE ftcpu;
+
+-- Test LIKE pattern matching
+CREATE FOREIGN TABLE sensor_tbl (
+time timestamp,
+tags jsonb OPTIONS (tags 'true'),
+fields jsonb OPTIONS (fields 'true')
+) SERVER server1 OPTIONS (table 'sensor', schemaless 'true', tags 'device');
+
+--Testcase 484:
+CREATE FOREIGN TABLE sensor_tbl_nsc (
+  time timestamp with time zone,
+  device text,
+  line text,
+  sensor text,
+  value int
+) SERVER server1 OPTIONS (table 'sensor', tags 'device');
+
+--Testcase 485:
+INSERT INTO sensor_tbl_nsc (time, device, line, sensor, value) values ('2024-10-18 14:44:24.297985+09', 'D01', 'L01', 'A32', 1);
+--Testcase 486:
+INSERT INTO sensor_tbl_nsc (time, device, line, sensor, value) values ('2024-10-18 14:44:24.319444+09', 'D02', 'L02', 'A31', 2);
+--Testcase 487:
+INSERT INTO sensor_tbl_nsc (time, device, line, sensor, value) values ('2024-10-18 14:44:24.325517+09', 'D03', 'L03', 'Alarm', 3);
+--Testcase 488:
+INSERT INTO sensor_tbl_nsc (time, device, line, sensor, value) values ('2024-10-18 14:44:24.331317+09', 'D04', 'L04', 'PS5A_PS2', 4);
+--Testcase 489:
+INSERT INTO sensor_tbl_nsc (time, device, line, sensor, value) values ('2024-10-18 14:44:24.336539+09', 'D05', 'L05', '^PS5A_PS2', 5);
+--Testcase 490:
+INSERT INTO sensor_tbl_nsc (time, device, line, sensor, value) values ('2024-10-18 14:44:24.341984+09', 'D06', 'L06', 'PS5A_PS2$', 6);
+--Testcase 491:
+INSERT INTO sensor_tbl_nsc (time, device, line, sensor, value) values ('2024-10-18 14:44:24.347979+09', 'D07', 'L07', '^PS5A_PS2$', 7);
+--Testcase 492:
+INSERT INTO sensor_tbl_nsc (time, device, line, sensor, value) values ('2024-10-18 14:44:24.353777+09', 'D08', 'L08', '_PS5A_PS2_', 8);
+--Testcase 493:
+INSERT INTO sensor_tbl_nsc (time, device, line, sensor, value) values ('2024-10-18 14:44:24.361595+09', 'D09', 'L09', '%PS5A%PS2%', 9);
+--Testcase 494:
+INSERT INTO sensor_tbl_nsc (time, device, line, sensor, value) values ('2024-10-18 14:44:24.368482+09', 'D10', 'L10', '\^$.|?aBc*+()[{', 10);
+--Testcase 585:
+INSERT INTO sensor_tbl_nsc (time, device, line, sensor, value) values ('2024-10-18 14:44:24.297985+09', 'D11', 'L11', 'A32\%', 11);
+--Testcase 700:
+INSERT INTO sensor_tbl_nsc (time, device, line, sensor, value) values ('2024-10-18 14:44:24.297988+09', 'D12', 'L12', '\%', 12);
+--Testcase 701:
+INSERT INTO sensor_tbl_nsc (time, device, line, sensor, value) values ('2024-10-18 14:44:24.297998+09', 'D13', 'L13', '%', 13);
+
+--Testcase 495:
+SELECT * FROM sensor_tbl;
+
+--Testcase 496:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE 'A%';
+--Testcase 497:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE 'A%';
+
+--Testcase 498:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '%PS2';
+--Testcase 499:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '%PS2';
+
+--Testcase 500:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '%A%';
+--Testcase 501:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '%A%';
+
+--Testcase 502:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE 'PS5A_PS2';
+--Testcase 503:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE 'PS5A_PS2';
+
+--Testcase 504:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE 'PS5A\_PS2';
+--Testcase 505:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE 'PS5A\_PS2';
+
+--Testcase 506:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '^PS5A_PS2';
+--Testcase 507:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '^PS5A_PS2';
+
+--Testcase 508:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '^PS5A\_PS2';
+--Testcase 509:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '^PS5A\_PS2';
+
+--Testcase 560:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '^PS5A_PS2$';
+--Testcase 561:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '^PS5A_PS2$';
+
+--Testcase 562:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '_PS5A_PS2_';
+--Testcase 563:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '_PS5A_PS2_';
+
+--Testcase 564:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '\_PS5A\_PS2\_';
+--Testcase 565:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '\_PS5A\_PS2\_';
+
+--Testcase 566:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '%PS5A%PS2%';
+--Testcase 567:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '%PS5A%PS2%';
+
+--Testcase 568:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '%PS5A%PS2\%';
+--Testcase 569:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '%PS5A%PS2\%';
+
+--Testcase 570:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '\%PS5A%PS2%';
+--Testcase 571:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '\%PS5A%PS2%';
+
+--Testcase 572:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '\%PS5A\%PS2\%';
+--Testcase 573:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '\%PS5A\%PS2\%';
+
+--Testcase 574:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '\%PS5A\%PS2\%';
+--Testcase 575:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '\%PS5A\%PS2\%';
+
+--Testcase 576:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '\\^$.|?aBc*+()[{';
+--Testcase 577:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '\\^$.|?aBc*+()[{';
+
+--Testcase 579:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' NOT LIKE 'A%';
+--Testcase 580:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' NOT LIKE 'A%';
+
+--Testcase 581:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' ~~ 'A%';
+--Testcase 582:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' ~~ 'A%';
+
+--Testcase 583:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' !~~ 'A%';
+--Testcase 584:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' !~~ 'A%';
+
+--Testcase 586:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE 'A32\\\%';
+--Testcase 587:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE 'A32\\\%';
+
+--Testcase 588:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE 'A32\\%';
+--Testcase 589:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE 'A32\\%';
+
+--Testcase 702:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '\%';
+--Testcase 703:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '\%';
+
+--Testcase 704:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '\\%';
+--Testcase 705:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '\\%';
+
+--Testcase 706:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '\\\%';
+--Testcase 707:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '\\\%';
+
+--Testcase 708:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '%';
+--Testcase 709:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '%';
+
+--Testcase 710:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '__PS5A__PS2__' ESCAPE '_';
+--Testcase 711:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '__PS5A__PS2__' ESCAPE '_';
+
+--Testcase 712:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '^^PS5A^_PS2' ESCAPE '^';
+--Testcase 713:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '^^PS5A^_PS2' ESCAPE '^';
+
+--Testcase 714:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '%%';
+--Testcase 715:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '%%';
+
+--Testcase 716:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '%_%';
+--Testcase 717:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '%_%';
+
+--Testcase 718:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '%2_';
+--Testcase 719:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '%2_';
+
+--Testcase 720:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '%c_+%{';
+--Testcase 720:
+SELECT * FROM sensor_tbl WHERE fields->>'sensor' LIKE '%c_+%{';
+
+--Testcase 721:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl
+WHERE time between '2024-10-18 14:44:24.297985+09' and '2024-10-18 14:44:24.341984+09'
+AND tags->>'device' = 'D02' AND (fields->>'value')::int <> 0
+AND fields->>'sensor' LIKE 'A%';
+--Testcase 722:
+SELECT * FROM sensor_tbl
+WHERE time between '2024-10-18 14:44:24.297985+09' and '2024-10-18 14:44:24.341984+09'
+AND tags->>'device' = 'D02' AND (fields->>'value')::int <> 0
+AND fields->>'sensor' LIKE 'A%';
+
+--Testcase 721:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl
+WHERE time between '2024-10-18 14:44:24.297985+09' and '2024-10-18 14:44:24.341984+09'
+AND tags->>'device' = 'D02' AND (fields->>'value')::int <> 0
+AND fields->>'sensor' LIKE 'A';
+--Testcase 722:
+SELECT * FROM sensor_tbl
+WHERE time between '2024-10-18 14:44:24.297985+09' and '2024-10-18 14:44:24.341984+09'
+AND tags->>'device' = 'D02' AND (fields->>'value')::int <> 0
+AND fields->>'sensor' LIKE 'A';
+-- clean-up
+--Testcase 578:
+DELETE FROM sensor_tbl;
 
 --Testcase 205:
 DROP USER MAPPING FOR CURRENT_USER SERVER server1;

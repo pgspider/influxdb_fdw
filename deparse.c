@@ -217,6 +217,12 @@ typedef struct deparse_expr_cxt
 										 * directly */
 	bool        has_bool_cmp;   /* outer has bool comparison target */
 	FuncExpr   *influx_fill_expr;	/* Store the fill() function */
+
+	/*
+	 * For comparison with time key column, if its data type is timestamp with time zone,
+	 * need to convert to timestamp without time zone.
+	 */
+	bool        convert_to_timestamp;
 } deparse_expr_cxt;
 
 typedef struct pull_func_clause_context
@@ -283,7 +289,8 @@ static bool influxdb_contain_time_column(List *exprs, schemaless_info *pslinfo);
 static bool influxdb_contain_time_key_column(Oid relid, List *exprs);
 static bool influxdb_contain_time_expr(List *exprs);
 static bool influxdb_contain_time_function(List *exprs);
-static bool influxdb_contain_time_const_or_param(List *exprs);
+static bool influxdb_contain_time_param(List *exprs);
+static bool influxdb_contain_time_const(List *exprs);
 static void influxdb_append_field_key(TupleDesc tupdesc, StringInfo buf, Index rtindex, PlannerInfo *root, bool first);
 static void influxdb_append_limit_clause(deparse_expr_cxt *context);
 static bool influxdb_is_string_type(Node *node, schemaless_info *pslinfo);
@@ -299,6 +306,7 @@ static bool influxdb_is_unique_func(Oid funcid, char *in);
 static bool influxdb_is_supported_builtin_func(Oid funcid, char *in);
 static bool exist_in_function_list(char *funcname, const char **funclist);
 static void add_backslash(StringInfo buf, const char *ptr, const char *regex_special);
+static bool influxdb_last_percent_sign_check(const char *val);
 
 /*
  * Local variables.
@@ -959,9 +967,9 @@ influxdb_foreign_expr_walker(Node *node,
 						 * For example:
 						 *	tags/fields vs '2010-10-10 10:10:10'
 						 */
-
 						if (has_time_tags_or_fields_column &&
-							influxdb_contain_time_const_or_param(oe->args))
+							(influxdb_contain_time_const(oe->args) ||
+							 influxdb_contain_time_param(oe->args)))
 						{
 							return false;
 						}
@@ -1756,6 +1764,7 @@ influxdb_deparse_select_stmt_for_rel(StringInfo buf, PlannerInfo *root, RelOptIn
 	context.require_regex = false;
 	context.is_tlist = false;
 	context.can_skip_cast = false;
+	context.convert_to_timestamp = false;
 	/* Construct SELECT clause */
 	influxdb_deparse_select(tlist, retrieved_attrs, &context);
 
@@ -2239,6 +2248,7 @@ influxdb_append_where_clause(StringInfo buf,
 	context.params_list = params;
 	context.is_tlist = false;
 	context.can_skip_cast = false;
+	context.convert_to_timestamp = false;
 
 	foreach(lc, exprs)
 	{
@@ -2317,6 +2327,39 @@ add_backslash(StringInfo buf, const char *ptr, const char *regex_special)
 }
 
 /*
+ * Check if the last percent sign is escaped.
+ *
+ * Return true if there is no '%' sign or '%' sign is escaped
+ * Return false if '%' sign is not escaped
+ */
+static bool
+influxdb_last_percent_sign_check(const char *val)
+{
+	int len;
+	int count_backslash = 0;
+
+	if (val == NULL)
+		return false;
+
+	len = strlen(val) - 1;
+
+	if (val[len] != '%')
+		return true;
+
+	len--;
+	while (len >= 0 && val[len] == '\\')
+	{
+		count_backslash ++;
+		len--;
+	}
+
+	if (count_backslash % 2 == 0)
+		return false;
+
+	return true;
+}
+
+/*
  * Append a SQL string regex representing "val" to buf.
  *
  * We convert LIKE's pattern on PostgreSQL to regex pattern on
@@ -2330,15 +2373,26 @@ add_backslash(StringInfo buf, const char *ptr, const char *regex_special)
  * PostgreSQL's underscore is used to matches any single character.
  * We convert '_' character to "(.{1})" regex string.
  *
- * Escape regex special characters: "\\^$.|?*+()[{"
+ * Escape regex special characters: "\\^$.|?*+()[{%"
  */
 void
 influxdb_deparse_string_regex(StringInfo buf, const char *val)
 {
-	const char *regex_special = "\\^$.|?*+()[{";
+	const char *regex_special = "\\^$.|?*+()[{%";
 	const char *ptr = val;
 
 	appendStringInfoChar(buf, '/');
+
+	/*
+	 * If there is no '%' sign at begin of string, add '^' sign at begin of string.
+	 * For example,
+	 *	- 'A\%'    -> '^A\%$'
+	 *	- 'A\\%'   -> '^A\\(.*)'
+	 *	- 'A\\\%'  -> '^A\\\%$'
+	 */
+	if (val[0] != '%')
+		appendStringInfoChar(buf, '^');
+
 	while (*ptr != '\0')
 	{
 		switch (*ptr)
@@ -2378,6 +2432,19 @@ influxdb_deparse_string_regex(StringInfo buf, const char *val)
 
 		ptr++;
 	}
+
+	/*
+	 * If either there is no '%' sign or there is a '%' sign (but escaped) at end of string, add '$' sign at the end of string.
+	 * For example:
+	 *	- '%Abc'    -> '(.*)Abc$'       No '%', add '$' at end of string
+	 *	- '%Abc%'   -> '(.*)Abc(.*)'    '%' is not escaped, don't add '$' at end of string
+	 *	- '%Abc\%'  -> '(.*)Abc\%$'     '%' is escaped, add '$' at end of string
+	 *	- '%Abc\\%' -> '(.*)Abc\\(.*)'  '%' is not escaped, don't add '$' at end of string
+	 *	- 'Abc\%'   -> '^Abc\%$'        '%' is escaped, add '$' at end of string
+	 */
+	if (influxdb_last_percent_sign_check(val))
+		appendStringInfoChar(buf, '$');
+
 	appendStringInfoChar(buf, '/');
 
 	return;
@@ -2426,18 +2493,22 @@ static void
 influxdb_deparse_expr(Expr *node, deparse_expr_cxt *context)
 {
 	bool		outer_can_skip_cast = context->can_skip_cast;
+	bool		outer_convert_to_timestamp = context->convert_to_timestamp;
 
 	if (node == NULL)
 		return;
 
 	context->can_skip_cast = false;
+	context->convert_to_timestamp = false;
 
 	switch (nodeTag(node))
 	{
 		case T_Var:
+			context->convert_to_timestamp = outer_convert_to_timestamp;
 			influxdb_deparse_var((Var *) node, context);
 			break;
 		case T_Const:
+			context->convert_to_timestamp = outer_convert_to_timestamp;
 			influxdb_deparse_const((Const *) node, context, 0);
 			break;
 		case T_Param:
@@ -2448,6 +2519,7 @@ influxdb_deparse_expr(Expr *node, deparse_expr_cxt *context)
 			influxdb_deparse_func_expr((FuncExpr *) node, context);
 			break;
 		case T_OpExpr:
+			context->convert_to_timestamp = outer_convert_to_timestamp;
 			influxdb_deparse_op_expr((OpExpr *) node, context);
 			break;
 		case T_ScalarArrayOpExpr:
@@ -2621,11 +2693,19 @@ influxdb_deparse_const(Const *node, deparse_expr_cxt *context, int showtype)
 				Datum		datum;
 
 				/*
-				 * Convert from TIMESTAMPTZOID to TIMESTAMP ex: '2015-08-18
+				 * For time key column, convert from TIMESTAMPTZOID to TIMESTAMP ex: '2015-08-18
 				 * 09:00:00+09' -> '2015-08-18 00:00:00'
 				 */
-				datum = DirectFunctionCall2(timestamptz_zone, CStringGetTextDatum("UTC"), node->constvalue);
-				getTypeOutputInfo(TIMESTAMPOID, &typoutput, &typIsVarlena);
+				if (context->convert_to_timestamp)
+				{
+					datum = DirectFunctionCall2(timestamptz_zone, CStringGetTextDatum("UTC"), node->constvalue);
+					getTypeOutputInfo(TIMESTAMPOID, &typoutput, &typIsVarlena);
+				}
+				else
+				{
+					datum = node->constvalue;
+					getTypeOutputInfo(TIMESTAMPTZOID, &typoutput, &typIsVarlena);
+				}
 
 				/* Convert to string */
 				extval = OidOutputFunctionCall(typoutput, datum);
@@ -3010,6 +3090,8 @@ influxdb_deparse_op_expr(OpExpr *node, deparse_expr_cxt *context)
 	InfluxDBFdwRelationInfo *fpinfo =
 		(InfluxDBFdwRelationInfo *)(context->foreignrel->fdw_private);
 
+	RangeTblEntry *rte = planner_rt_fetch(context->scanrel->relid, context->root);
+
 	/* Retrieve information about the operator from system catalog. */
 	tuple = SearchSysCache1(OPEROID, ObjectIdGetDatum(node->opno));
 	if (!HeapTupleIsValid(tuple))
@@ -3027,6 +3109,12 @@ influxdb_deparse_op_expr(OpExpr *node, deparse_expr_cxt *context)
 		influxdb_deparse_slvar((Node *)node, linitial_node(Var, node->args), lsecond_node(Const, node->args), context);
 		ReleaseSysCache(tuple);
 		return;
+	}
+
+	if (oprkind == 'b' &&
+		influxdb_contain_time_key_column(rte->relid, node->args))
+	{
+		context->convert_to_timestamp = true;
 	}
 
 	/* Always parenthesize the expression. */
@@ -3969,10 +4057,10 @@ influxdb_contain_time_function(List *exprs)
 }
 
 /*
- * At least one element in the list is time const or time param
+ * At least one element in the list is time param
  */
 static bool
-influxdb_contain_time_const_or_param(List *exprs)
+influxdb_contain_time_param(List *exprs)
 {
 	ListCell *lc;
 
@@ -3981,7 +4069,34 @@ influxdb_contain_time_const_or_param(List *exprs)
 		Expr *expr = (Expr *)lfirst(lc);
 		Oid type;
 
-		if (!IsA(expr, Const) && !IsA(expr, Param))
+		if (!IsA(expr, Param))
+			continue;
+
+		type = exprType((Node *)expr);
+
+		if (INFLUXDB_IS_TIME_TYPE(type))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/*
+ * At least one element in the list is time const
+ */
+static bool
+influxdb_contain_time_const(List *exprs)
+{
+	ListCell *lc;
+
+	foreach (lc, exprs)
+	{
+		Expr *expr = (Expr *)lfirst(lc);
+		Oid type;
+
+		if (!IsA(expr, Const))
 			continue;
 
 		type = exprType((Node *)expr);
