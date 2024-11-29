@@ -198,6 +198,20 @@ typedef struct foreign_loc_cxt
 	bool		is_comparison;				/* mark true if has comparison */
 } foreign_loc_cxt;
 
+/* Type of operator for pattern matching */
+typedef enum
+{
+	UNKNOWN_OPERATOR = 0,
+	LIKE_OPERATOR,                       /* LIKE case senstive */
+	NOT_LIKE_OPERATOR,                   /* NOT LIKE case sensitive */
+	ILIKE_OPERATOR,                      /* LIKE case insensitive */
+	NOT_ILIKE_OPERATOR,                  /* NOT LIKE case insensitive */
+	REGEX_MATCH_CASE_SENSITIVE_OPERATOR,
+	REGEX_NOT_MATCH_CASE_SENSITIVE_OPERATOR,
+	REGEX_MATCH_CASE_INSENSITIVE_OPERATOR,
+	REGEX_NOT_MATCH_CASE_INSENSITIVE_OPERATOR
+} PatternMatchingOperator;
+
 /*
  * Context for influxdb_deparse_expr
  */
@@ -210,7 +224,7 @@ typedef struct deparse_expr_cxt
 								 * a base relation. */
 	StringInfo	buf;			/* output buffer to append to */
 	List	  **params_list;	/* exprs that will become remote Params */
-	bool		require_regex;	/* require regex for LIKE operator */
+	PatternMatchingOperator	op_type;	/* Type of operator for pattern matching */
 	bool		is_tlist;		/* deparse during target list exprs */
 	bool		can_skip_cast;	/* outer function can skip float8/numeric cast */
 	bool		can_delete_directly;	/* DELETE statement can pushdown
@@ -248,7 +262,7 @@ static void influxdb_deparse_param(Param *node, deparse_expr_cxt *context);
 static void influxdb_deparse_func_expr(FuncExpr *node, deparse_expr_cxt *context);
 static void influxdb_deparse_fill_option(StringInfo buf, const char *val);
 static void influxdb_deparse_op_expr(OpExpr *node, deparse_expr_cxt *context);
-static void influxdb_deparse_operator_name(StringInfo buf, Form_pg_operator opform, bool *regex);
+static void influxdb_deparse_operator_name(StringInfo buf, Form_pg_operator opform, PatternMatchingOperator *op_type);
 
 static void influxdb_deparse_scalar_array_op_expr(ScalarArrayOpExpr *node,
 												  deparse_expr_cxt *context);
@@ -307,6 +321,8 @@ static bool influxdb_is_supported_builtin_func(Oid funcid, char *in);
 static bool exist_in_function_list(char *funcname, const char **funclist);
 static void add_backslash(StringInfo buf, const char *ptr, const char *regex_special);
 static bool influxdb_last_percent_sign_check(const char *val);
+static void influxdb_deparse_string_like_pattern(StringInfo buf, const char *val, PatternMatchingOperator op_type);
+static void influxdb_deparse_string_regex_pattern(StringInfo buf, const char *val, PatternMatchingOperator op_type);
 
 /*
  * Local variables.
@@ -860,12 +876,6 @@ influxdb_foreign_expr_walker(Node *node,
 				/* opname is not a SQL identifier, so we should not quote it. */
 				cur_opname = pstrdup(NameStr(form->oprname));
 				ReleaseSysCache(tuple);
-
-				/* ILIKE cannot be pushed down to InfluxDB */
-				if (strcmp(cur_opname, "~~*") == 0 || strcmp(cur_opname, "!~~*") == 0)
-				{
-					return false;
-				}
 
 				if (strcmp(cur_opname, "=") == 0 ||
 					strcmp(cur_opname, ">") == 0 ||
@@ -1761,7 +1771,7 @@ influxdb_deparse_select_stmt_for_rel(StringInfo buf, PlannerInfo *root, RelOptIn
 	context.foreignrel = rel;
 	context.scanrel = (rel->reloptkind == RELOPT_UPPER_REL) ? fpinfo->outerrel : rel;
 	context.params_list = params_list;
-	context.require_regex = false;
+	context.op_type = UNKNOWN_OPERATOR;
 	context.is_tlist = false;
 	context.can_skip_cast = false;
 	context.convert_to_timestamp = false;
@@ -2360,12 +2370,13 @@ influxdb_last_percent_sign_check(const char *val)
 }
 
 /*
- * Append a SQL string regex representing "val" to buf.
+ * Convert a LIKE's pattern to Regex's pattern and append to buf
  *
  * We convert LIKE's pattern on PostgreSQL to regex pattern on
  * InfluxDB.
  *
  * Surround regex pattern by '/' characters.
+ * Add the prefix (?i) to the pattern if using case-insensitive operators.
  *
  * PostgreSQL's percent sign is used to matches any sequence of
  * zero or more characters. We convert '%' sign to "(.*)" regex string.
@@ -2375,13 +2386,16 @@ influxdb_last_percent_sign_check(const char *val)
  *
  * Escape regex special characters: "\\^$.|?*+()[{%"
  */
-void
-influxdb_deparse_string_regex(StringInfo buf, const char *val)
+static void
+influxdb_deparse_string_like_pattern(StringInfo buf, const char *val, PatternMatchingOperator op_type)
 {
 	const char *regex_special = "\\^$.|?*+()[{%";
 	const char *ptr = val;
 
 	appendStringInfoChar(buf, '/');
+
+	if (op_type == ILIKE_OPERATOR || op_type == NOT_ILIKE_OPERATOR)
+		appendStringInfoString(buf, "(?i)");
 
 	/*
 	 * If there is no '%' sign at begin of string, add '^' sign at begin of string.
@@ -2447,6 +2461,28 @@ influxdb_deparse_string_regex(StringInfo buf, const char *val)
 
 	appendStringInfoChar(buf, '/');
 
+	return;
+}
+
+/*
+ * Append a SQL string regex representing "val" to buf.
+ *
+ * Pushdown PostgreSQL's regrex pattern to InfluxDB
+ * 
+ * Surround regex pattern by '/' characters.
+ * Add the prefix (?i) to the pattern if using case-insensitive operators.
+ */
+static void
+influxdb_deparse_string_regex_pattern(StringInfo buf, const char *val, PatternMatchingOperator op_type)
+{
+	appendStringInfoChar(buf, '/');
+
+	if (op_type == REGEX_MATCH_CASE_INSENSITIVE_OPERATOR || op_type == REGEX_NOT_MATCH_CASE_INSENSITIVE_OPERATOR)
+		appendStringInfoString(buf, "(?i)");
+
+	appendStringInfoString(buf, val);
+
+	appendStringInfoChar(buf, '/');
 	return;
 }
 
@@ -2750,13 +2786,30 @@ influxdb_deparse_const(Const *node, deparse_expr_cxt *context, int showtype)
 			{
 				influxdb_deparse_fill_option(buf, extval);
 			}
-			else if (context->require_regex)
+			else if (context->op_type != UNKNOWN_OPERATOR)
 			{
-				/*
-				 * Convert LIKE's pattern on PostgreSQL to regex pattern on
-				 * InfluxDB.
-				 */
-				influxdb_deparse_string_regex(buf, extval);
+				switch (context->op_type)
+				{
+					case LIKE_OPERATOR:
+					case NOT_LIKE_OPERATOR:
+					case ILIKE_OPERATOR:
+					case NOT_ILIKE_OPERATOR:
+						/*
+						 * Convert LIKE's pattern on PostgreSQL to regex pattern on
+						 * InfluxDB.
+						 */
+						influxdb_deparse_string_like_pattern(buf, extval, context->op_type);
+						break;
+					case REGEX_MATCH_CASE_SENSITIVE_OPERATOR:
+					case REGEX_NOT_MATCH_CASE_SENSITIVE_OPERATOR:
+					case REGEX_MATCH_CASE_INSENSITIVE_OPERATOR:
+					case REGEX_NOT_MATCH_CASE_INSENSITIVE_OPERATOR:
+						influxdb_deparse_string_regex_pattern(buf, extval, context->op_type);
+						break;
+					default:
+						elog(ERROR, "OPERATOR is not supported");
+						break;
+				}
 			}
 			else
 			{
@@ -3128,16 +3181,15 @@ influxdb_deparse_op_expr(OpExpr *node, deparse_expr_cxt *context)
 	}
 
 	/* Deparse operator name. */
-	influxdb_deparse_operator_name(buf, form, &context->require_regex);
+	influxdb_deparse_operator_name(buf, form, &context->op_type);
 
 	/* Deparse right operand. */
 	appendStringInfoChar(buf, ' ');
 
 	influxdb_deparse_expr(llast(node->args), context);
 
-	/* Reset regex require for next operation */
-	if (context->require_regex)
-		context->require_regex = false;
+	/* Reset pattern matching operator type for next operation */
+	context->op_type = UNKNOWN_OPERATOR;
 
 	appendStringInfoChar(buf, ')');
 
@@ -3148,11 +3200,11 @@ influxdb_deparse_op_expr(OpExpr *node, deparse_expr_cxt *context)
  * Print the name of an operator.
  */
 static void
-influxdb_deparse_operator_name(StringInfo buf, Form_pg_operator opform, bool *regex)
+influxdb_deparse_operator_name(StringInfo buf, Form_pg_operator opform, PatternMatchingOperator *op_type)
 {
 	/* opname is not a SQL identifier, so we should not quote it. */
 	cur_opname = NameStr(opform->oprname);
-	*regex = false;
+	*op_type = UNKNOWN_OPERATOR;
 
 	/* Print schema name only if it's not pg_catalog */
 	if (opform->oprnamespace != PG_CATALOG_NAMESPACE)
@@ -3169,21 +3221,42 @@ influxdb_deparse_operator_name(StringInfo buf, Form_pg_operator opform, bool *re
 		if (strcmp(cur_opname, "~~") == 0)
 		{
 			appendStringInfoString(buf, "=~");
-			*regex = true;
+			*op_type = LIKE_OPERATOR;
 		}
 		else if (strcmp(cur_opname, "!~~") == 0)
 		{
 			appendStringInfoString(buf, "!~");
-			*regex = true;
+			*op_type = NOT_LIKE_OPERATOR;
 		}
-		else if (strcmp(cur_opname, "~~*") == 0 ||
-				 strcmp(cur_opname, "!~~*") == 0 ||
-				 strcmp(cur_opname, "~") == 0 ||
-				 strcmp(cur_opname, "!~") == 0 ||
-				 strcmp(cur_opname, "~*") == 0 ||
-				 strcmp(cur_opname, "!~*") == 0)
+		else if (strcmp(cur_opname, "~~*") == 0)
 		{
-			elog(ERROR, "OPERATOR is not supported");
+			appendStringInfoString(buf, "=~");
+			*op_type = ILIKE_OPERATOR;
+		}
+		else if (strcmp(cur_opname, "!~~*") == 0)
+		{
+			appendStringInfoString(buf, "!~");
+			*op_type = NOT_ILIKE_OPERATOR;
+		}
+		else if (strcmp(cur_opname, "~") == 0)
+		{
+			appendStringInfoString(buf, "=~");
+			*op_type = REGEX_MATCH_CASE_SENSITIVE_OPERATOR;
+		}
+		else if (strcmp(cur_opname, "!~") == 0)
+		{
+			appendStringInfoString(buf, "!~");
+			*op_type = REGEX_NOT_MATCH_CASE_SENSITIVE_OPERATOR;
+		}
+		else if (strcmp(cur_opname, "~*") == 0)
+		{
+			appendStringInfoString(buf, "=~");
+			*op_type = REGEX_MATCH_CASE_INSENSITIVE_OPERATOR;
+		}
+		else if (strcmp(cur_opname, "!~*") == 0)
+		{
+			appendStringInfoString(buf, "!~");
+			*op_type = REGEX_NOT_MATCH_CASE_INSENSITIVE_OPERATOR;
 		}
 		else
 		{
