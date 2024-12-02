@@ -67,7 +67,8 @@ Columns of foreign table in schemaless mode
   - tags `true` indicates this column as containing values of tags in InfluxDB measurement.
   - fields `true` indicates this column as containing values of fields in InfluxDB measurement.
 - Creation of foreign table in schemaless mode, for example:
-```sql
+  
+  ```sql
   -- Create foreign table
 	CREATE FOREIGN TABLE sc1(
 	  time timestamp with time zone,
@@ -80,14 +81,14 @@ Columns of foreign table in schemaless mode
           tags 'device_id',
           schemaless 'true'
 	);
--- import foreign schema
+  -- import foreign schema
 	IMPORT FOREIGN SCHEMA public
 	FROM SERVER influxdb_svr
 	INTO public
 	OPTIONS (
           schemaless 'true'
         );
-```
+  ```
 Querying foreign tables:
 - Initialize data in InfluxDB.
   <pre>
@@ -103,8 +104,7 @@ Querying foreign tables:
   </pre>
 
 - Get data through schemaless foreign table:
-  <pre>
-
+  ```sql
   EXPLAIN VERBOSE
   SELECT * FROM sc1;
                               QUERY PLAN
@@ -127,7 +127,7 @@ Querying foreign tables:
   1970-01-01 09:00:00+09 | {"device_id": "dev2"} | {"sig1": "8", "sig2": "h", "sig3": "3.8", "sig4": "false"}
   1970-01-01 09:00:00+09 | {"device_id": "dev3"} | {"sig1": "9", "sig2": "i", "sig3": "3.9", "sig4": "false"}
   (9 rows)
-  </pre>
+  ```
 
 Fetch values in jsonb expression:
 - Using `->>` `jsonb` arrow operator to fetch actual remote InfluxDB tag or fields keys from foreign schemaless columns.
@@ -137,8 +137,7 @@ Fetch values in jsonb expression:
 
 For examples:
 - Fetch all column based on all actual columns:
-  <pre>
-
+  ```sql
   EXPLAIN VERBOSE
   SELECT time,tags->>'device_id' device_id,(fields->>'sig1')::bigint sig1,fields->>'sig2' sig2,(fields->>'sig3')::double precision sig3,(fields->>'sig4')::boolean sig4 FROM sc1;
                                                                                               QUERY PLAN                                                                                              
@@ -161,11 +160,10 @@ For examples:
   1970-01-01 09:00:00+09 | dev2      |    8 | h    |  3.8 | f
   1970-01-01 09:00:00+09 | dev3      |    9 | i    |  3.9 | f
   (9 rows)
-  </pre>
+  ```
 
 - `jsonb` expression is pushed down in `WHERE`.
-  <pre>
-
+  ```sql
   EXPLAIN VERBOSE
   SELECT * FROM sc1 WHERE (fields->>'sig3')::double precision > 2;
                               QUERY PLAN
@@ -185,10 +183,10 @@ For examples:
   1970-01-01 09:00:00+09 | {"device_id": "dev2"} | {"sig1": "8", "sig2": "h", "sig3": "3.8", "sig4": "false"}
   1970-01-01 09:00:00+09 | {"device_id": "dev3"} | {"sig1": "9", "sig2": "i", "sig3": "3.9", "sig4": "false"}
   (6 rows)
-  </pre>
+  ```
 
 - `jsonb` expression is pushed down in aggregate `sum` (remote) + tag + `group by`
-  <pre>
+  ```sql
 
   EXPLAIN VERBOSE
   SELECT sum((fields->>'sig1')::bigint),tags->>'device_id' device_id FROM sc1 GROUP BY tags->>'device_id';
@@ -206,7 +204,7 @@ For examples:
     15 | dev2
     18 | dev3
   (3 rows)
-  </pre>
+  ```
 
 ### Pushdowning
 
@@ -244,8 +242,8 @@ For example:
   INSERT INTO J2_TBL VALUES (NULL, 0);
 ```
 - Query in InfluxDB server by selecting specific field keys: 7 records are returned without null value.
-  <pre>
-  > SELECT k FROM j2_tbl;
+```sql
+  SELECT k FROM j2_tbl;
   name: j2_tbl
   time k
   ---- -
@@ -256,10 +254,10 @@ For example:
   5    -5
   6    -5
   10   0
-  </pre>
+```
 - Query in InfluxDB server by selecting all field key: 8 records are returned with null value.
-  <pre>
-  > SELECT * FROM j2_tbl;
+```sql
+  SELECT * FROM j2_tbl;
   name: j2_tbl
   time i k
   ---- - -
@@ -271,7 +269,7 @@ For example:
   6    5 -5
   7    0
   10     0
-  </pre>
+```
 
 #### The targets list contains both functions and `fields` schemaless jsonb column
 - If the targets list contains both functions and `fields` schemaless `jsonb` column, the function is not pushed down.
@@ -526,15 +524,21 @@ SELECT * FROM tmp_time WHERE time = c2 + interval '25896 days 01:00:54.634467';
 (1 row)
 ```
 #### Pattern Matching
-InfluxDB FDW supports pattern matching (case sensitive) by using LIKE operator in WHERE clause.
-The following operators are used:
-- `LIKE` or `~~`: Check if a value matches a pattern (case sensitive)
-- `NOT LIKE` or `!~~`: Check if a value does not match a pattern (case sensitive)
+InfluxDB FDW supports pattern matching by using LIKE and Regular Expression (Regex) operator in WHERE clause. <br>
+The following operators are used: <br>
+(1) `LIKE` or `~~`: Check if a value matches a LIKE pattern (case sensitive) <br>
+(2) `NOT LIKE` or `!~~`: Check if a value does not match a LIKE pattern (case sensitive) <br>
+(3) `ILIKE` or `~~*`: Check if a value matches a LIKE pattern (case insensitive) <br>
+(4) `NOT ILIKE` or `!~~*`: Check if a value does not match a LIKE pattern (case insensitive) <br>
+(5) `~`: Check if a value matches a Regex pattern (case sensitive) <br>
+(6) `!~`: Check if a value does not match a Regex pattern (case sensitive) <br>
+(7) `~*`: Check if a value matches a Regex pattern (case insensitive) <br>
+(8) `!~*`: Check if a value does not match a Regex pattern (case insensitive) <br>
 
 For example,
 
-Test with percent sign (`%`)
-```
+(1) `LIKE` operator (case sensitive)
+```sql
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT * FROM sensor_tbl WHERE sensor LIKE 'A%';
                                                 QUERY PLAN                                                 
@@ -552,70 +556,6 @@ SELECT * FROM sensor_tbl WHERE sensor LIKE 'A%';
  2024-10-18 14:44:24.325517+09 | D03    | L03  | Alarm  |     3
 (3 rows)
 
-EXPLAIN (VERBOSE, COSTS OFF)
-SELECT * FROM sensor_tbl WHERE sensor NOT LIKE 'A%';
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
- Foreign Scan on public.sensor_tbl
-   Output: "time", device, line, sensor, value
-   InfluxDB query: SELECT "device", "line", "sensor", "value" FROM "sensor" WHERE (("sensor" !~ /^A(.*)/))
-(3 rows)
-
-SELECT * FROM sensor_tbl WHERE sensor NOT LIKE 'A%';
-             time              | device | line |     sensor      | value 
--------------------------------+--------+------+-----------------+-------
- 2024-10-18 14:44:24.331317+09 | D04    | L04  | PS5A_PS2        |     4
- 2024-10-18 14:44:24.336539+09 | D05    | L05  | ^PS5A_PS2       |     5
- 2024-10-18 14:44:24.341984+09 | D06    | L06  | PS5A_PS2$       |     6
- 2024-10-18 14:44:24.347979+09 | D07    | L07  | ^PS5A_PS2$      |     7
- 2024-10-18 14:44:24.353777+09 | D08    | L08  | _PS5A_PS2_      |     8
- 2024-10-18 14:44:24.361595+09 | D09    | L09  | %PS5A%PS2%      |     9
- 2024-10-18 14:44:24.368482+09 | D10    | L10  | \^$.|?aBc*+()[{ |    10
-(7 rows)
-
-
-EXPLAIN (VERBOSE, COSTS OFF)
-SELECT * FROM sensor_tbl WHERE sensor ~~ 'A%';
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
- Foreign Scan on public.sensor_tbl
-   Output: "time", device, line, sensor, value
-   InfluxDB query: SELECT "device", "line", "sensor", "value" FROM "sensor" WHERE (("sensor" =~ /^A(.*)/))
-(3 rows)
-
-
-SELECT * FROM sensor_tbl WHERE sensor ~~ 'A%';
-             time              | device | line | sensor | value 
--------------------------------+--------+------+--------+-------
- 2024-10-18 14:44:24.297985+09 | D01    | L01  | A32    |     1
- 2024-10-18 14:44:24.319444+09 | D02    | L02  | A31    |     2
- 2024-10-18 14:44:24.325517+09 | D03    | L03  | Alarm  |     3
-(3 rows)
-
-
-EXPLAIN (VERBOSE, COSTS OFF)
-SELECT * FROM sensor_tbl WHERE sensor !~~ 'A%';
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
- Foreign Scan on public.sensor_tbl
-   Output: "time", device, line, sensor, value
-   InfluxDB query: SELECT "device", "line", "sensor", "value" FROM "sensor" WHERE (("sensor" !~ /^A(.*)/))
-(3 rows)
-
-SELECT * FROM sensor_tbl WHERE sensor !~~ 'A%';
-             time              | device | line |     sensor      | value 
--------------------------------+--------+------+-----------------+-------
- 2024-10-18 14:44:24.331317+09 | D04    | L04  | PS5A_PS2        |     4
- 2024-10-18 14:44:24.336539+09 | D05    | L05  | ^PS5A_PS2       |     5
- 2024-10-18 14:44:24.341984+09 | D06    | L06  | PS5A_PS2$       |     6
- 2024-10-18 14:44:24.347979+09 | D07    | L07  | ^PS5A_PS2$      |     7
- 2024-10-18 14:44:24.353777+09 | D08    | L08  | _PS5A_PS2_      |     8
- 2024-10-18 14:44:24.361595+09 | D09    | L09  | %PS5A%PS2%      |     9
- 2024-10-18 14:44:24.368482+09 | D10    | L10  | \^$.|?aBc*+()[{ |    10
-(7 rows)
-```
-Test with underscore sign (`_`)
-```
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT * FROM sensor_tbl WHERE sensor LIKE '_PS5A_PS2_';
                                                            QUERY PLAN                                                           
@@ -648,6 +588,209 @@ SELECT * FROM sensor_tbl WHERE sensor LIKE '\_PS5A\_PS2\_';
  2024-10-18 14:44:24.353777+09 | D08    | L08  | _PS5A_PS2_ |     8
 (1 row)
 
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~~ 'A%';
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sensor_tbl
+   Output: "time", device, line, sensor, value
+   InfluxDB query: SELECT "device", "line", "sensor", "value" FROM "sensor" WHERE (("sensor" =~ /^A(.*)/))
+(3 rows)
+
+
+SELECT * FROM sensor_tbl WHERE sensor ~~ 'A%';
+             time              | device | line | sensor | value 
+-------------------------------+--------+------+--------+-------
+ 2024-10-18 14:44:24.297985+09 | D01    | L01  | A32    |     1
+ 2024-10-18 14:44:24.319444+09 | D02    | L02  | A31    |     2
+ 2024-10-18 14:44:24.325517+09 | D03    | L03  | Alarm  |     3
+(3 rows)
+```
+
+(2) `NOT LIKE` operator (case sensitive)
+```sql
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor NOT LIKE 'A%';
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sensor_tbl
+   Output: "time", device, line, sensor, value
+   InfluxDB query: SELECT "device", "line", "sensor", "value" FROM "sensor" WHERE (("sensor" !~ /^A(.*)/))
+(3 rows)
+
+SELECT * FROM sensor_tbl WHERE sensor NOT LIKE 'A%';
+             time              | device | line |     sensor      | value 
+-------------------------------+--------+------+-----------------+-------
+ 2024-10-18 14:44:24.331317+09 | D04    | L04  | PS5A_PS2        |     4
+ 2024-10-18 14:44:24.336539+09 | D05    | L05  | ^PS5A_PS2       |     5
+ 2024-10-18 14:44:24.341984+09 | D06    | L06  | PS5A_PS2$       |     6
+ 2024-10-18 14:44:24.347979+09 | D07    | L07  | ^PS5A_PS2$      |     7
+ 2024-10-18 14:44:24.353777+09 | D08    | L08  | _PS5A_PS2_      |     8
+ 2024-10-18 14:44:24.361595+09 | D09    | L09  | %PS5A%PS2%      |     9
+ 2024-10-18 14:44:24.368482+09 | D10    | L10  | \^$.|?aBc*+()[{ |    10
+(7 rows)
+
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor !~~ 'A%';
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sensor_tbl
+   Output: "time", device, line, sensor, value
+   InfluxDB query: SELECT "device", "line", "sensor", "value" FROM "sensor" WHERE (("sensor" !~ /^A(.*)/))
+(3 rows)
+
+SELECT * FROM sensor_tbl WHERE sensor !~~ 'A%';
+             time              | device | line |     sensor      | value 
+-------------------------------+--------+------+-----------------+-------
+ 2024-10-18 14:44:24.331317+09 | D04    | L04  | PS5A_PS2        |     4
+ 2024-10-18 14:44:24.336539+09 | D05    | L05  | ^PS5A_PS2       |     5
+ 2024-10-18 14:44:24.341984+09 | D06    | L06  | PS5A_PS2$       |     6
+ 2024-10-18 14:44:24.347979+09 | D07    | L07  | ^PS5A_PS2$      |     7
+ 2024-10-18 14:44:24.353777+09 | D08    | L08  | _PS5A_PS2_      |     8
+ 2024-10-18 14:44:24.361595+09 | D09    | L09  | %PS5A%PS2%      |     9
+ 2024-10-18 14:44:24.368482+09 | D10    | L10  | \^$.|?aBc*+()[{ |    10
+(7 rows)
+```
+
+(3) `ILIKE` operator (case insensitive)
+```sql
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ILIKE 'a3%';
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sensor_tbl
+   Output: "time", device, line, sensor, value
+   InfluxDB query: SELECT "device", "line", "sensor", "value" FROM "sensor" WHERE (("sensor" =~ /(?i)^a3(.*)/))
+(3 rows)
+
+SELECT * FROM sensor_tbl WHERE sensor ILIKE 'a3%';
+             time              | device | line | sensor | value 
+-------------------------------+--------+------+--------+-------
+ 2024-10-18 14:44:24.297985+09 | D01    | L01  | A32    |     1
+ 2024-10-18 14:44:24.297985+09 | D11    | L11  | A32\%  |    11
+ 2024-10-18 14:44:24.319444+09 | D02    | L02  | A31    |     2
+(3 rows)
+```
+
+(4) `NOT ILIKE` operator (case insenstive)
+```sql
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor NOT ILIKE 'a3%';
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sensor_tbl
+   Output: "time", device, line, sensor, value
+   InfluxDB query: SELECT "device", "line", "sensor", "value" FROM "sensor" WHERE (("sensor" !~ /(?i)^a3(.*)/))
+(3 rows)
+
+SELECT * FROM sensor_tbl WHERE sensor NOT ILIKE 'a3%';
+             time              | device | line |     sensor      | value 
+-------------------------------+--------+------+-----------------+-------
+ 2024-10-18 14:44:24.297988+09 | D12    | L12  | \%              |    12
+ 2024-10-18 14:44:24.297998+09 | D13    | L13  | %               |    13
+ 2024-10-18 14:44:24.325517+09 | D03    | L03  | Alarm           |     3
+ 2024-10-18 14:44:24.331317+09 | D04    | L04  | PS5A_PS2        |     4
+ 2024-10-18 14:44:24.336539+09 | D05    | L05  | ^PS5A_PS2       |     5
+ 2024-10-18 14:44:24.341984+09 | D06    | L06  | PS5A_PS2$       |     6
+ 2024-10-18 14:44:24.347979+09 | D07    | L07  | ^PS5A_PS2$      |     7
+ 2024-10-18 14:44:24.353777+09 | D08    | L08  | _PS5A_PS2_      |     8
+ 2024-10-18 14:44:24.361595+09 | D09    | L09  | %PS5A%PS2%      |     9
+ 2024-10-18 14:44:24.368482+09 | D10    | L10  | \^$.|?aBc*+()[{ |    10
+(10 rows)
+```
+
+(5) `~` Regex match operator (case sensitive)
+```sql
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '^A(.*)';
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sensor_tbl
+   Output: "time", device, line, sensor, value
+   InfluxDB query: SELECT "device", "line", "sensor", "value" FROM "sensor" WHERE (("sensor" =~ /^A(.*)/))
+(3 rows)
+
+SELECT * FROM sensor_tbl WHERE sensor ~ '^A(.*)';
+             time              | device | line | sensor | value 
+-------------------------------+--------+------+--------+-------
+ 2024-10-18 14:44:24.297985+09 | D01    | L01  | A32    |     1
+ 2024-10-18 14:44:24.297985+09 | D11    | L11  | A32\%  |    11
+ 2024-10-18 14:44:24.319444+09 | D02    | L02  | A31    |     2
+ 2024-10-18 14:44:24.325517+09 | D03    | L03  | Alarm  |     3
+(4 rows)
+```
+
+(6) `!~` Regex not match operator (case sensitive)
+```sql
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor !~ '^A(.*)';
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sensor_tbl
+   Output: "time", device, line, sensor, value
+   InfluxDB query: SELECT "device", "line", "sensor", "value" FROM "sensor" WHERE (("sensor" !~ /^A(.*)/))
+(3 rows)
+
+SELECT * FROM sensor_tbl WHERE sensor !~ '^A(.*)';
+             time              | device | line |     sensor      | value 
+-------------------------------+--------+------+-----------------+-------
+ 2024-10-18 14:44:24.297988+09 | D12    | L12  | \%              |    12
+ 2024-10-18 14:44:24.297998+09 | D13    | L13  | %               |    13
+ 2024-10-18 14:44:24.331317+09 | D04    | L04  | PS5A_PS2        |     4
+ 2024-10-18 14:44:24.336539+09 | D05    | L05  | ^PS5A_PS2       |     5
+ 2024-10-18 14:44:24.341984+09 | D06    | L06  | PS5A_PS2$       |     6
+ 2024-10-18 14:44:24.347979+09 | D07    | L07  | ^PS5A_PS2$      |     7
+ 2024-10-18 14:44:24.353777+09 | D08    | L08  | _PS5A_PS2_      |     8
+ 2024-10-18 14:44:24.361595+09 | D09    | L09  | %PS5A%PS2%      |     9
+ 2024-10-18 14:44:24.368482+09 | D10    | L10  | \^$.|?aBc*+()[{ |    10
+(9 rows)
+```
+
+(7) `~*` Regex match operator (case insensitive)
+```sql
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~* '^a3(.*)';
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sensor_tbl
+   Output: "time", device, line, sensor, value
+   InfluxDB query: SELECT "device", "line", "sensor", "value" FROM "sensor" WHERE (("sensor" =~ /(?i)^a3(.*)/))
+(3 rows)
+
+SELECT * FROM sensor_tbl WHERE sensor ~* '^a3(.*)';
+             time              | device | line | sensor | value 
+-------------------------------+--------+------+--------+-------
+ 2024-10-18 14:44:24.297985+09 | D01    | L01  | A32    |     1
+ 2024-10-18 14:44:24.297985+09 | D11    | L11  | A32\%  |    11
+ 2024-10-18 14:44:24.319444+09 | D02    | L02  | A31    |     2
+(3 rows)
+```
+
+(8) `!~*` Regex not match operator (case insensitive)
+```sql
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor !~* '^a3(.*)';
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.sensor_tbl
+   Output: "time", device, line, sensor, value
+   InfluxDB query: SELECT "device", "line", "sensor", "value" FROM "sensor" WHERE (("sensor" !~ /(?i)^a3(.*)/))
+(3 rows)
+
+SELECT * FROM sensor_tbl WHERE sensor !~* '^a3(.*)';
+             time              | device | line |     sensor      | value 
+-------------------------------+--------+------+-----------------+-------
+ 2024-10-18 14:44:24.297988+09 | D12    | L12  | \%              |    12
+ 2024-10-18 14:44:24.297998+09 | D13    | L13  | %               |    13
+ 2024-10-18 14:44:24.325517+09 | D03    | L03  | Alarm           |     3
+ 2024-10-18 14:44:24.331317+09 | D04    | L04  | PS5A_PS2        |     4
+ 2024-10-18 14:44:24.336539+09 | D05    | L05  | ^PS5A_PS2       |     5
+ 2024-10-18 14:44:24.341984+09 | D06    | L06  | PS5A_PS2$       |     6
+ 2024-10-18 14:44:24.347979+09 | D07    | L07  | ^PS5A_PS2$      |     7
+ 2024-10-18 14:44:24.353777+09 | D08    | L08  | _PS5A_PS2_      |     8
+ 2024-10-18 14:44:24.361595+09 | D09    | L09  | %PS5A%PS2%      |     9
+ 2024-10-18 14:44:24.368482+09 | D10    | L10  | \^$.|?aBc*+()[{ |    10
+(10 rows)
 ```
 
 Supported platforms
@@ -1155,6 +1298,10 @@ the number of points with field1 and field2 are different in *InfluxDB* database
 - `IMPORT FOREIGN SCHEMA` should be used to identify foreign tables.
   - If the user defines it manually, it is necessary to use the correct mapping type in the foreign table to avoid some unexpected behavior because of type mismatch or unsupported in InfluxDB.
   - If a user wants to use an unsupported type with InfluxDB data, PostgreSQL's explicit cast functions should be used instead of define column type in foreign table directly.
+- For pattern matching, Regex pattern of Postgres and InfluxDB has some differences. For example,
+  - Postgres supports patterns \m, \M but InfluxDB does not.
+  - InfluxDB supports patterns (?U) ungreedy, \Q...\E but Postgres does not.
+If Postgres detects invalid pattern, it will report error. Otherwise, FDW will push down the pattern to InfluxDB. If InfluxDB detects invalid pattern, it will report error. Otherwise, it will search data matching the pattern and return result to user.
 
 When a query to foreign tables fails, you can find why it fails by seeing a query executed in *InfluxDB* with `EXPLAIN VERBOSE`.
 

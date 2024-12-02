@@ -1505,7 +1505,6 @@ SELECT tag1, tag2, value1, value2 FROM datatype_test WHERE value2::timestamptz >
 --Testcase 228:
 SELECT tag1, tag2, value1, value2 FROM datatype_test WHERE value2::timestamptz > '2021-02-05 00:00:00+00';
 
--- Test LIKE pattern matching
 --Testcase 484:
 CREATE FOREIGN TABLE sensor_tbl (
   time timestamp with time zone,
@@ -1545,6 +1544,7 @@ INSERT INTO sensor_tbl (time, device, line, sensor, value) values ('2024-10-18 1
 --Testcase 495:
 SELECT * FROM sensor_tbl;
 
+-- Test LIKE pattern matching (case sensitive)
 --Testcase 496:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT * FROM sensor_tbl WHERE sensor LIKE 'A%';
@@ -1641,23 +1641,11 @@ SELECT * FROM sensor_tbl WHERE sensor LIKE '\\^$.|?aBc*+()[{';
 --Testcase 577:
 SELECT * FROM sensor_tbl WHERE sensor LIKE '\\^$.|?aBc*+()[{';
 
---Testcase 579:
-EXPLAIN (VERBOSE, COSTS OFF)
-SELECT * FROM sensor_tbl WHERE sensor NOT LIKE 'A%';
---Testcase 580:
-SELECT * FROM sensor_tbl WHERE sensor NOT LIKE 'A%';
-
 --Testcase 581:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT * FROM sensor_tbl WHERE sensor ~~ 'A%';
 --Testcase 582:
 SELECT * FROM sensor_tbl WHERE sensor ~~ 'A%';
-
---Testcase 583:
-EXPLAIN (VERBOSE, COSTS OFF)
-SELECT * FROM sensor_tbl WHERE sensor !~~ 'A%';
---Testcase 584:
-SELECT * FROM sensor_tbl WHERE sensor !~~ 'A%';
 
 --Testcase 586:
 EXPLAIN (VERBOSE, COSTS OFF)
@@ -1743,17 +1731,661 @@ WHERE time between '2024-10-18 14:44:24.297985+09' and '2024-10-18 14:44:24.3419
 AND device = 'D02' AND value <> 0
 AND sensor LIKE 'A%';
 
---Testcase 721:
+--Testcase 723:
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT * FROM sensor_tbl
 WHERE time between '2024-10-18 14:44:24.297985+09' and '2024-10-18 14:44:24.341984+09'
 AND device = 'D02' AND value <> 0
 AND sensor LIKE 'A';
---Testcase 722:
+--Testcase 724:
 SELECT * FROM sensor_tbl
 WHERE time between '2024-10-18 14:44:24.297985+09' and '2024-10-18 14:44:24.341984+09'
 AND device = 'D02' AND value <> 0
 AND sensor LIKE 'A';
+
+-- Test LIKE pattern un-matching (case sensitive)
+--Testcase 579:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor NOT LIKE 'A%';
+--Testcase 580:
+SELECT * FROM sensor_tbl WHERE sensor NOT LIKE 'A%';
+
+--Testcase 583:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor !~~ 'A%';
+--Testcase 584:
+SELECT * FROM sensor_tbl WHERE sensor !~~ 'A%';
+
+-- Test ILIKE pattern matching (case insensitive)
+--Testcase 594:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ILIKE 'a3%';
+--Testcase 595:
+SELECT * FROM sensor_tbl WHERE sensor ILIKE 'a3%';
+
+--Testcase 881:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ILIKE 'PS5A_PS2';
+--Testcase 882:
+SELECT * FROM sensor_tbl WHERE sensor ILIKE 'PS5A_PS2';
+
+--Testcase 883:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ILIKE 'PS5A\_PS2';
+--Testcase 884:
+SELECT * FROM sensor_tbl WHERE sensor ILIKE 'PS5A\_PS2';
+
+--Testcase 885:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ILIKE '^PS5A_PS2';
+--Testcase 886:
+SELECT * FROM sensor_tbl WHERE sensor ILIKE '^PS5A_PS2';
+
+--Testcase 887:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ILIKE '^PS5A\_PS2';
+--Testcase 888:
+SELECT * FROM sensor_tbl WHERE sensor ILIKE '^PS5A\_PS2';
+
+--Testcase 889:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ILIKE '^PS5A_PS2$';
+--Testcase 890:
+SELECT * FROM sensor_tbl WHERE sensor ILIKE '^PS5A_PS2$';
+
+--Testcase 891:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ILIKE '_PS5A_PS2_';
+--Testcase 892:
+SELECT * FROM sensor_tbl WHERE sensor ILIKE '_PS5A_PS2_';
+
+--Testcase 893:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ILIKE '\_PS5A\_PS2\_';
+--Testcase 894:
+SELECT * FROM sensor_tbl WHERE sensor ILIKE '\_PS5A\_PS2\_';
+
+--Testcase 590:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~~* 'a3%';
+--Testcase 591:
+SELECT * FROM sensor_tbl WHERE sensor ~~* 'a3%';
+
+-- Test ILIKE pattern un-matching (case insensitive)
+--Testcase 596:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor NOT ILIKE 'a3%';
+--Testcase 597:
+SELECT * FROM sensor_tbl WHERE sensor NOT ILIKE 'a3%';
+
+--Testcase 895:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor NOT ILIKE 'PS5A_PS2';
+--Testcase 896:
+SELECT * FROM sensor_tbl WHERE sensor NOT ILIKE 'PS5A_PS2';
+
+--Testcase 897:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor NOT ILIKE 'PS5A\_PS2';
+--Testcase 898:
+SELECT * FROM sensor_tbl WHERE sensor NOT ILIKE 'PS5A\_PS2';
+
+--Testcase 899:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor NOT ILIKE '^PS5A_PS2';
+--Testcase 900:
+SELECT * FROM sensor_tbl WHERE sensor NOT ILIKE '^PS5A_PS2';
+
+--Testcase 901:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor NOT ILIKE '^PS5A\_PS2';
+--Testcase 902:
+SELECT * FROM sensor_tbl WHERE sensor NOT ILIKE '^PS5A\_PS2';
+
+--Testcase 903:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor NOT ILIKE '^PS5A_PS2$';
+--Testcase 904:
+SELECT * FROM sensor_tbl WHERE sensor NOT ILIKE '^PS5A_PS2$';
+
+--Testcase 905:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor NOT ILIKE '_PS5A_PS2_';
+--Testcase 906:
+SELECT * FROM sensor_tbl WHERE sensor NOT ILIKE '_PS5A_PS2_';
+
+--Testcase 907:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor NOT ILIKE '\_PS5A\_PS2\_';
+--Testcase 908:
+SELECT * FROM sensor_tbl WHERE sensor NOT ILIKE '\_PS5A\_PS2\_';
+
+--Testcase 592:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor !~~* 'a3%';
+--Testcase 593:
+SELECT * FROM sensor_tbl WHERE sensor !~~* 'a3%';
+
+-- Test REGEX operators
+-- Test REGEX pattern matching (case sensitive)
+--Testcase 725:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '^A(.*)';
+--Testcase 726:
+SELECT * FROM sensor_tbl WHERE sensor ~ '^A(.*)';
+
+--Testcase 727:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '(.*)PS2$';
+--Testcase 728:
+SELECT * FROM sensor_tbl WHERE sensor ~ '(.*)PS2$';
+
+--Testcase 729:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '(.*)A(.*)';
+--Testcase 730:
+SELECT * FROM sensor_tbl WHERE sensor ~ '(.*)A(.*)';
+
+--Testcase 731:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ 'PS5A(.{1})PS2';
+--Testcase 732:
+SELECT * FROM sensor_tbl WHERE sensor ~ 'PS5A(.{1})PS2';
+
+--Testcase 733:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ 'PS5A\_PS2s';
+--Testcase 734:
+SELECT * FROM sensor_tbl WHERE sensor ~ 'PS5A\_PS2';
+
+--Testcase 735:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '^PS5A(.{1})PS2';
+--Testcase 736:
+SELECT * FROM sensor_tbl WHERE sensor ~ '^PS5A(.{1})PS2';
+
+--Testcase 737:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '^PS5A\_PS2';
+--Testcase 738:
+SELECT * FROM sensor_tbl WHERE sensor ~ '^PS5A\_PS2';
+
+--Testcase 739:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '^PS5A(.{1})PS2$';
+--Testcase 740:
+SELECT * FROM sensor_tbl WHERE sensor ~ '^PS5A(.{1})PS2$';
+
+--Testcase 741:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '(.{1})PS5A(.{1})PS2(.{1})';
+--Testcase 742:
+SELECT * FROM sensor_tbl WHERE sensor ~ '(.{1})PS5A(.{1})PS2(.{1})';
+
+--Testcase 743:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '\_PS5A\_PS2\_';
+--Testcase 744:
+SELECT * FROM sensor_tbl WHERE sensor ~ '\_PS5A\_PS2\_';
+
+--Testcase 745:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '%PS5A%PS2%';
+--Testcase 746:
+SELECT * FROM sensor_tbl WHERE sensor ~ '%PS5A%PS2%';
+
+--Testcase 747:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '%PS5A%PS2\%';
+--Testcase 748:
+SELECT * FROM sensor_tbl WHERE sensor ~ '%PS5A%PS2\%';
+
+--Testcase 749:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '\%PS5A%PS2%';
+--Testcase 750:
+SELECT * FROM sensor_tbl WHERE sensor ~ '\%PS5A%PS2%';
+
+--Testcase 751:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '\%PS5A\%PS2\%';
+--Testcase 752:
+SELECT * FROM sensor_tbl WHERE sensor ~ '\%PS5A\%PS2\%';
+
+--Testcase 753:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '\%PS5A\%PS2\%';
+--Testcase 754:
+SELECT * FROM sensor_tbl WHERE sensor ~ '\%PS5A\%PS2\%';
+
+--Testcase 755:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ 'A32\\\%';
+--Testcase 756:
+SELECT * FROM sensor_tbl WHERE sensor ~ 'A32\\\%';
+
+--Testcase 757:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '^A32\\(.*)';
+--Testcase 758:
+SELECT * FROM sensor_tbl WHERE sensor ~ '^A32\\(.*)';
+
+-- Test REGEX pattern un-matching (case sensitive)
+--Testcase 759:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor !~ '^A(.*)';
+--Testcase 760:
+SELECT * FROM sensor_tbl WHERE sensor !~ '^A(.*)';
+
+-- Test REGEX pattern matching (case insensitive)
+--Testcase 761:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~* '^a3(.*)';
+--Testcase 762:
+SELECT * FROM sensor_tbl WHERE sensor ~* '^a3(.*)';
+
+-- Test REGEX pattern un-matching (case insensitive)
+--Testcase 763:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor !~* '^a3(.*)';
+--Testcase 764:
+SELECT * FROM sensor_tbl WHERE sensor !~* '^a3(.*)';
+
+-- Test mix of REGEX operators
+--Testcase 765:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '^A(.*)' AND sensor !~ '^A3(.*)' ;
+--Testcase 766:
+SELECT * FROM sensor_tbl WHERE sensor ~ '^A(.*)' AND sensor !~ '^A3(.*)' ;
+
+-- Test REGEX syntax
+--Testcase 767:
+INSERT INTO sensor_tbl (time, device, line, sensor, value) values ('2024-10-18 14:44:24.397988+09', 'D14', 'L14', 'grey', 14);
+--Testcase 768:
+INSERT INTO sensor_tbl (time, device, line, sensor, value) values ('2024-10-18 14:44:24.397998+09', 'D15', 'L15', 'gray', 15);
+--Testcase 769:
+INSERT INTO sensor_tbl (time, device, line, sensor, value) values ('2024-10-18 14:44:24.497988+09', 'D16', 'L16', 'grey
+1234', 16);
+--Testcase 770:
+INSERT INTO sensor_tbl (time, device, line, sensor, value) values ('2024-10-18 14:44:24.597988+09', 'D17', 'L17', 'color', 17);
+--Testcase 771:
+INSERT INTO sensor_tbl (time, device, line, sensor, value) values ('2024-10-18 14:44:24.697988+09', 'D18', 'L18', 'colour', 18);
+--Testcase 772:
+INSERT INTO sensor_tbl (time, device, line, sensor, value) values ('2024-10-18 14:44:24.797988+09', 'D19', 'L19', 'colouur', 19);
+--Testcase 773:
+INSERT INTO sensor_tbl (time, device, line, sensor, value) values ('2024-10-18 14:44:24.897988+09', 'D20', 'L20', 'colr', 20);
+--Testcase 774:
+INSERT INTO sensor_tbl (time, device, line, sensor, value) values ('2024-10-18 14:44:24.997988+09', 'D21', 'L21', 'c ol or', 21);
+
+-- Characters
+-- Backslash escapes one metacharacter, '^' is a metacharacter, use backslash to escape it.
+--Testcase 775:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '\^PS5A_PS2';
+--Testcase 776:
+SELECT * FROM sensor_tbl WHERE sensor ~ '\^PS5A_PS2';
+
+-- Character Classes or Character Sets
+-- [abc] character class
+--Testcase 777:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ 'gr[ae]y';
+--Testcase 778:
+SELECT * FROM sensor_tbl WHERE sensor ~ 'gr[ae]y';
+-- [^abc] negated character class
+--Testcase 779:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ 'gr[^e]y';
+--Testcase 780:
+SELECT * FROM sensor_tbl WHERE sensor ~ 'gr[^e]y';
+-- [a-z] character class range
+--Testcase 781:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '[a-z]';
+--Testcase 782:
+SELECT * FROM sensor_tbl WHERE sensor ~ '[a-z]';
+
+-- Perl Character Classes (all ASCII-only)
+-- \d digits ([0-9])
+--Testcase 783:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '\d';
+--Testcase 784:
+SELECT * FROM sensor_tbl WHERE sensor ~ '\d';
+
+--Testcase 785:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '[0-9]';
+--Testcase 786:
+SELECT * FROM sensor_tbl WHERE sensor ~ '[0-9]';
+
+-- \D not digits ([^0-9])
+--Testcase 787:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '\D';
+--Testcase 788:
+SELECT * FROM sensor_tbl WHERE sensor ~ '\D';
+
+--Testcase 789:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '[^0-9]';
+--Testcase 790:
+SELECT * FROM sensor_tbl WHERE sensor ~ '[^0-9]';
+
+-- \s whitespace ([\t\n\f\r ])
+--Testcase 791:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '\s';
+--Testcase 792:
+SELECT * FROM sensor_tbl WHERE sensor ~ '\s';
+
+--Testcase 793:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '[\t\n\f\r ]';
+--Testcase 794:
+SELECT * FROM sensor_tbl WHERE sensor ~ '[\t\n\f\r ]';
+
+-- \S not whitespace (≡ [^\t\n\f\r ])
+--Testcase 795:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '\S';
+--Testcase 796:
+SELECT * FROM sensor_tbl WHERE sensor ~ '\S';
+
+--Testcase 797:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '[^\t\n\f\r ]';
+--Testcase 798:
+SELECT * FROM sensor_tbl WHERE sensor ~ '[^\t\n\f\r ]';
+
+-- \w word characters (≡ [0-9A-Za-z_])
+--Testcase 799:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '\w';
+--Testcase 800:
+SELECT * FROM sensor_tbl WHERE sensor ~ '\w';
+
+--Testcase 801:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '[0-9A-Za-z_]';
+--Testcase 802:
+SELECT * FROM sensor_tbl WHERE sensor ~ '[0-9A-Za-z_]';
+-- \W not word characters (≡ [^0-9A-Za-z_])
+--Testcase 803:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '\W';
+--Testcase 804:
+SELECT * FROM sensor_tbl WHERE sensor ~ '\W';
+
+--Testcase 805:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '[^0-9A-Za-z_]';
+--Testcase 806:
+SELECT * FROM sensor_tbl WHERE sensor ~ '[^0-9A-Za-z_]';
+
+-- ASCII character classes
+-- [[:alpha:]]	alphabetic (≡ [A-Za-z])
+--Testcase 807:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ '[[:alpha:]]';
+--Testcase 808:
+SELECT * FROM sensor_tbl WHERE sensor ~ '[[:alpha:]]';
+
+-- [[:alnum:]] alphanumeric (≡ [0-9A-Za-z])
+--Testcase 809:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ '[[:alnum:]]';
+--Testcase 810:
+SELECT * FROM sensor_tbl WHERE sensor ~ '[[:alnum:]]';
+
+-- Dot
+-- . (dot; any character)
+--Testcase 811:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '.A';
+--Testcase 812:
+SELECT * FROM sensor_tbl WHERE sensor ~ '.A';
+
+-- . with line break character
+--Testcase 813:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '.\n';
+--Testcase 814:
+SELECT * FROM sensor_tbl WHERE sensor ~ '.\n';
+
+-- Anchors
+-- ^ (start of string/line)
+--Testcase 815:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '^A';
+--Testcase 816:
+SELECT * FROM sensor_tbl WHERE sensor ~ '^A';
+-- $ (end of string/line)
+--Testcase 817:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ 'S2$';
+--Testcase 818:
+SELECT * FROM sensor_tbl WHERE sensor ~ 'S2$';
+--  \A (start of string)
+--Testcase 819:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '\AA';
+--Testcase 820:
+SELECT * FROM sensor_tbl WHERE sensor ~ '\AA';
+
+-- \b at ASCII word boundary (\w on one side and \W, \A, or \z on the other)
+--Testcase 821:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '\bA';
+--Testcase 822:
+SELECT * FROM sensor_tbl WHERE sensor ~ '\bA';
+
+-- \B not at ASCII word boundary
+--Testcase 823:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '\BA';
+--Testcase 824:
+SELECT * FROM sensor_tbl WHERE sensor ~ '\BA';
+
+-- \m matches only at the beginning of a word - not supported by InfluxDB
+--Testcase 825:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ '\mA';
+--Testcase 826:
+SELECT * FROM sensor_tbl WHERE sensor ~ '\mA';
+
+-- \M matches only at the end of a word - not supported by InfluxDB
+--Testcase 827:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ 'y\M';
+--Testcase 828:
+SELECT * FROM sensor_tbl WHERE sensor ~ 'y\M';
+
+-- Alternation
+-- | (alternation)
+--Testcase 829:
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT * FROM sensor_tbl WHERE sensor ~ 'gray|grey';
+--Testcase 830:
+SELECT * FROM sensor_tbl WHERE sensor ~ 'gray|grey';
+
+-- Quantifiers
+-- ? (0 or 1)
+--Testcase 831:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou?r';
+--Testcase 832:
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou?r';
+-- * (0 or more)
+--Testcase 833:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou*r';
+--Testcase 834:
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou*r';
+
+--Testcase 835:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ 'u*r';
+--Testcase 836:
+SELECT * FROM sensor_tbl WHERE sensor ~ 'u*r';
+
+-- + (1 or more)
+--Testcase 837:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou+r';
+--Testcase 838:
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou+r';
+
+-- {n} (exactly n)
+--Testcase 839:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou{1}r';
+--Testcase 840:
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou{1}r';
+
+--Testcase 841:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou{2}r';
+--Testcase 842:
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou{2}r';
+
+-- {n,m} (between n and m)
+--Testcase 843:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou{0,2}r';
+--Testcase 844:
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou{0,2}r';
+
+-- {n,} (n or more)
+--Testcase 845:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou{1,}r';
+--Testcase 846:
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou{1,}r';
+
+-- *? zero or more, prefer fewer
+--Testcase 847:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou*?r';
+--Testcase 848:
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou*?r';
+
+-- +? one or more, prefer fewer
+--Testcase 849:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou+?r';
+--Testcase 850:
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou+?r';
+
+-- ?? zero or one, prefer zero
+--Testcase 851:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou??r';
+--Testcase 852:
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou??r';
+
+-- {n,m}? n or n+1 or ... or m, prefer fewer
+--Testcase 853:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou{0,2}?r';
+--Testcase 854:
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou{0,2}?r';
+
+-- {n,}? n or more, prefer fewer
+--Testcase 855:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou{0,}?r';
+--Testcase 856:
+SELECT * FROM sensor_tbl WHERE sensor ~ 'colou{0,}?r';
+
+-- Grouping and Backreferences
+-- (regex) (numbered capturing group)
+--Testcase 857:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ 'col(ou)?r';
+--Testcase 858:
+SELECT * FROM sensor_tbl WHERE sensor ~ 'col(ou)?r';
+
+-- (?:regex) non-capturing group
+--Testcase 859:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ '(?:ou)';
+--Testcase 860:
+SELECT * FROM sensor_tbl WHERE sensor ~ '(?:ou)';
+
+-- Modifiers
+-- (?flags)regex set flags within current group; non-capturing
+-- i	case-insensitive (default false)
+--Testcase 861:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ '(?i)a';
+--Testcase 862:
+SELECT * FROM sensor_tbl WHERE sensor ~ '(?i)a';
+
+-- m multi-line mode: ^ and $ match begin/end line in addition to begin/end text (default false)
+--Testcase 863:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ '(?m)1';
+--Testcase 864:
+SELECT * FROM sensor_tbl WHERE sensor ~ '(?m)1';
+
+-- s let . match \n (default false)
+--Testcase 865:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ '(?s)A';
+--Testcase 866:
+SELECT * FROM sensor_tbl WHERE sensor ~ '(?s)A';
+
+-- U ungreedy: swap meaning of x* and x*?, x+ and x+?, etc (default false) -- Not supported by PostgreSQL
+--Testcase 867:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ '(?U)color';
+--Testcase 868:
+SELECT * FROM sensor_tbl WHERE sensor ~ '(?U)color';
+
+-- (?flags:re) set flags during re; non-capturing -- Not supported by Postgres
+--Testcase 869:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ '(?i:a)';
+--Testcase 870:
+SELECT * FROM sensor_tbl WHERE sensor ~ '(?i:a)';
+
+--Testcase 871:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ '(?m:a)';
+--Testcase 872:
+SELECT * FROM sensor_tbl WHERE sensor ~ '(?m:a';
+
+--Testcase 873:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ '(?s:A)';
+--Testcase 874:
+SELECT * FROM sensor_tbl WHERE sensor ~ '(?s:A)';
+
+--Testcase 875:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ '(?U:color)';
+--Testcase 876:
+SELECT * FROM sensor_tbl WHERE sensor ~ '(?U:color)';
+
+-- (?P=name) (Python-style named backreference) - Not supported by Postgres
+--Testcase 877:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ '(?P=color)';
+--Testcase 878:
+SELECT * FROM sensor_tbl WHERE sensor ~ '(?P=color)';
+
+-- backreferences - not supported by InfluxDB
+--Testcase 881:
+INSERT INTO sensor_tbl (time, device, line, sensor, value) values ('2024-10-18 14:44:22.897988+09', 'D22', 'L22', 'axaxax', 22);
+--Testcase 882:
+INSERT INTO sensor_tbl (time, device, line, sensor, value) values ('2024-10-18 14:44:23.997988+09', 'D23', 'L23', 'bxbxbx', 23);
+-- \1 match the first capturing group. For example ([ab])x\1x\1 matches axaxa, bxbxb.
+--Testcase 879:
+EXPLAIN VERBOSE
+SELECT * FROM sensor_tbl WHERE sensor ~ '([ab])x\1';
+--Testcase 880:
+SELECT * FROM sensor_tbl WHERE sensor ~ '([ab])x\1';
 
 -- clean-up
 --Testcase 578:

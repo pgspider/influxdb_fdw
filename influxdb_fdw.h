@@ -304,7 +304,6 @@ extern void influxdb_deparse_drop_measurement_stmt(StringInfo buf, Relation rel)
 extern void influxdb_append_where_clause(StringInfo buf, PlannerInfo *root, RelOptInfo *baserel, List *exprs,
 										 bool is_first, List **params);
 extern void influxdb_deparse_analyze(StringInfo buf, char *dbname, char *relname);
-extern void influxdb_deparse_string_regex(StringInfo buf, const char *val);
 extern void influxdb_deparse_string_literal(StringInfo buf, const char *val);
 extern List *influxdb_build_tlist_to_deparse(RelOptInfo *foreignrel);
 extern int	influxdb_set_transmission_modes(void);
