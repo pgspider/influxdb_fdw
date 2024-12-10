@@ -2,7 +2,7 @@
 
 # InfluxDB systemtest config
 container_name_v2='influxdb_server_v2'
-influxdbV2_image='influxdb:2.2'
+influxdbV2_image='influxdb:2.7.6'
 container_name_v1='influxdb_server_v1'
 influxdbV1_image='influxdb:1.8.10'
 container_name_go='influxdb_server_go'

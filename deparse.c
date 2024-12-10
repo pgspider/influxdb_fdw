@@ -178,7 +178,7 @@ typedef enum
 {
 	FDW_COLLATE_NONE,			/* expression is of a noncollatable type */
 	FDW_COLLATE_SAFE,			/* collation derives from a foreign Var */
-	FDW_COLLATE_UNSAFE			/* collation derives from something else */
+	FDW_COLLATE_UNSAFE,			/* collation derives from something else */
 } FDWCollateState;
 
 typedef struct foreign_loc_cxt
@@ -1713,6 +1713,7 @@ influxdb_deparse_direct_delete_sql(StringInfo buf, PlannerInfo *root,
 	context.buf = buf;
 	context.params_list = params_list;
 	context.can_delete_directly = true;
+	context.has_bool_cmp = false;
 
 	appendStringInfoString(buf, "DELETE FROM ");
 	influxdb_deparse_relation(buf, rel);
@@ -1775,6 +1776,7 @@ influxdb_deparse_select_stmt_for_rel(StringInfo buf, PlannerInfo *root, RelOptIn
 	context.is_tlist = false;
 	context.can_skip_cast = false;
 	context.convert_to_timestamp = false;
+	context.has_bool_cmp = false;
 	/* Construct SELECT clause */
 	influxdb_deparse_select(tlist, retrieved_attrs, &context);
 
