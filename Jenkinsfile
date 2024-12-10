@@ -19,7 +19,7 @@ def make_check_test(String target, String version, String cxx_client, String Inf
         sh """
             rm -rf make_check_existed_test.out || true
             docker exec -u postgres postgresserver_multi_for_influxdb_existed_test /bin/bash -c '/home/test/influxdb_existed_test.sh ${env.GIT_BRANCH} ${target}${version} ${cxx_client} ${InfluxDBVersion}'
-            docker exec -u postgres -w /home/postgres/${target}${version}/contrib/influxdb_fdw postgresserver_multi_for_influxdb_existed_test /bin/bash -c 'export LD_LIBRARY_PATH=/usr/local/lib64: && export PATH=$PATH:/usr/local/go/bin && go env -w GO111MODULE=auto && go get github.com/influxdata/influxdb1-client/v2 && export LANGUAGE="en_US.UTF-8" && export LANG="en_US.UTF-8" && export LC_ALL="en_US.UTF-8" && make ${prefix} ${cxx_client} && export no_proxy=172.23.0.3,172.23.0.4,172.23.0.5 && export NO_PROXY=172.23.0.3,172.23.0.4,172.23.0.5 && make check ${prefix} ${cxx_client} | tee make_check.out'
+            docker exec -u postgres -w /home/postgres/${target}${version}/contrib/influxdb_fdw postgresserver_multi_for_influxdb_existed_test /bin/bash -c 'export LD_LIBRARY_PATH=/usr/local/lib64 && export PATH=$PATH:/usr/local/go/bin && go env -w GO111MODULE=auto && go get github.com/influxdata/influxdb1-client/v2 && export LANGUAGE="en_US.UTF-8" && export LANG="en_US.UTF-8" && export LC_ALL="en_US.UTF-8" && make ${prefix} ${cxx_client}&& export no_proxy=172.23.0.3,172.23.0.4,172.23.0.5 && export NO_PROXY=172.23.0.3,172.23.0.4,172.23.0.5 && make check ${prefix} ${cxx_client} | tee make_check.out'
             docker cp postgresserver_multi_for_influxdb_existed_test:/home/postgres/${target}${version}/contrib/influxdb_fdw/make_check.out make_check_existed_test.out
         """
     }
@@ -125,7 +125,7 @@ pipeline {
                 }
             }
         }
-        stage('Init_data_InfluxDBV1_For_Testing_Postgres_12_16_Use_GO_CLIENT') {
+        stage('Init_data_InfluxDBV1_For_Testing_Postgres_13.15_Use_GO_CLIENT') {
             steps {
                 catchError() {
                     init_data_influxdbv1()
@@ -133,7 +133,7 @@ pipeline {
             }
             post {
                 failure {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with InfluxDBV1 v12.16 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with InfluxDBV1 v13.15 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
                     updateGitlabCommitStatus name: 'Init_Data', state: 'failed'
                 }
                 success {
@@ -141,19 +141,19 @@ pipeline {
                 }
             }
         }
-        stage('make_check_FDW_Test_With_InfluxDBV1_Postgres_12_16_Use_GO_CLIENT') {
+        stage('make_check_FDW_Test_With_InfluxDBV1_Postgres_13.15_Use_GO_CLIENT') {
             steps {
                 catchError() {
-                    make_check_test("postgresql", "12.16", "", "1")
+                    make_check_test("postgresql", "13.15", "", "1")
                 }
             }
             post {
                 unstable {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check on InfluxDBV1 v12.16 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check on InfluxDBV1 v13.15 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
                 }
             }
         }
-        stage('Init_data_InfluxDBV1_For_Testing_Postgres_13_12_Use_GO_CLIENT') {
+        stage('Init_data_InfluxDBV1_For_Testing_Postgres_14.12_Use_GO_CLIENT') {
             steps {
                 catchError() {
                     init_data_influxdbv1()
@@ -161,7 +161,7 @@ pipeline {
             }
             post {
                 failure {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with InfluxDBV1 v13.12 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with InfluxDBV1 v14.12 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
                     updateGitlabCommitStatus name: 'Init_Data', state: 'failed'
                 }
                 success {
@@ -169,19 +169,19 @@ pipeline {
                 }
             }
         }
-        stage('make_check_FDW_Test_With_InfluxDBV1_Postgres_13_12_Use_GO_CLIENT') {
+        stage('make_check_FDW_Test_With_InfluxDBV1_Postgres_14.12_Use_GO_CLIENT') {
             steps {
                 catchError() {
-                    make_check_test("postgresql", "13.12", "", "1")
+                    make_check_test("postgresql", "14.12", "", "1")
                 }
             }
             post {
                 unstable {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check on InfluxDBV1 v13.12 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check on InfluxDBV1 v14.12 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
                 }
             }
         }
-        stage('Init_data_InfluxDBV1_For_Testing_Postgres_14_9_Use_GO_CLIENT') {
+        stage('Init_data_InfluxDBV1_For_Testing_Postgres_15.7_Use_GO_CLIENT') {
             steps {
                 catchError() {
                     init_data_influxdbv1()
@@ -189,7 +189,7 @@ pipeline {
             }
             post {
                 failure {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with InfluxDBV1 v14.9 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with InfluxDBV1 v15.7 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
                     updateGitlabCommitStatus name: 'Init_Data', state: 'failed'
                 }
                 success {
@@ -197,19 +197,19 @@ pipeline {
                 }
             }
         }
-        stage('make_check_FDW_Test_With_InfluxDBV1_Postgres_14_9_Use_GO_CLIENT') {
+        stage('make_check_FDW_Test_With_InfluxDBV1_Postgres_15.7_Use_GO_CLIENT') {
             steps {
                 catchError() {
-                    make_check_test("postgresql", "14.9", "", "1")
+                    make_check_test("postgresql", "15.7", "", "1")
                 }
             }
             post {
                 unstable {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check on InfluxDBV1 v14.9 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check on InfluxDBV1 v15.7 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
                 }
             }
         }
-        stage('Init_data_InfluxDBV1_For_Testing_Postgres_15_4_Use_GO_CLIENT') {
+        stage('Init_data_InfluxDBV1_For_Testing_Postgres_16.3_Use_GO_CLIENT') {
             steps {
                 catchError() {
                     init_data_influxdbv1()
@@ -217,7 +217,7 @@ pipeline {
             }
             post {
                 failure {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with InfluxDBV1 v15.4 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with InfluxDBV1 v16.3 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
                     updateGitlabCommitStatus name: 'Init_Data', state: 'failed'
                 }
                 success {
@@ -225,19 +225,19 @@ pipeline {
                 }
             }
         }
-        stage('make_check_FDW_Test_With_InfluxDBV1_Postgres_15_4_Use_GO_CLIENT') {
+        stage('make_check_FDW_Test_With_InfluxDBV1_Postgres_16.3_Use_GO_CLIENT') {
             steps {
                 catchError() {
-                    make_check_test("postgresql", "15.4", "", "1")
+                    make_check_test("postgresql", "16.3", "", "1")
                 }
             }
             post {
                 unstable {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check on InfluxDBV1 v15.4 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check on InfluxDBV1 v16.3 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
                 }
             }
         }
-        stage('Init_data_InfluxDBV1_For_Testing_Postgres_16.0_Use_GO_CLIENT') {
+        stage('Init_data_InfluxDBV1_For_Testing_Postgres_17_Use_GO_CLIENT') {
             steps {
                 catchError() {
                     init_data_influxdbv1()
@@ -245,7 +245,7 @@ pipeline {
             }
             post {
                 failure {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with InfluxDBV1 v16.0 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with InfluxDBV1 v17 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
                     updateGitlabCommitStatus name: 'Init_Data', state: 'failed'
                 }
                 success {
@@ -253,15 +253,15 @@ pipeline {
                 }
             }
         }
-        stage('make_check_FDW_Test_With_InfluxDBV1_Postgres_16.0_Use_GO_CLIENT') {
+        stage('make_check_FDW_Test_With_InfluxDBV1_Postgres_17_Use_GO_CLIENT') {
             steps {
                 catchError() {
-                    make_check_test("postgresql", "16.0", "", "1")
+                    make_check_test("postgresql", "17.0", "", "1")
                 }
             }
             post {
                 unstable {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check on InfluxDBV1 v16.0 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check on InfluxDBV1 v17 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
                 }
             }
         }
@@ -296,7 +296,7 @@ pipeline {
                 }
             }
         }
-        /*stage('Init_data_InfluxDBV1_For_Testing_Postgres_13_12_Use_CXX_Client') {
+        /*stage('Init_data_InfluxDBV1_For_Testing_Postgres_13.15_Use_CXX_Client') {
             steps {
                 catchError() {
                     init_data_influxdbcxx()
@@ -304,7 +304,7 @@ pipeline {
             }
             post {
                 failure {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with CXX Client InfluxDBV1 v13.12 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with CXX Client InfluxDBV1 v13.15 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
                     updateGitlabCommitStatus name: 'Init_Data', state: 'failed'
                 }
                 success {
@@ -312,19 +312,19 @@ pipeline {
                 }
             }
         }
-        stage('make_check_FDW_Test_With_InfluxDBV1_Postgres_13_12_Use_CXX_Client') {
+        stage('make_check_FDW_Test_With_InfluxDBV1_Postgres_13.15_Use_CXX_Client') {
             steps {
                 catchError() {
-                    make_check_test("postgresql", "13.12", "CXX_CLIENT=1", "1")
+                    make_check_test("postgresql", "13.15", "CXX_CLIENT=1", "1")
                 }
             }
             post {
                 unstable {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check with CXX Client on InfluxDBV1 v13.12 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check with CXX Client on InfluxDBV1 v13.15 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
                 }
             }
         }
-        stage('Init_data_InfluxDBV1_For_Testing_Postgres_14_9_Use_CXX_Client') {
+        stage('Init_data_InfluxDBV1_For_Testing_Postgres_14.12_Use_CXX_Client') {
             steps {
                 catchError() {
                     init_data_influxdbcxx()
@@ -332,7 +332,7 @@ pipeline {
             }
             post {
                 failure {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with CXX Client InfluxDBV1 v14.9 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with CXX Client InfluxDBV1 v14.12 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
                     updateGitlabCommitStatus name: 'Init_Data', state: 'failed'
                 }
                 success {
@@ -340,19 +340,19 @@ pipeline {
                 }
             }
         }
-        stage('make_check_FDW_Test_With_InfluxDBV1_Postgres_14_9_Use_CXX_Client') {
+        stage('make_check_FDW_Test_With_InfluxDBV1_Postgres_14.12_Use_CXX_Client') {
             steps {
                 catchError() {
-                    make_check_test("postgresql", "14.9", "CXX_CLIENT=1", "1")
+                    make_check_test("postgresql", "14.12", "CXX_CLIENT=1", "1")
                 }
             }
             post {
                 unstable {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check with CXX Client on InfluxDBV1 v14.9 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check with CXX Client on InfluxDBV1 v14.12 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
                 }
             }
         }
-        stage('Init_data_InfluxDBV1_For_Testing_Postgres_15_4_Use_CXX_Client') {
+        stage('Init_data_InfluxDBV1_For_Testing_Postgres_15.7_Use_CXX_Client') {
             steps {
                 catchError() {
                     init_data_influxdbcxx()
@@ -360,7 +360,7 @@ pipeline {
             }
             post {
                 failure {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with CXX Client InfluxDBV1 v15.4 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with CXX Client InfluxDBV1 v15.7 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
                     updateGitlabCommitStatus name: 'Init_Data', state: 'failed'
                 }
                 success {
@@ -368,19 +368,47 @@ pipeline {
                 }
             }
         }
-        stage('make_check_FDW_Test_With_InfluxDBV1_Postgres_15_4_Use_CXX_Client') {
+        stage('make_check_FDW_Test_With_InfluxDBV1_Postgres_15.7_Use_CXX_Client') {
             steps {
                 catchError() {
-                    make_check_test("postgresql", "15.4", "CXX_CLIENT=1", "1")
+                    make_check_test("postgresql", "15.7", "CXX_CLIENT=1", "1")
                 }
             }
             post {
                 unstable {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check with CXX Client on InfluxDBV1 v15.4 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check with CXX Client on InfluxDBV1 v15.7 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
+                }
+            }
+        }
+        stage('Init_data_InfluxDBV1_For_Testing_Postgres_16.3_Use_CXX_Client') {
+            steps {
+                catchError() {
+                    init_data_influxdbcxx()
+                }
+            }
+            post {
+                failure {
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with CXX Client InfluxDBV1 v16.3 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
+                    updateGitlabCommitStatus name: 'Init_Data', state: 'failed'
+                }
+                success {
+                    updateGitlabCommitStatus name: 'Init_Data', state: 'success'
+                }
+            }
+        }
+        stage('make_check_FDW_Test_With_InfluxDBV1_Postgres_16.3_Use_CXX_Client') {
+            steps {
+                catchError() {
+                    make_check_test("postgresql", "16.3", "CXX_CLIENT=1", "1")
+                }
+            }
+            post {
+                unstable {
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check with CXX Client on InfluxDBV1 v16.3 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
                 }
             }
         }*/
-        stage('Init_data_InfluxDBV1_For_Testing_Postgres_16.0_Use_CXX_Client') {
+        stage('Init_data_InfluxDBV1_For_Testing_Postgres_17_Use_CXX_Client') {
             steps {
                 catchError() {
                     init_data_influxdbcxx()
@@ -388,7 +416,7 @@ pipeline {
             }
             post {
                 failure {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with CXX Client InfluxDBV1 v16.0 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with CXX Client InfluxDBV1 v17 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
                     updateGitlabCommitStatus name: 'Init_Data', state: 'failed'
                 }
                 success {
@@ -396,15 +424,15 @@ pipeline {
                 }
             }
         }
-        stage('make_check_FDW_Test_With_InfluxDBV1_Postgres_16.0_Use_CXX_Client') {
+        stage('make_check_FDW_Test_With_InfluxDBV1_Postgres_17_Use_CXX_Client') {
             steps {
                 catchError() {
-                    make_check_test("postgresql", "16.0", "CXX_CLIENT=1", "1")
+                    make_check_test("postgresql", "17.0", "CXX_CLIENT=1", "1")
                 }
             }
             post {
                 unstable {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check with CXX Client on InfluxDBV1 v16.0 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check with CXX Client on InfluxDBV1 v17 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
                 }
             }
         }
@@ -439,7 +467,7 @@ pipeline {
                 }
             }
         }
-        /* stage('init_data_influxdbcxx_For_Testing_Postgres_13_12_Use_CXX_Client') {
+        /*stage('Init_data_InfluxDBV2_For_Testing_Postgres_13.15_Use_CXX_Client') {
             steps {
                 catchError() {
                     init_data_influxdbcxx()
@@ -447,7 +475,7 @@ pipeline {
             }
             post {
                 failure {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with CXX Client InfluxDBV2 v13.12 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with CXX Client InfluxDBV2 v13.15 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
                     updateGitlabCommitStatus name: 'Init_Data', state: 'failed'
                 }
                 success {
@@ -455,19 +483,19 @@ pipeline {
                 }
             }
         }
-        stage('make_check_FDW_Test_With_InfluxDBV2_Postgres_13_12_Use_CXX_Client') {
+        stage('make_check_FDW_Test_With_InfluxDBV2_Postgres_13.15_Use_CXX_Client') {
             steps {
                 catchError() {
-                    make_check_test("postgresql", "13.12", "CXX_CLIENT=1", "2")
+                    make_check_test("postgresql", "13.15", "CXX_CLIENT=1", "2")
                 }
             }
             post {
                 unstable {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check with CXX Client on InfluxDBV2 v13.12 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check with CXX Client on InfluxDBV2 v13.15 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
                 }
             }
         }
-        stage('init_data_influxdbcxx_For_Testing_Postgres_14_9_Use_CXX_Client') {
+        stage('Init_data_InfluxDBV2_For_Testing_Postgres_14.12_Use_CXX_Client') {
             steps {
                 catchError() {
                     init_data_influxdbcxx()
@@ -475,7 +503,7 @@ pipeline {
             }
             post {
                 failure {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with CXX Client InfluxDBV2 v14.9 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with CXX Client InfluxDBV2 v14.12 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
                     updateGitlabCommitStatus name: 'Init_Data', state: 'failed'
                 }
                 success {
@@ -483,19 +511,19 @@ pipeline {
                 }
             }
         }
-        stage('make_check_FDW_Test_With_InfluxDBV2_Postgres_14_9_Use_CXX_Client') {
+        stage('make_check_FDW_Test_With_InfluxDBV2_Postgres_14.12_Use_CXX_Client') {
             steps {
                 catchError() {
-                    make_check_test("postgresql", "14.9", "CXX_CLIENT=1", "2")
+                    make_check_test("postgresql", "14.12", "CXX_CLIENT=1", "2")
                 }
             }
             post {
                 unstable {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check with CXX Client on InfluxDBV2 v14.9 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check with CXX Client on InfluxDBV2 v14.12 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
                 }
             }
         }
-        stage('init_data_influxdbcxx_For_Testing_Postgres_15_4_Use_CXX_Client') {
+        stage('Init_data_InfluxDBV2_For_Testing_Postgres_15.7_Use_CXX_Client') {
             steps {
                 catchError() {
                     init_data_influxdbcxx()
@@ -503,7 +531,7 @@ pipeline {
             }
             post {
                 failure {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with CXX Client InfluxDBV2 v15.4 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with CXX Client InfluxDBV2 v15.7 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
                     updateGitlabCommitStatus name: 'Init_Data', state: 'failed'
                 }
                 success {
@@ -511,19 +539,47 @@ pipeline {
                 }
             }
         }
-        stage('make_check_FDW_Test_With_InfluxDBV2_Postgres_15_4_Use_CXX_Client') {
+        stage('make_check_FDW_Test_With_InfluxDBV2_Postgres_15.7_Use_CXX_Client') {
             steps {
                 catchError() {
-                    make_check_test("postgresql", "15.4", "CXX_CLIENT=1", "2")
+                    make_check_test("postgresql", "15.7", "CXX_CLIENT=1", "2")
                 }
             }
             post {
                 unstable {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check with CXX Client on InfluxDBV2 v15.4 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check with CXX Client on InfluxDBV2 v15.7 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
+                }
+            }
+        }
+        stage('Init_data_InfluxDBV2_For_Testing_Postgres_16.3_Use_CXX_Client') {
+            steps {
+                catchError() {
+                    init_data_influxdbcxx()
+                }
+            }
+            post {
+                failure {
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with CXX Client InfluxDBV2 v16.3 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
+                    updateGitlabCommitStatus name: 'Init_Data', state: 'failed'
+                }
+                success {
+                    updateGitlabCommitStatus name: 'Init_Data', state: 'success'
+                }
+            }
+        }
+        stage('make_check_FDW_Test_With_InfluxDBV2_Postgres_16.3_Use_CXX_Client') {
+            steps {
+                catchError() {
+                    make_check_test("postgresql", "16.3", "CXX_CLIENT=1", "2")
+                }
+            }
+            post {
+                unstable {
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check with CXX Client on InfluxDBV2 v16.3 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
                 }
             }
         }*/
-        stage('init_data_influxdbcxx_For_Testing_Postgres_16.0_Use_CXX_Client') {
+        stage('Init_data_InfluxDBV2_For_Testing_Postgres_17_Use_CXX_Client') {
             steps {
                 catchError() {
                     init_data_influxdbcxx()
@@ -531,7 +587,7 @@ pipeline {
             }
             post {
                 failure {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with CXX Client InfluxDBV2 v16.0 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Initialize data with CXX Client InfluxDBV2 v17 FAILED ' + BRANCH_NAME, body: BUILD_INFO + '${BUILD_LOG, maxLines=200, escapeHtml=false}', to: "${MAIL_TO}", attachLog: false 
                     updateGitlabCommitStatus name: 'Init_Data', state: 'failed'
                 }
                 success {
@@ -539,15 +595,15 @@ pipeline {
                 }
             }
         }
-        stage('make_check_FDW_Test_With_InfluxDBV2_Postgres_16.0_Use_CXX_Client') {
+        stage('make_check_FDW_Test_With_InfluxDBV2_Postgres_17_Use_CXX_Client') {
             steps {
                 catchError() {
-                    make_check_test("postgresql", "16.0", "CXX_CLIENT=1", "2")
+                    make_check_test("postgresql", "17.0", "CXX_CLIENT=1", "2")
                 }
             }
             post {
                 unstable {
-                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check with CXX Client on InfluxDBV2 v16.0 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
+                    emailext subject: '[CI INFLUXDB_FDW] EXISTED_TEST: Result make check with CXX Client on InfluxDBV2 v17 FAILED ' + BRANCH_NAME, body: BUILD_INFO +  '${FILE,path="make_check_existed_test.out"}', to: "${MAIL_TO}", attachLog: false
                 }
             }
         }
