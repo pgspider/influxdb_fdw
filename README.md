@@ -1277,8 +1277,6 @@ Access foreign table
 	SELECT * FROM t1;
 ```
 
-For PGSpider, influxdb_fdw can support some different features. For details, please refer to [`README_PGSpider.md`](README_PGSpider.md) file.
-
 Limitations
 -----------
 
