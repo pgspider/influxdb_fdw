@@ -1,5 +1,0 @@
-*.sh
-Jenkinsfile
-.gitlab-ci.yml
-fdw_rpm_with_pgspider/
-fdw_rpm_with_postgres/
