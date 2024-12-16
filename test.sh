@@ -2,8 +2,11 @@
 
 # Usage:
 # ./test.sh                                     -- using GO CLIENT + Postgres versions
+# ./test.sh REGRESS_PREFIX=PGSpider             -- using GO CLIENT + PGSpider
 # ./test.sh --CXX_V1                            -- using CXX V1    + Postgres versions
 # ./test.sh --CXX_V2                            -- using CXX V2    + Postgres versions
+# ./test.sh --CXX_V1 REGRESS_PREFIX=PGSpider    -- using CXX V1    + PGSpider
+# ./test.sh --CXX_V2 REGRESS_PREFIX=PGSpider    -- using CXX V2    + PGSpider
 #
 # *Note: If using CXX, we need to use gcc 7 (source /opt/rh/devtoolset-7/enable)
 

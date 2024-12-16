@@ -79,7 +79,11 @@ PG_MODULE_MAGIC;
 #define DEFAULT_FDW_STARTUP_COST    100.0
 
  /* Default CPU cost to process 1 row (above and beyond cpu_tuple_cost). */
-#define DEFAULT_FDW_TUPLE_COST      0.01
+#if PG_VERSION_NUM >= 170000
+#define DEFAULT_FDW_TUPLE_COST		0.2
+#else
+#define DEFAULT_FDW_TUPLE_COST		0.01
+#endif
 
  /* If no remote estimates, assume a sort costs 20% extra */
 #define DEFAULT_FDW_SORT_MULTIPLIER 1.2
@@ -268,7 +272,7 @@ enum FdwPathPrivateIndex
 	/* has-final-sort flag (as a Boolean node) */
 	FdwPathPrivateHasFinalSort,
 	/* has-limit flag (as a Boolean node) */
-	FdwPathPrivateHasLimit
+	FdwPathPrivateHasLimit,
 };
 
 /*
@@ -283,7 +287,7 @@ enum FdwModifyPrivateIndex
 	/* SQL statement to execute remotely (as a String node) */
 	FdwModifyPrivateUpdateSql,
 	/* Integer list of target attribute numbers */
-	FdwModifyPrivateTargetAttnums
+	FdwModifyPrivateTargetAttnums,
 };
 
 /*
@@ -774,6 +778,9 @@ influxdbGetForeignPaths(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntable
 									 NULL,	/* no outer rel either */
 #endif
 									 NULL,	/* no extra plan */
+#if PG_VERSION_NUM >= 170000
+									 NIL, /* no fdw_restrictinfo list */
+#endif
 									 NULL));	/* no fdw_private data */
 }
 
@@ -3484,7 +3491,11 @@ add_foreign_final_paths(PlannerInfo *root, RelOptInfo *input_rel,
 													   path->total_cost,
 													   path->pathkeys,
 													   NULL,	/* no extra plan */
-													   NULL);	/* no fdw_private */
+#if PG_VERSION_NUM >= 170000
+													   NIL, /* no fdw_restrictinfo
+															 * list */
+#endif
+													   NIL);	/* no fdw_private */
 #else
 				final_path = create_foreignscan_path(root,
 													 input_rel,
@@ -3564,6 +3575,18 @@ add_foreign_final_paths(PlannerInfo *root, RelOptInfo *input_rel,
 	if (!parse->limitCount && parse->limitOffset)
 		return;
 
+#if PG_VERSION_NUM >= 130000
+	/*
+	 * If the query has FETCH FIRST .. WITH TIES, 1) it must have ORDER BY as
+	 * well, which is used to determine which additional rows tie for the last
+	 * place in the result set, and 2) ORDER BY must already have been determined 
+	 * to be safe to push down before we get here. Since, influxdb_fdw does 
+	 * not support pushdown ORDER BY, disable pushing the FETCH clause.
+	 */
+	if (parse->limitOption == LIMIT_OPTION_WITH_TIES)
+		return;	
+#endif
+
 	/*
 	 * Also, the LIMIT/OFFSET cannot be pushed down, if their expressions are
 	 * not safe to remote.
@@ -3603,6 +3626,9 @@ add_foreign_final_paths(PlannerInfo *root, RelOptInfo *input_rel,
 										   total_cost,
 										   pathkeys,
 										   NULL,	/* no extra plan */
+#if PG_VERSION_NUM >= 170000
+										   NIL, /* no fdw_restrictinfo list */
+#endif
 										   fdw_private);
 #else
 	final_path = create_foreignscan_path(root,
@@ -3741,6 +3767,9 @@ add_foreign_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel,
 										  total_cost,
 										  NIL,	/* no pathkeys */
 										  NULL,
+#if PG_VERSION_NUM >= 170000
+										  NIL,	/* no fdw_restrictinfo list */
+#endif
 										  NIL); /* no fdw_private */
 #else
 
