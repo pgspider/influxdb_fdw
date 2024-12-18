@@ -10,7 +10,7 @@ typedef enum InfluxDBType{
 	INFLUXDB_BOOLEAN,
 	INFLUXDB_STRING,
 	INFLUXDB_TIME,
-	INFLUXDB_NULL
+	INFLUXDB_NULL,
 } InfluxDBType;
 
 typedef union InfluxDBValue{
@@ -47,7 +47,7 @@ typedef enum InfluxDBColumnType{
 	INFLUXDB_UNKNOWN_KEY,
 	INFLUXDB_TIME_KEY,
 	INFLUXDB_TAG_KEY,
-	INFLUXDB_FIELD_KEY
+	INFLUXDB_FIELD_KEY,
 } InfluxDBColumnType;
 
 typedef struct InfluxDBColumnInfo {
