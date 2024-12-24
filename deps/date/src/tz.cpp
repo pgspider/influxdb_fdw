@@ -1734,7 +1734,7 @@ enum class endian
 {
     native = __BYTE_ORDER__,
     little = __ORDER_LITTLE_ENDIAN__,
-    big    = __ORDER_BIG_ENDIAN__
+    big    = __ORDER_BIG_ENDIAN__,
 };
 
 static
